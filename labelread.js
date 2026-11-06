@@ -77,7 +77,7 @@
   const MFG_RX=/DATE\s*OF\s*MANUFACTURE|DATE\s*CODE|FACTORY(?:\s*(?:DATE|CODE))?|MANUFACTURED|MANUFACTURE(?!R)|\bMFD\b|\bMFG\b|\bDOM\b|\bMADE\b/g;
   const EXP_RX=/EXPIRY(?:\s*DATE)?|EXPIRES?|\bEXP\b|REPLACE(?:MENT)?(?:\s*(?:BY|BEFORE|DATE))?|USE\s*(?:BEFORE|BY)/g;
   function nearestKind(text,at,end){
-    const a=Math.max(0,at-40),b=Math.min(text.length,end+24),slice=text.slice(a,b);
+    const a=text.lastIndexOf('\n',Math.max(0,at-1))+1,nl=text.indexOf('\n',end),b=nl<0?text.length:nl,slice=text.slice(a,b);
     let best=null;
     function scan(rx,kind){rx.lastIndex=0;let m;while((m=rx.exec(slice))){const s=a+m.index,e=s+m[0].length;let gap=e<=at?at-e:s>=end?s-end:0;if(gap>24)continue;if(!best||gap<best.gap||(gap===best.gap&&kind==='exp'))best={kind:kind,gap:gap}}}
     scan(MFG_RX,'mfg');scan(EXP_RX,'exp');return best?best.kind:''}
@@ -132,8 +132,9 @@
       const e=addYears(manufacture.y,manufacture.m,manufacture.d,10);
       expiry={iso:isoOf(e.y,e.m,e.d),full:displayYMD(e.y,e.m,e.d),display:displayMY(e.y,e.m),y:e.y,m:e.m,d:e.d,derived:true};
       derived=true}
-    if(opts.explicitExpiry&&!explicit)expiry=expiry&&expiry.derived?null:expiry;
-    if(!manufacture&&!expiry)return null;
+    let alternative=null;
+    if(opts.explicitExpiry&&!explicit&&expiry&&expiry.derived){alternative=expiry;expiry=null;derived=false}
+    if(!manufacture&&!expiry&&!alternative)return null;
     const made=manufacture?stamp(manufacture,{code:manufacture.code,full:manufacture.full,note:'Clipsal factory code '+manufacture.code+' is '+manufacture.full+'. Worksheet month/year '+manufacture.display+'.'}):null;
     let expOut=null,note='';
     if(expiry&&explicit){
@@ -143,7 +144,74 @@
     else if(expiry&&derived&&manufacture){
       expOut={iso:expiry.iso,full:expiry.full,display:expiry.display,derived:true};
       note=(weak?'Possible Clipsal factory code ':'Clipsal factory code ')+manufacture.code+' is '+manufacture.full+'. Worksheet expiry '+expiry.display+' (10 years)'+(weak?' — confirm this is the manufacture date.':'.')}
-    return {manufacture:made,expiry:expOut,explicit:explicit,derived:derived,weak:weak,note:note}}
+    return {manufacture:made,expiry:expOut,alternative:alternative,explicit:explicit,derived:derived,weak:weak,note:note}}
+  /* A date written with separators is handwriting (or a printed expiry), not a factory code.
+     It is the replacement month itself. It does not get another 10 years. */
+  function handwrittenExpiry(text,nowYear){
+    nowYear=nowYear||new Date().getFullYear();
+    const upper=String(text||'').toUpperCase().replace(/[\u2010-\u2015]/g,'-');
+    const found=[];
+    function push(at,end,item){if(found.some(function(f){return at<f.end&&end>f.at}))return;if(nearestKind(upper,at,end)==='mfg')return;found.push(Object.assign({at:at,end:end},item))}
+    let m,re=/(^|[^\d])(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*((?:19|20)\d{2})(?!\d)/g;
+    while((m=re.exec(upper))){
+      const d=+m[2],mo=+m[3],y=+m[4],at=m.index+m[1].length;
+      if(!validYMD(y,mo,d)||y<1990||y>nowYear+20)continue;
+      push(at,at+m[0].length-m[1].length,{display:displayMY(y,mo),iso:isoOf(y,mo,d),raw:m[0].slice(m[1].length)})}
+    re=/(^|[^\d])(\d{1,2})\s*[\/\-.]\s*((?:19|20)\d{2})(?!\d)/g;
+    while((m=re.exec(upper))){
+      const mo=+m[2],y=+m[3],at=m.index+m[1].length;
+      if(mo<1||mo>12||y<1990||y>nowYear+20)continue;
+      push(at,at+m[0].length-m[1].length,{display:displayMY(y,mo),iso:null,raw:m[0].slice(m[1].length)})}
+    re=/(^|[^\d])(\d{1,2})\s*[\/\-.]\s*(\d{2})(?!\d)/g;
+    while((m=re.exec(upper))){
+      const a=+m[2],b=+m[3],at=m.index+m[1].length;
+      if(a>=1&&a<=12&&b>12){const y=2000+b;if(y>nowYear+20)continue;push(at,at+m[0].length-m[1].length,{display:displayMY(y,a),iso:null,raw:m[0].slice(m[1].length)})}
+      else push(at,at+m[0].length-m[1].length,{ambiguous:true,raw:m[0].slice(m[1].length)})}
+    const clear=[],ambig=[];
+    found.forEach(function(f){if(f.ambiguous)ambig.push(f);else if(!clear.some(function(c){return c.display===f.display}))clear.push(f)});
+    if(ambig.length&&!clear.length)return {conflict:true,expiry:null,note:'Handwritten date '+ambig.map(function(f){return f.raw}).join(' / ')+' could be read more than one way. Type the expiry as MM/YYYY.'};
+    if(!clear.length)return null;
+    if(clear.length>1)return {conflict:true,expiry:null,options:clear.map(function(c){return c.display}),note:'More than one handwritten date ('+clear.map(function(c){return c.display}).join(', ')+'). Confirm the expiry. Nothing was guessed.'};
+    const one=clear[0];
+    const weak=nearestKind(upper,one.at,one.end)!=='exp';
+    return {conflict:false,weak:weak,expiry:{display:one.display,iso:one.iso,derived:false},note:'Handwritten date '+one.raw+' is the expiry '+one.display+', not a manufacture date.'}}
+  function acceptableModel(v){
+    v=String(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+    if(v.length<3||v.length>16)return '';
+    if(!/[A-Z]/.test(v)||!/\d/.test(v))return '';
+    if(/^\d{6}$/.test(v))return '';
+    if(/^(?:AS|EN|ISO|UL|BS)\d/.test(v))return '';
+    if(/^(?:CLIPSAL|BROOKS|KIDDE|CAVIUS)$/.test(v))return '';
+    return v}
+  function readModel(text){
+    const upper=String(text||'').toUpperCase().replace(/[\u2010-\u2015]/g,'-');
+    const labeled=/\b(?:MODEL|MOD\.|TYPE)\s*(?:NO\.?|NUMBER|#)?\s*[:.\-]?\s*([A-Z0-9][A-Z0-9\-\/.]{1,16})/g;
+    let m;while((m=labeled.exec(upper))){const v=acceptableModel(m[1]);if(v)return v}
+    const lines=upper.split(/\n/);
+    for(let i=0;i<lines.length;i++){
+      const line=lines[i];
+      if(/\b(?:S\/?N|SERIAL|CAT(?:ALOGUE)?|PART|P\/N)\b/.test(line)&&!/\b(?:MODEL|TYPE)\b/.test(line))continue;
+      if(!/\b(?:CL[I1L]PSAL|BROOKS|K[I1]DDE|CAV[I1]US|QUELL|HPM|ARLEC)\b/.test(line))continue;
+      const joined=line.match(/[A-Z0-9]+(?:[-\/][A-Z0-9]+)+/g)||[];
+      for(let j=0;j<joined.length;j++){const v=acceptableModel(joined[j]);if(v)return v}
+      const tokens=line.split(/[^A-Z0-9]+/);
+      for(let t=0;t<tokens.length;t++){const v=acceptableModel(tokens[t]);if(v)return v}}
+    return null}
+  function reviewPhotoText(text,opts){
+    opts=opts||{};
+    const nowYear=opts.nowYear||new Date().getFullYear();
+    const hand=handwrittenExpiry(text,nowYear);
+    const factory=clipsalFactoryExpiry(text,Object.assign({},opts,{nowYear:nowYear,explicitExpiry:!!(hand&&(hand.expiry||hand.conflict))}));
+    const model=readModel(text);
+    if(hand&&hand.conflict)return {expiry:null,manufacture:factory&&factory.manufacture,model:model,weak:true,conflict:true,note:hand.note+(factory&&factory.manufacture?' '+factory.manufacture.note:'')};
+    if(hand&&hand.expiry){
+      let note=hand.note,weak=!!hand.weak;
+      const other=factory&&(factory.expiry&&factory.expiry.derived?factory.expiry:factory.alternative);
+      if(factory&&factory.manufacture&&other&&other.display!==hand.expiry.display){weak=true;note+=' Factory code '+factory.manufacture.code+' would derive '+other.display+' if it were the only date. Handwriting is the expiry. Confirm before applying.'}
+      else if(factory&&factory.manufacture)note+=' '+factory.manufacture.note;
+      return {expiry:hand.expiry,manufacture:factory&&factory.manufacture,model:model,weak:weak,conflict:false,note:note}}
+    if(factory&&(factory.expiry||factory.manufacture))return {expiry:factory.expiry,manufacture:factory.manufacture,model:model,weak:!!factory.weak,conflict:false,note:factory.note};
+    return {expiry:null,manufacture:null,model:model,weak:false,conflict:false,note:''}}
   function normalizeExpiry(s){
     const t=String(s||'').trim();
     let m=t.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
@@ -172,6 +240,9 @@
     addYears:addYears,
     parseFactoryCode:parseFactoryCode,
     clipsalFactoryExpiry:clipsalFactoryExpiry,
+    handwrittenExpiry:handwrittenExpiry,
+    readModel:readModel,
+    reviewPhotoText:reviewPhotoText,
     normalizeExpiry:normalizeExpiry,
     expiryMonthIndex:expiryMonthIndex,
     formatExpiryTyping:formatExpiryTyping,

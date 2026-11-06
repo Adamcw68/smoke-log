@@ -115,6 +115,44 @@ test('bare or invalid codes are not treated as dates',function(){
   assert.equal(lr.formatExpiryTyping('29/02/2021',false),'29/02/2021');
 });
 
+test('handwritten date is expiry and is not given another 10 years',function(){
+  const both=lr.reviewPhotoText('CLIPSAL SMA4\nDOM 210119\n03/2028',{nowYear:2026});
+  assert.equal(both.expiry.display,'03/2028');
+  assert.equal(both.expiry.derived,false);
+  assert.notEqual(both.expiry.display,'03/2038');
+  assert.notEqual(both.expiry.display,'01/2029');
+  assert.equal(both.weak,true);
+  assert.match(both.note,/Handwritten/);
+  assert.match(both.note,/01\/2029/);
+  assert.equal(both.manufacture.iso,'2019-01-21');
+  assert.equal(both.manufacture.display,'01/2019');
+  assert.equal(both.model,'SMA4');
+  const only=lr.reviewPhotoText('03/2028',{nowYear:2026});
+  assert.equal(only.expiry.display,'03/2028');
+  assert.equal(only.expiry.derived,false);
+  assert.equal(only.manufacture,null);
+  const full=lr.handwrittenExpiry('21/01/2029',2026);
+  assert.equal(full.expiry.display,'01/2029');
+  assert.equal(full.expiry.iso,'2029-01-21');
+  assert.equal(full.expiry.derived,false);
+});
+
+test('conflicting or unreadable dates and non-model numbers are not guessed',function(){
+  const clash=lr.reviewPhotoText('03/2028\n06/2030',{nowYear:2026});
+  assert.equal(clash.conflict,true);
+  assert.equal(clash.expiry,null);
+  assert.match(clash.note,/Confirm/);
+  assert.equal(lr.handwrittenExpiry('03/12',2026).conflict,true);
+  assert.equal(lr.readModel('CLIPSAL\nDOM 210119'),null);
+  assert.equal(lr.readModel('CLIPSAL\nSERIAL AB12C\nS/N 998877'),null);
+  assert.equal(lr.readModel('CAT NO 755PS'),null);
+  assert.equal(lr.readModel('MODEL SMA4'),'SMA4');
+  assert.equal(lr.readModel('CLIPSAL SMA-4'),'SMA4');
+  const plan=lr.transferField({power:['9v'],model:''},{manufacturer:'Clipsal',model:'SMA4'},'model','SMA4');
+  assert.equal(plan.value,'SMA4');
+  assert.deepEqual(plan.power,['9v','240v']);
+});
+
 test('transfer sets 240V on that alarm only and does not invent unread fields',function(){
   const alarm={model:'',manufacturer:'',power:['9v'],expiry:''};
   const other={model:'755',power:['9v'],expiry:'01/2030'};

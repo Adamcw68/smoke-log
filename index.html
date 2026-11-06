@@ -356,7 +356,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.12.1 (20261106)';
+const APP_VERSION='2.12.2 (20261106)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -1025,7 +1025,7 @@ function parseLabel(lines){ // lines: [{t:text,c:confidence 0-100}]
   if(exp)r.fields.expiry={v:show(exp),note:'read near “'+exp.kw+'” ('+exp.fmt+')'+(full(exp)?'. Label '+full(exp)+' is stored as '+show(exp):''),score:exp.score};
   else if(mfd){const plus=mfd.d&&window.LabelRead?LabelRead.addYears(mfd.y,mfd.m,mfd.d,10):null;const y=plus?plus.y:mfd.y+10,mo=plus?plus.m:mfd.m;r.fields.expiry={v:pad2(mo)+'/'+y,derived:true,note:'derived: manufactured '+(full(mfd)||show(mfd))+' + 10 years → '+pad2(mo)+'/'+y,score:mfd.score*0.9}}
   else{const u=cands.filter(c=>c.kind==='none').sort((a,b)=>b.score-a.score)[0];
-    if(u){const plus=u.d&&u.y<=now&&window.LabelRead?LabelRead.addYears(u.y,u.m,u.d,10):null;const y=plus?plus.y:u.y+10,mo=plus?plus.m:u.m;r.fields.expiry=u.y>now?{v:show(u),note:'unlabelled date '+u.raw+(full(u)?' ('+full(u)+')':'')+' – check it is the expiry. Worksheet stores '+show(u),score:u.score,weak:true}:{v:pad2(mo)+'/'+y,derived:true,weak:true,note:'derived: unlabelled date '+u.raw+' assumed manufacture + 10 years – check. Worksheet stores '+pad2(mo)+'/'+y,score:u.score*0.8}}}
+    if(u)r.fields.expiry={v:show(u),derived:false,weak:true,note:'Handwritten or unmarked date '+u.raw+(full(u)?' ('+full(u)+')':'')+' is the expiry, stored as '+show(u)+'. It is not given another 10 years. Confirm before applying.',score:u.score}}
   if(mfd)r.mfd={v:show(mfd),note:'near “'+mfd.kw+'”'};
   // manufacturer
   let brand=null;for(const[nm,rx]of BRANDS)if(rx.test(all)){brand=nm;break}
@@ -1033,10 +1033,12 @@ function parseLabel(lines){ // lines: [{t:text,c:confidence 0-100}]
   if(brand)r.fields.manufacturer={v:brand,note:'brand name on label'};
   // model
   const bad=v=>!/\d/.test(v)||/^(AS|EN|ISO|UL|BS)?\s*\d{4,5}(-\d{4})?$/.test(v)||/^\d+(\.\d+)?(V|VAC|VDC|DB|MA|HZ|MM|YRS?)$/.test(v)||/^\d{1,2}[\/\-.]\d{2,4}$/.test(v)||/^(19|20)\d{2}/.test(v);
-  let model=null;const mrx=/\b(?:MODEL|MOD\.|TYPE|CAT\.?\s*NO|CATALOGUE\s*NO|PART\s*NO|P\/N|ART\.?\s*NO|PRODUCT\s*CODE|REF)\s*(?:NO\.?|NUMBER|#)?\s*[:.\-]?\s*([A-Z0-9][A-Z0-9\-\/.]{2,15})/g;
-  for(const l of U){mrx.lastIndex=0;let m;while((m=mrx.exec(l.t))){const v=m[1].replace(/[.\-\/]+$/,'');if(!bad(v)){model=v;break}}if(model)break}
-  if(!model&&brand){const bl=U.find(l=>BRANDS.find(b=>b[0]===brand)[1].test(l.t));if(bl){const t=bl.t.split(/\s+/).map(x=>x.replace(/^[^A-Z0-9]+|[^A-Z0-9]+$/g,'')).find(x=>x.length>=4&&x.length<=14&&/[A-Z]/.test(x)&&/\d/.test(x)&&!bad(x));if(t)model=t}}
-  if(model)r.fields.model={v:model,note:'model / type number'};
+  let model=null;
+  if(window.LabelRead)model=LabelRead.readModel(all);
+  else{const mrx=/\b(?:MODEL|MOD\.|TYPE)\s*(?:NO\.?|NUMBER|#)?\s*[:.\-]?\s*([A-Z0-9][A-Z0-9\-\/.]{2,15})/g;
+    for(const l of U){mrx.lastIndex=0;let m;while((m=mrx.exec(l.t))){const v=m[1].replace(/[.\-\/]+$/,'');if(!bad(v)){model=v;break}}if(model)break}
+    if(!model&&brand){const bl=U.find(l=>BRANDS.find(b=>b[0]===brand)[1].test(l.t));if(bl){const t=bl.t.split(/\s+/).map(x=>x.replace(/^[^A-Z0-9]+|[^A-Z0-9]+$/g,'')).find(x=>x.length>=4&&x.length<=14&&/[A-Z]/.test(x)&&/\d/.test(x)&&!bad(x)&&!/^\d{6}$/.test(x));if(t)model=t}}}
+  if(model)r.fields.model={v:model,note:'model number on the label'};
   // power + sensor
   const pw=[];if(/\b2[234]0\s*(?:-\s*2[34]0\s*)?V(?:AC|\b)|\b2[234]0\s*VOLT|MAINS\s*POWER/.test(all))pw.push('240v');
   if(/(^|[^\d.])9\s*V+(?:DC|OLT|\b)|\bPP3\b|6LR61/.test(all))pw.push('9v');
@@ -1046,7 +1048,7 @@ function parseLabel(lines){ // lines: [{t:text,c:confidence 0-100}]
   if(/[IL1|][O0]N[IL1|][SZ]AT[IL1|][O0]N|[IL1|][O0]N[IL1|][SZ][IL1|]NG|AMER[I1]C[I1]UM|\bAM[\s\-]?241|RAD[I1]OACT[I1]VE/.test(all))sn.push('Ionization');
   if(/HEAT\s*(?:ALARM|DETECTOR)|THERMAL\s*DETECT/.test(all))sn.push('Heat');
   if(sn.length)r.fields.sensor={v:sn,note:'sensor type on label'};
-  if(window.LabelRead){const hit=LabelRead.clipsalFactoryExpiry(all,{brand:brand,nowYear:now,explicitExpiry:!!exp});if(hit){if(hit.manufacture)r.mfd={v:hit.manufacture.display,iso:hit.manufacture.iso,note:hit.manufacture.note};if(hit.explicit&&hit.expiry)r.fields.expiry={v:hit.expiry.display,derived:false,weak:false,note:hit.note,score:90};else if(hit.expiry&&!exp)r.fields.expiry={v:hit.expiry.display,derived:true,weak:!!hit.weak,note:hit.note,score:hit.weak?42:84}}}
+  if(window.LabelRead){const review=LabelRead.reviewPhotoText(all,{brand:brand,nowYear:now});if(review.model)r.fields.model={v:review.model,note:'model number on the label'};if(review.manufacture)r.mfd={v:review.manufacture.display,iso:review.manufacture.iso,note:review.manufacture.note};if(review.conflict){delete r.fields.expiry;r.review=review.note}else if(review.expiry)r.fields.expiry={v:review.expiry.display,derived:!!review.expiry.derived,weak:!!review.weak,note:review.note,score:review.weak?44:86}}
   const e=r.fields.expiry;r.score=(e?e.score:0)+Object.keys(r.fields).length*6+(lines.length?lines.reduce((s,l)=>s+(l.c||0),0)/lines.length*0.15:0);
   r.strong=!!(e&&!e.weak&&e.score>=70);if(window.LabelRead)LabelRead.correctReading(r);return r}
 
@@ -1073,7 +1075,7 @@ function paintOCR(j,f,i){if(CURJOB!==j.id)return;const el=document.getElementByI
     <div class="ob">${ap?'<span class="okd">✓ Applied</span>':`<button type="button" class="pri" data-ocrapply="${i}.${k}">${cur&&cur!==showV(d.v)?'Replace':'Apply'}</button><button type="button" data-ocredit="${i}.${k}">Edit</button>`}</div>
     <div class="cur">On form now: <b>${esc(cur)||'—'}</b></div></div>`}).join('');
   el.innerHTML=`<div class="ocr"><div class="oh"><b>🔍 Read from label</b><button type="button" class="ox" data-ocrx="${i}" aria-label="Close">✕</button></div>
-   ${F.expiry?'':'<p class="ocrnone">No date found, enter manually</p>'}${rows}
+   ${F.expiry?'':r.review?`<p class="ocrnone">${esc(r.review)}</p>`:'<p class="ocrnone">No date found, enter manually</p>'}${rows}
    ${r.mfd&&F.expiry&&!F.expiry.derived?`<p class="note">Manufacture date also found: ${esc(r.mfd.v)}</p>`:''}
    <p class="note">Check each value against the label before applying. Nothing changes until you tap Apply.</p>
    <details><summary>Raw text read (${r.rot?'rotated '+r.rot+'°, ':''}${r.conf}% confidence${st.ms?', '+(st.ms/1000).toFixed(1)+' s':''})</summary><pre>${esc(r.text.trim()||'(no text)')}</pre></details></div>`}
