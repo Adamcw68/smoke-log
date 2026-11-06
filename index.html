@@ -356,7 +356,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.12.0 (20261106)';
+const APP_VERSION='2.12.1 (20261106)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -1021,11 +1021,11 @@ function parseLabel(lines){ // lines: [{t:text,c:confidence 0-100}]
   const now=new Date().getFullYear(),top=k=>cands.filter(c=>c.kind===k).sort((a,b)=>b.score-a.score)[0];
   let exp=top('exp'),mfd=top('mfd');
   if(exp&&(exp.y<2000||exp.y>now+15))exp=null;if(mfd&&mfd.y>now)mfd=null;
-  const r={fields:{},cands,score:0,strong:false};const show=c=>c.d?pad2(c.d)+'/'+pad2(c.m)+'/'+c.y:pad2(c.m)+'/'+c.y;
-  if(exp)r.fields.expiry={v:show(exp),note:'read near “'+exp.kw+'” ('+exp.fmt+')',score:exp.score};
-  else if(mfd){const plus=mfd.d&&window.LabelRead?LabelRead.addYears(mfd.y,mfd.m,mfd.d,10):null;r.fields.expiry=plus?{v:LabelRead.displayYMD(plus.y,plus.m,plus.d),derived:true,note:'derived: manufactured '+show(mfd)+' + 10 years',score:mfd.score*0.9}:{v:pad2(mfd.m)+'/'+(mfd.y+10),derived:true,note:'derived: manufactured '+show(mfd)+' + 10 years',score:mfd.score*0.9}}
+  const r={fields:{},cands,score:0,strong:false};const show=c=>pad2(c.m)+'/'+c.y;const full=c=>c&&c.d&&window.LabelRead?LabelRead.displayYMD(c.y,c.m,c.d):'';
+  if(exp)r.fields.expiry={v:show(exp),note:'read near “'+exp.kw+'” ('+exp.fmt+')'+(full(exp)?'. Label '+full(exp)+' is stored as '+show(exp):''),score:exp.score};
+  else if(mfd){const plus=mfd.d&&window.LabelRead?LabelRead.addYears(mfd.y,mfd.m,mfd.d,10):null;const y=plus?plus.y:mfd.y+10,mo=plus?plus.m:mfd.m;r.fields.expiry={v:pad2(mo)+'/'+y,derived:true,note:'derived: manufactured '+(full(mfd)||show(mfd))+' + 10 years → '+pad2(mo)+'/'+y,score:mfd.score*0.9}}
   else{const u=cands.filter(c=>c.kind==='none').sort((a,b)=>b.score-a.score)[0];
-    if(u){const plus=u.d&&u.y<=now&&window.LabelRead?LabelRead.addYears(u.y,u.m,u.d,10):null;r.fields.expiry=u.y>now?{v:show(u),note:'unlabelled date '+u.raw+' – check it is the expiry',score:u.score,weak:true}:plus?{v:LabelRead.displayYMD(plus.y,plus.m,plus.d),derived:true,weak:true,note:'derived: unlabelled date '+u.raw+' assumed manufacture + 10 years – check',score:u.score*0.8}:{v:pad2(u.m)+'/'+(u.y+10),derived:true,weak:true,note:'derived: unlabelled date '+u.raw+' assumed manufacture + 10 years – check',score:u.score*0.8}}}
+    if(u){const plus=u.d&&u.y<=now&&window.LabelRead?LabelRead.addYears(u.y,u.m,u.d,10):null;const y=plus?plus.y:u.y+10,mo=plus?plus.m:u.m;r.fields.expiry=u.y>now?{v:show(u),note:'unlabelled date '+u.raw+(full(u)?' ('+full(u)+')':'')+' – check it is the expiry. Worksheet stores '+show(u),score:u.score,weak:true}:{v:pad2(mo)+'/'+y,derived:true,weak:true,note:'derived: unlabelled date '+u.raw+' assumed manufacture + 10 years – check. Worksheet stores '+pad2(mo)+'/'+y,score:u.score*0.8}}}
   if(mfd)r.mfd={v:show(mfd),note:'near “'+mfd.kw+'”'};
   // manufacturer
   let brand=null;for(const[nm,rx]of BRANDS)if(rx.test(all)){brand=nm;break}
@@ -1079,7 +1079,7 @@ function paintOCR(j,f,i){if(CURJOB!==j.id)return;const el=document.getElementByI
    <details><summary>Raw text read (${r.rot?'rotated '+r.rot+'°, ':''}${r.conf}% confidence${st.ms?', '+(st.ms/1000).toFixed(1)+' s':''})</summary><pre>${esc(r.text.trim()||'(no text)')}</pre></details></div>`}
 function ocrApply(j,f,i,k){const st=OCR.res.get(j.id+'|'+i),inp=document.getElementById('ocrv-'+i+'-'+k);if(!st||!inp)return;const a=f.al[i];let v=inp.value.trim();
   const lab=OCRF.find(x=>x[0]===k)[1];
-  if(k==='expiry'){const n=window.LabelRead?LabelRead.normalizeExpiry(v):null;if(!n){toast('Expiry must be DD/MM/YYYY or MM/YYYY');return}v=n.display}
+  if(k==='expiry'){const n=window.LabelRead?LabelRead.normalizeExpiry(v):null;if(!n){toast(/\d[\/\-.]\d{1,2}[\/\-.]\d{4}/.test(v)?'That day is not a real date. Expiry is stored as MM/YYYY':'Expiry must be MM/YYYY');return}v=n.display}
   if(k==='power'||k==='sensor'){const opts=k==='power'?POWER:SENSOR;const norm=s=>s.toLowerCase().replace(/[^a-z0-9]/g,'');
     v=[...new Set(v.split(/[,;+&]+/).map(x=>opts.find(o=>norm(o)===norm(x)||(norm(x).length>2&&norm(o).startsWith(norm(x))))).filter(Boolean))];if(!v.length){toast('Use: '+opts.join(', '));return}}
   if(!v||(Array.isArray(v)&&!v.length))return;
@@ -1274,7 +1274,7 @@ function alarmHTML(a,i){
   <label class="l">Power</label>${chips('al.'+i+'.power',POWER,a.power,1)}
   <label class="l">Sensor</label>${chips('al.'+i+'.sensor',SENSOR,a.sensor,1)}
   <div class="grid2"><div><label class="l">Manufacturer</label>${inp('al.'+i+'.manufacturer',a.manufacturer,'e.g. Brooks')}</div><div><label class="l">Model</label>${inp('al.'+i+'.model',a.model,'')}</div></div>
-  <div class="grid2"><div><label class="l">Decibels @ 3m</label>${inp('al.'+i+'.db',a.db,'e.g. 85','text','inputmode="decimal"')}</div><div><label class="l">Expiry</label>${inp('al.'+i+'.expiry',a.expiry,'DD/MM/YYYY or MM/YYYY','text','inputmode="numeric" maxlength="10"')}<p class="note" id="made${i}" ${a.mfd?'':'hidden'}>${a.mfd?'Made '+esc(a.mfd):''}</p></div></div>
+  <div class="grid2"><div><label class="l">Decibels @ 3m</label>${inp('al.'+i+'.db',a.db,'e.g. 85','text','inputmode="decimal"')}</div><div><label class="l">Expiry (MM/YYYY)</label>${inp('al.'+i+'.expiry',a.expiry,'MM/YYYY','text','inputmode="numeric" maxlength="7"')}<p class="note" id="made${i}" ${a.mfd?'':'hidden'}>${a.mfd?'Made '+esc(a.mfd):''}</p></div></div>
   <div class="row" style="margin-top:6px"><button type="button" data-exp10="${i}">Expiry = service date + 10 yrs</button></div>
   <label class="l">Checks</label><div class="yn" id="yn${i}">${QS.map(([k,q])=>ynRow(i,k,q,a.yn[k],a)).join('')}</div>
   ${photoBox('al'+i,'Photos – alarm '+(i+1))}<div id="ocr-al${i}"></div></div>`;

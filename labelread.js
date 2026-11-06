@@ -61,6 +61,7 @@
     return d<=dim[m-1]}
   function isoOf(y,m,d){return y+'-'+pad(m)+'-'+pad(d)}
   function displayYMD(y,m,d){return pad(d)+'/'+pad(m)+'/'+y}
+  function displayMY(y,m){return pad(m)+'/'+y}
   function addYears(y,m,d,n){
     const y2=y+n;
     const dim=[31,isLeap(y2)?29:28,31,30,31,30,31,31,30,31,30,31];
@@ -72,7 +73,7 @@
     if(!validYMD(y,m,d))return null;
     if(role==='exp'){if(y<1990||y>2100)return null}
     else if(y<2000||y>nowYear+1)return null;
-    return {y:y,m:m,d:d,iso:isoOf(y,m,d),display:displayYMD(y,m,d),code:token}}
+    return {y:y,m:m,d:d,iso:isoOf(y,m,d),full:displayYMD(y,m,d),display:displayMY(y,m),code:token}}
   const MFG_RX=/DATE\s*OF\s*MANUFACTURE|DATE\s*CODE|FACTORY(?:\s*(?:DATE|CODE))?|MANUFACTURED|MANUFACTURE(?!R)|\bMFD\b|\bMFG\b|\bDOM\b|\bMADE\b/g;
   const EXP_RX=/EXPIRY(?:\s*DATE)?|EXPIRES?|\bEXP\b|REPLACE(?:MENT)?(?:\s*(?:BY|BEFORE|DATE))?|USE\s*(?:BEFORE|BY)/g;
   function nearestKind(text,at,end){
@@ -93,7 +94,7 @@
     let m;while((m=re.exec(text))){
       const d=+m[2],mo=+m[3],y=+m[4],at=m.index+m[1].length;
       if(!validYMD(y,mo,d)||y<1990||y>2100)continue;
-      consider(at,at+m[0].length-m[1].length,{iso:isoOf(y,mo,d),display:displayYMD(y,mo,d),y:y,m:mo,d:d})}
+      consider(at,at+m[0].length-m[1].length,{iso:isoOf(y,mo,d),full:displayYMD(y,mo,d),display:displayMY(y,mo),y:y,m:mo,d:d})}
     while((m=reMY.exec(text))){
       const mo=+m[2],y=+m[3],at=m.index+m[1].length;
       if(mo<1||mo>12||y<1990||y>2100)continue;
@@ -129,24 +130,24 @@
     else if(expCodes.length===1){expiry=expCodes[0];explicit=true}
     else if(manufacture&&mfg.length<=1){
       const e=addYears(manufacture.y,manufacture.m,manufacture.d,10);
-      expiry={iso:isoOf(e.y,e.m,e.d),display:displayYMD(e.y,e.m,e.d),y:e.y,m:e.m,d:e.d,derived:true};
+      expiry={iso:isoOf(e.y,e.m,e.d),full:displayYMD(e.y,e.m,e.d),display:displayMY(e.y,e.m),y:e.y,m:e.m,d:e.d,derived:true};
       derived=true}
     if(opts.explicitExpiry&&!explicit)expiry=expiry&&expiry.derived?null:expiry;
     if(!manufacture&&!expiry)return null;
-    const made=manufacture?stamp(manufacture,{code:manufacture.code,note:'Clipsal factory code '+manufacture.code+' is manufacture '+manufacture.display}):null;
+    const made=manufacture?stamp(manufacture,{code:manufacture.code,full:manufacture.full,note:'Clipsal factory code '+manufacture.code+' is '+manufacture.full+'. Worksheet month/year '+manufacture.display+'.'}):null;
     let expOut=null,note='';
     if(expiry&&explicit){
-      expOut={iso:expiry.iso,display:expiry.display,y:expiry.y,m:expiry.m,d:expiry.d,derived:false};
-      note='Explicit expiry '+expiry.display+' (not manufacture + 10 years).';
-      if(made)note+=' '+made.note+'.'}
+      expOut={iso:expiry.iso,full:expiry.full||null,display:expiry.display,y:expiry.y,m:expiry.m,d:expiry.d,derived:false};
+      note='Explicit expiry '+(expiry.full||expiry.display)+' goes on the worksheet as '+expiry.display+'.';
+      if(made)note+=' '+made.note}
     else if(expiry&&derived&&manufacture){
-      expOut={iso:expiry.iso,display:expiry.display,derived:true};
-      note=(weak?'Possible Clipsal factory code ':'Clipsal factory code ')+manufacture.code+' is manufacture '+manufacture.display+'. Replacement due '+expiry.display+' (10 years)'+(weak?' — confirm this is the manufacture date.':'.')}
+      expOut={iso:expiry.iso,full:expiry.full,display:expiry.display,derived:true};
+      note=(weak?'Possible Clipsal factory code ':'Clipsal factory code ')+manufacture.code+' is '+manufacture.full+'. Worksheet expiry '+expiry.display+' (10 years)'+(weak?' — confirm this is the manufacture date.':'.')}
     return {manufacture:made,expiry:expOut,explicit:explicit,derived:derived,weak:weak,note:note}}
   function normalizeExpiry(s){
     const t=String(s||'').trim();
     let m=t.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
-    if(m){const d=+m[1],mo=+m[2],y=+m[3];if(!validYMD(y,mo,d)||y<1990||y>2100)return null;return {display:displayYMD(y,mo,d),iso:isoOf(y,mo,d),day:d,month:mo,year:y}}
+    if(m){const d=+m[1],mo=+m[2],y=+m[3];if(!validYMD(y,mo,d)||y<1990||y>2100)return null;return {display:displayMY(y,mo),iso:isoOf(y,mo,d),day:d,month:mo,year:y}}
     m=t.match(/^(\d{1,2})[\/\-.](\d{4})$/);
     if(m){const mo=+m[1],y=+m[2];if(mo<1||mo>12||y<1990||y>2100)return null;return {display:pad(mo)+'/'+y,iso:null,day:null,month:mo,year:y}}
     return null}
@@ -154,7 +155,8 @@
   function formatExpiryTyping(v,deleting){
     v=String(v||'').replace(/[^\d\/]/g,'');
     const digits=v.replace(/\//g,'');
-    if(v.indexOf('/')<0&&digits.length===8)return digits.slice(0,2)+'/'+digits.slice(2,4)+'/'+digits.slice(4);
+    if(/^\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{4}$/.test(String(v).trim())){const n=normalizeExpiry(v);return n?n.display:v}
+    if(v.indexOf('/')<0&&digits.length===8){const n=normalizeExpiry(digits.slice(0,2)+'/'+digits.slice(2,4)+'/'+digits.slice(4));return n?n.display:v}
     if(v.indexOf('/')<0&&digits.length===6)return digits.slice(0,2)+'/'+digits.slice(2);
     if(!deleting&&/^\d{2}$/.test(v))return v+'/';
     return v}
@@ -173,6 +175,7 @@
     normalizeExpiry:normalizeExpiry,
     expiryMonthIndex:expiryMonthIndex,
     formatExpiryTyping:formatExpiryTyping,
-    displayYMD:displayYMD
+    displayYMD:displayYMD,
+    displayMY:displayMY
   };
 });
