@@ -54,6 +54,54 @@ test('other models keep the supply the photo actually showed',function(){
   assert.equal(unknown.fields.power,undefined);
 });
 
+test('Clipsal factory code 210119 is made 21 Jan 2019 and due 21 Jan 2029',function(){
+  const hit=lr.clipsalFactoryExpiry('CLIPSAL\nDOM 210119',{nowYear:2026});
+  assert.equal(hit.manufacture.iso,'2019-01-21');
+  assert.equal(hit.manufacture.display,'21/01/2019');
+  assert.equal(hit.expiry.iso,'2029-01-21');
+  assert.equal(hit.expiry.display,'21/01/2029');
+  assert.equal(hit.expiry.derived,true);
+  assert.equal(hit.explicit,false);
+  assert.equal(hit.weak,false);
+});
+
+test('explicit expiry is not given another 10 years and beats a factory code',function(){
+  const dated=lr.clipsalFactoryExpiry('CLIPSAL EXPIRY 21/01/2029\nDATE CODE 210119',{nowYear:2026});
+  assert.equal(dated.explicit,true);
+  assert.equal(dated.expiry.iso,'2029-01-21');
+  assert.equal(dated.expiry.derived,false);
+  assert.equal(dated.manufacture.iso,'2019-01-21');
+  const stamped=lr.clipsalFactoryExpiry('CLIPSAL EXP 210129',{nowYear:2026});
+  assert.equal(stamped.explicit,true);
+  assert.equal(stamped.expiry.iso,'2029-01-21');
+  assert.equal(stamped.manufacture,null);
+  const monthOnly=lr.clipsalFactoryExpiry('CLIPSAL REPLACE BY 01/2029',{nowYear:2026});
+  assert.equal(monthOnly.expiry.display,'01/2029');
+  assert.equal(monthOnly.expiry.derived,false);
+  assert.notEqual(monthOnly.expiry.display,'01/2039');
+});
+
+test('bare or invalid codes are not treated as dates',function(){
+  const bare=lr.clipsalFactoryExpiry('CLIPSAL\n210119',{nowYear:2026});
+  assert.equal(bare.weak,true);
+  assert.equal(bare.expiry.iso,'2029-01-21');
+  assert.equal(lr.clipsalFactoryExpiry('BROOKS DOM 210119',{nowYear:2026}),null);
+  assert.equal(lr.clipsalFactoryExpiry('CLIPSAL',{brand:'Brooks',nowYear:2026}),null);
+  assert.equal(lr.clipsalFactoryExpiry('CLIPSAL S/N 210119',{nowYear:2026}),null);
+  assert.equal(lr.clipsalFactoryExpiry('CLIPSAL MODEL 210119',{nowYear:2026}),null);
+  assert.equal(lr.clipsalFactoryExpiry('CLIPSAL DOM 21011988',{nowYear:2026}),null);
+  assert.equal(lr.clipsalFactoryExpiry('CLIPSAL DOM 320119',{nowYear:2026}),null);
+  assert.equal(lr.clipsalFactoryExpiry('CLIPSAL DOM 290221',{nowYear:2026}),null);
+  assert.equal(lr.clipsalFactoryExpiry('CLIPSAL DOM 000119',{nowYear:2026}),null);
+  const leap=lr.clipsalFactoryExpiry('CLIPSAL DOM 290220',{nowYear:2026});
+  assert.equal(leap.manufacture.iso,'2020-02-29');
+  assert.equal(leap.expiry.iso,'2030-02-28');
+  assert.equal(lr.clipsalFactoryExpiry('CLIPSAL DOM 210119\nDOM 150318',{nowYear:2026}),null);
+  assert.equal(lr.normalizeExpiry('29/02/2021'),null);
+  assert.equal(lr.normalizeExpiry('21/01/2029').iso,'2029-01-21');
+  assert.equal(lr.normalizeExpiry('01/2029').display,'01/2029');
+});
+
 test('transfer sets 240V on that alarm only and does not invent unread fields',function(){
   const alarm={model:'',manufacturer:'',power:['9v'],expiry:''};
   const other={model:'755',power:['9v'],expiry:'01/2030'};
