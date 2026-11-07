@@ -120,6 +120,10 @@ label.btn{cursor:pointer;position:relative}
 .btn.calbtn{width:100%;flex:none;margin:0 0 8px}
 .calstat{margin:0 0 8px}
 .calstat.bad{color:var(--bad);font-weight:700}
+.calrev{border:2px solid var(--amber);background:var(--amberbg);border-radius:12px;padding:10px;margin:8px 0 12px}
+.calrevrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
+.calrevrow span{flex:1 1 180px}
+.calrevrow .btn{flex:0 1 auto;min-height:40px}
 .calextra{display:flex;gap:8px;margin:0 0 10px}
 .calextra .btn{min-height:44px}
 .calents{background:#fff;border-radius:14px;padding:10px 12px 8px;margin:0 0 12px;box-shadow:0 1px 3px rgba(0,0,0,.08);border-top:4px solid var(--brand)}
@@ -356,7 +360,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.13.1 (20261107)';
+const APP_VERSION='2.14.1 (20261107)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -771,10 +775,26 @@ function bindCalendarControls(){
 function gcalEventUrl(id,query){const u='https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(GCAL_ID)+'/events/'+encodeURIComponent(id);return query?u+'?'+query:u}
 function flushWorksheet(root,f){if(!root||!f)return;root.querySelectorAll('[data-path]').forEach(t=>{if(!t.dataset.path)return;setPath(f,t.dataset.path,t.type==='checkbox'?t.checked:t.value)});save(LS.forms,FORMS)}
 function rememberCalEvent(ev){if(!ev||!ev.id)return;const row={id:String(ev.id),summary:ev.summary||'',location:ev.location||'',description:typeof ev.description==='string'?ev.description:'',colorId:ev.colorId||'',iso:ev.iso,start:Date.parse(ev.iso)||ev.start||0,jobId:ev.jobId||null,dupKey:ev.dupKey||null,jobKey:ev.jobKey||null};const i=CAL_EVENTS.findIndex(x=>x.id===row.id);if(i>=0)CAL_EVENTS[i]=Object.assign({},CAL_EVENTS[i],row);else CAL_EVENTS.push(row);CAL_EVENTS.sort((a,b)=>(a.start||0)-(b.start||0));save(LS_CALEV,CAL_EVENTS)}
+let CAL_REVIEW={},CAL_NOTE={};
+function showCalValue(v){return Array.isArray(v)?v.join(', '):String(v==null?'':v)}
+function calReviewHTML(id){
+  const rows=CAL_REVIEW[id]||[];if(!rows.length)return '';
+  return `<div class="calrev" id="calrev"><b>Calendar differs — typed values were kept</b><p class="note">Choose a calendar value for that field only. This does not mark the visit passed, done, or archived.</p>${rows.map((c,i)=>{const where=c.index==null?c.label:'Alarm '+(c.index+1)+' '+(c.label||'').toLowerCase();return `<div class="calrevrow"><span>${esc(where)}: worksheet has <b>${esc(showCalValue(c.local))}</b>, calendar has <b>${esc(showCalValue(c.source))}</b></span><button type="button" class="btn" data-caluse="${i}">Use calendar</button><button type="button" class="btn" data-calkeep="${i}">Keep mine</button></div>`}).join('')}</div>`}
+function bindCalReview(id,f){
+  const m=$('main');
+  m.querySelectorAll('[data-caluse]').forEach(b=>b.onclick=()=>{
+    const rows=CAL_REVIEW[id]||[],c=rows[+b.dataset.caluse];if(!c||!f)return;
+    if(c.index==null)f[c.field]=c.source;
+    else if(c.field==='new')setNewAns(f.al[c.index],'Yes');
+    else f.al[c.index]=JobRefresh.acceptAlarmField(f.al[c.index],c);
+    rows.splice(+b.dataset.caluse,1);if(!rows.length)delete CAL_REVIEW[id];
+    save(LS.forms,FORMS);renderJob(id)});
+  m.querySelectorAll('[data-calkeep]').forEach(b=>b.onclick=()=>{
+    const rows=CAL_REVIEW[id]||[];rows.splice(+b.dataset.calkeep,1);if(!rows.length)delete CAL_REVIEW[id];renderJob(id)})}
 async function updateJobFromCalendar(id){
   const j=JOBS.find(x=>x.id===id);if(!j||!window.JobRefresh)return;
   const f=FORMS[id]||null;
-  const say=m=>{const n=$('#jcalstat');if(n)n.textContent=m;toast(m)};
+  const say=m=>{CAL_NOTE[id]=m;const n=$('#jcalstat');if(n)n.textContent=m;toast(m)};
   const btn=$('#jcal');
   const plan=window.CCSASignIn?CCSASignIn.jobReadAction(calendarState()):{action:(!gcalLive()||(typeof navigator!=='undefined'&&navigator.onLine===false)||GCAL_SYNCING)?'stop':(GCAL.connected&&gcalTokenFresh()?'read':'sign-in-then-read'),prompt:GCAL.connected?'':'consent',waitForGis:!(window.google&&google.accounts&&google.accounts.oauth2),writes:false,reason:!gcalLive()?'unavailable':GCAL_SYNCING?'busy':'offline'};
   if(plan.action==='stop'){say(plan.reason==='busy'?'Google sign-in is already open. This worksheet was not changed.':plan.reason==='offline'?JobRefresh.failureMessage('offline'):'Connect Google first. This worksheet was not changed.');return}
@@ -798,10 +818,20 @@ async function updateJobFromCalendar(id){
     if(!ev||!ev.iso){say('That calendar event had no appointment time. This worksheet was not changed.');return}
     const patch=JobRefresh.appointmentPatch(j,f||{},ev,{calendarId:GCAL_ID});
     const at=JOBS.findIndex(x=>x.id===id);if(at<0)return;
-    JOBS[at]=patch.job;
-    if(f){if(patch.formPatch.date)f.date=patch.formPatch.date;if(patch.formPatch.addr)f.addr=patch.formPatch.addr;if(patch.formPatch.agent)f.agent=patch.formPatch.agent}
+    const keptDone=!!(f&&f.done),keptArch=j.arch||null;
+    JOBS[at]=patch.job;JOBS[at].arch=keptArch;
+    if(f){if(patch.formPatch.date)f.date=patch.formPatch.date;if(patch.formPatch.addr)f.addr=patch.formPatch.addr;if(patch.formPatch.agent)f.agent=patch.formPatch.agent;f.done=keptDone}
+    let msg=patch.message;
+    if(f&&JobRefresh.applyAlarmInventory){
+      const inv=JobRefresh.applyAlarmInventory(f,ev.description||'',{nowYear:new Date().getFullYear()});
+      if(inv.changed){f.al=inv.alarms;f.alarms=inv.alarmCount;f.comments=inv.comments;Object.keys(inv.property||{}).forEach(k=>{f[k]=inv.property[k]})}
+      f.done=keptDone;JOBS[at].arch=keptArch;
+      if(inv.conflicts&&inv.conflicts.length)CAL_REVIEW[id]=inv.conflicts;else delete CAL_REVIEW[id];
+      if(inv.filled)msg=msg.replace('Inspection answers were kept.','Filled '+inv.filled+' alarm detail'+(inv.filled===1?'':'s')+' from the calendar. Inspection answers were kept.');
+      if(inv.conflicts&&inv.conflicts.length)msg+=' '+inv.conflicts.length+' difference'+(inv.conflicts.length===1?' needs':'s need')+' a look before replacing what is typed.';
+      if(inv.reference&&inv.reference.length)msg+=' Unread alarm text was kept with the worksheet.'}
     rememberCalEvent(ev);recomputeRouteOrder();save(LS.jobs,JOBS);save(LS.forms,FORMS);
-    say(patch.message);if(location.hash==='#job/'+encodeURIComponent(id))renderJob(id)}
+    say(msg);if(location.hash==='#job/'+encodeURIComponent(id))renderJob(id)}
   catch(e){const code=e&&e.code;say(code===404||code===410?JobRefresh.classifyRemote(null,target.eventId).message:code===401?JobRefresh.failureMessage('auth'):code===403?JobRefresh.failureMessage('permission'):JobRefresh.failureMessage('error'))}
   finally{const b=$('#jcal');if(b){b.disabled=false;b.textContent='↻ Update from calendar'}}}
 async function gcalJSON(url,opts){
@@ -1312,6 +1342,7 @@ function ncHTML(a,i){const nv=a.newAns||'',c=a.yn.cleaned||'',isN=nv==='Yes';
   <div class="q cln-q ${isN?'na':c?'':'need'}" id="cln${i}"><b>🧽 Cleaned?</b><small>${isN?'N/A (new) – no cleaning needed':c?'Recorded':'<span class="req">Required – not new</span>'}</small></div>${isN?`<div class="s na" data-na="${i}.cleaned" aria-label="Alarm ${i+1}: Cleaned? N/A (new)"><span>N/A (new)</span></div>`:`<div class="s cln" role="group" aria-label="Alarm ${i+1}: Cleaned?" data-yn="${i}.cleaned">${pb('Yes',c,'y'+(c?'':' sugg'))}${pb('No',c,'n')}</div>`}`}
 function alarmHTML(a,i){
   return`<div class="alarm ${a.isNew?'isnew':''}" id="al${i}"><h3>Smoke alarm #${i+1}<span class="badge newb" id="newb${i}" ${a.isNew?'':'hidden'}>🆕 NEW</span>${i>=3?' <span class="note">(goes in Notes)</span>':''}<button type="button" data-allyes="${i}">All Yes</button></h3>
+  ${a.calRef?`<p class="note">Calendar text kept for review: ${esc(a.calRef)}</p>`:''}
   <div class="yn nc" id="nc${i}">${ncHTML(a,i)}</div>
   <label class="l">Mounted on</label>${chips('al.'+i+'.mount',['Ceiling','Wall'],a.mount)}
   <label class="l">Location</label>${chips('al.'+i+'.room',ROOMS,a.room)}
@@ -1343,7 +1374,8 @@ function renderJob(id){
    <label class="l">Technician's name</label>${techCtl(f)}
    <div><label class="l">Date of service</label>${inp('date',f.date,'','date')}</div>
    <button type="button" class="btn" id="jcal">↻ Update from calendar</button>
-   <p class="note" id="jcalstat">${gcalLive()&&!(GCAL.connected&&gcalTokenFresh())?'Not signed in. This opens Google sign-in, then reads this appointment. Nothing is written, and this worksheet stays as it is until the read succeeds.':''}</p>
+   <p class="note" id="jcalstat">${esc(CAL_NOTE[id]||(gcalLive()&&!(GCAL.connected&&gcalTokenFresh())?'Not signed in. This opens Google sign-in, then reads this appointment. Nothing is written, and this worksheet stays as it is until the read succeeds.':''))}</p>
+   ${calReviewHTML(id)}
   </section>
   <section class="f"><h2>Property</h2>
    <label class="l">Property type</label>${chips('ptype',PTYPES,f.ptype)}
@@ -1369,6 +1401,7 @@ function renderJob(id){
   $('#jarch').onclick=()=>{if(isArch(j))restoreHere();else{save(LS.forms,FORMS);archiveJobs([id])}};
   if($('#jrest'))$('#jrest').onclick=restoreHere;
   if($('#jcal'))$('#jcal').onclick=()=>updateJobFromCalendar(id);
+  bindCalReview(id,f);
   $('#dpa').onclick=()=>{save(LS.forms,FORMS);archiveJobs([id])};$('#dpn').onclick=()=>{$('#donepr').hidden=true};
   CURJOB=j.id;paintHead(j);bindForm(j,f);paintAllThumbs(f);syncAsPhotos(f);
   if(FIXTO&&FIXTO.id===id){const i=FIXTO.i;FIXTO=null;setTimeout(()=>flashFix(i),60)}
