@@ -1,6 +1,8 @@
-/* Agency names for the worksheet, and the measured sound level.
-   Known agencies become the short code. Anything else is kept as written.
-   A blank sound level stays blank. No reading is invented. */
+/* Agency names for the worksheet, measured sound, and Australian phone numbers.
+   Ray White Yamba, Ray White Maclean and Raine & Horne use RWY, RWM and R&H.
+   Lifestyle is written in full. LIFE is the same agency. Anything else is kept.
+   A blank sound level stays blank. No reading is invented.
+   A mobile is printed 0### ### ###. A missing digit is not invented. */
 (function(root,factory){
   const api=factory();
   if(typeof module==='object'&&module.exports)module.exports=api;
@@ -19,7 +21,7 @@
     'rwy':'RWY','ray white yamba':'RWY',
     'rwm':'RWM','ray white maclean':'RWM',
     'r and h':'R&H','raine and horne':'R&H','raine horne':'R&H',
-    'life':'LIFE','lifestyle':'LIFE'
+    'life':'Lifestyle','lifestyle':'Lifestyle'
   };
   /* Whole agency cell. "Ray White" alone is not enough to choose Yamba or Maclean. */
   function print(v){
@@ -31,7 +33,7 @@
     [/[, ]+ray\s*white\s*yamba$/i,'RWY'],
     [/[, ]+ray\s*white\s*maclean$/i,'RWM'],
     [/[, ]+raine\s*(?:&|and)\s*horne$/i,'R&H'],
-    [/[, ]+lifestyle$/i,'LIFE']
+    [/[, ]+(?:lifestyle|life)$/i,'Lifestyle']
   ];
   function tokenKind(token){
     const k=key(token);
@@ -152,6 +154,37 @@
     if(base&&ten)return base+' '+ten;
     return base||ten||'';
   }
+  /* Australian mobiles keep the leading 0: 0400 111 222.
+     +61 and 61 are the same number. A landline, an email, or a short number is not padded. */
+  function phoneFormat(v){
+    if(v==null||v==='')return '';
+    if(typeof v==='number'){
+      if(!Number.isSafeInteger(v))return clean(v);
+      v=String(v);
+    }
+    let original=clean(v);
+    if(!original)return '';
+    if(/[a-z@]/i.test(original)&&!/^[\d.]+e\+?\d+$/i.test(original))return original;
+    const sci=original.match(/^(\d+)(?:\.(\d+))?[eE]\+?(\d+)$/);
+    if(sci){
+      const frac=sci[2]||'';
+      const shift=(+sci[3])-frac.length;
+      if(shift!==0)return original;
+      original=sci[1]+frac;
+    }
+    let body=original.replace(/[^\d+]/g,'');
+    if(!body)return original;
+    let fromCountry=false;
+    if(body.startsWith('+61')){body=body.slice(3);fromCountry=true}
+    else if(body.startsWith('61')&&body.length>=11&&body.length<=12){body=body.slice(2);fromCountry=true}
+    if(fromCountry&&/^[2378]\d{8}$/.test(body))body='0'+body;
+    if(/^4\d{8}$/.test(body))body='0'+body;
+    if(/^04\d{8}$/.test(body))return body.slice(0,4)+' '+body.slice(4,7)+' '+body.slice(7);
+    if(/^0[2378]\d{8}$/.test(body))return body.slice(0,2)+' '+body.slice(2,6)+' '+body.slice(6);
+    if(/^1[38]00\d{6}$/.test(body))return body.slice(0,4)+' '+body.slice(4,7)+' '+body.slice(7);
+    if(/^\d{8}$/.test(body)&&!fromCountry)return body.slice(0,4)+' '+body.slice(4);
+    return original;
+  }
   function soundDraft(raw){
     let s=String(raw==null?'':raw).replace(/[^\d.]/g,'');
     const dot=s.indexOf('.');
@@ -169,5 +202,5 @@
     if(!Number.isFinite(n)||n<0||n>200)return {ok:false,blank:false,value:'',message:'That is not a measured sound level. Leave the field blank if it was not measured.'};
     return {ok:true,blank:false,value:String(n),message:''};
   }
-  return {print:print,stripTail:stripTail,readTitle:readTitle,readEvent:readEvent,fromEvent:fromEvent,forForm:forForm,agentForForm:agentForForm,tenancyName:tenancyName,tenancyForForm:tenancyForForm,agentSlot:agentSlot,soundDraft:soundDraft,soundFinal:soundFinal};
+  return {print:print,stripTail:stripTail,readTitle:readTitle,readEvent:readEvent,fromEvent:fromEvent,forForm:forForm,agentForForm:agentForForm,tenancyName:tenancyName,tenancyForForm:tenancyForForm,agentSlot:agentSlot,phoneFormat:phoneFormat,soundDraft:soundDraft,soundFinal:soundFinal};
 });

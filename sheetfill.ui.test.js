@@ -66,7 +66,7 @@ test('worksheet PDF prints agency codes, strikes obsolete rows through Yes and N
       const r=await buildPDF(j,f);
       return {text:await textOf(r.bytes),bytes:Array.from(r.bytes)};
     }
-    const names=[['Ray White Yamba','RWY'],['Ray White Maclean','RWM'],['Raine & Horne','R&H'],['Lifestyle','LIFE'],['McGrath','McGrath']];
+    const names=[['Ray White Yamba','RWY'],['Ray White Maclean','RWM'],['Raine & Horne','R&H'],['Lifestyle','Lifestyle'],['McGrath','McGrath']];
     const out=[];
     for(const pair of names){
       const made=await build(pair[0], pair[0]==='Ray White Yamba'?'99.5':'');
@@ -247,5 +247,108 @@ test('an old blank worksheet picks up a comma calendar title without changing ho
   assert.equal(placed.still,placed.kept);
   fs.writeFileSync(path.join(ART,'synthetic_agent_slot_pdf.png'),Buffer.from(placed.png.split(',')[1],'base64'));
   fs.writeFileSync(path.join(ART,'synthetic_insect_unmarked_rows.png'),Buffer.from(placed.rows.split(',')[1],'base64'));
+  await context.close();
+});
+
+test('a sheet import fills a blank worksheet, keeps the mobile, and prints the agent with status',{timeout:120000},async(t)=>{
+  if(!puppeteer)return t.skip('puppeteer-core is not installed');
+  browser=browser||await puppeteer.launch({executablePath:'/usr/bin/google-chrome',headless:'new',args:['--no-sandbox','--disable-dev-shm-usage']});
+  const context=await browser.createBrowserContext();
+  const page=await context.newPage();
+  await page.setViewport({width:390,height:844,deviceScaleFactor:1});
+  await page.goto(BASE,{waitUntil:'domcontentloaded'});
+  await page.waitForFunction(()=>window.SheetFill&&window.XLSX&&window.PDFLib);
+  const found=await page.evaluate(async()=>{
+    const header=['Agent','Address','Town','Phone 1','Phone 2','Annual Due','Property','Contact'];
+    const preview=parseRows([header,['Lifestyle','1 Sample St','Yamba',400111222,'0266490000','2026-11-08','','Pat Sample'],['Ray White Maclean','4 Fresh St','Maclean','61400222333','+61 2 6649 1111','2026-11-08','','Fresh']]);
+    const addr=preview[0].addr,id=jobKey(addr,preview[0].ident||'');
+    const keptAddr='9 Kept St, Yamba NSW 2464',keptId=jobKey(keptAddr,'');
+    const alarm={isNew:false,newAns:'No',mount:'Ceiling',room:'Hallway',bedno:'',other:'',adjacent:'',power:['240v'],sensor:['Photo-Electric'],manufacturer:'Brooks',model:'Sample',db:'',expiry:'11/2036',yn:{cleaned:'Yes',comply:'Yes',battery:'Yes',located:'Yes',button:'Yes',affixed:'Yes'},photos:[]};
+    const blank={techMode:'def',techOther:'',tech:'Adam Westerman',date:'2026-11-08',time:'',ident:'Sample',agent:'',addr:addr,ptype:'House',ptypeOther:'',levels:1,beds:2,alarms:1,ladder:'Sm',asPrev:false,asPhotos:false,asPhotosSet:false,photos:[],comments:'',done:false,updated:null,al:[alarm]};
+    JOBS=[{id:id,row:1,section:'Holiday',agent:'',tech:'',last:'',due:'2026-11-08',ident:preview[0].ident||'',street:'1 Sample St',town:'Yamba',addr:addr,directions:'',contact:'Pat Sample',p1:'',p2:'pat@example.com',ptype:'House',beds:2,alarms:1,ladder:'Sm',exp:['11/2036'],ic:'',notes:'',extra:[],svc:'2026-11-08T09:00:00+11:00',order:1,arch:null,src:'Earlier import'},
+      {id:keptId,row:2,section:'Permanent',agent:'McGrath',tech:'',last:'',due:'2026-11-08',ident:'',street:'9 Kept St',town:'Yamba',addr:keptAddr,directions:'',contact:'Kept',p1:'0411222333',p2:'',ptype:'Unit',beds:1,alarms:1,ladder:'Sm',exp:[],ic:'',notes:'',extra:[],svc:'2026-11-08T10:00:00+11:00',order:2,arch:null,src:'Earlier import'}];
+    FORMS[id]=Object.assign({},blank);
+    FORMS[keptId]=Object.assign({},blank,{ident:'Kept',agent:'McGrath',agentSet:true,addr:keptAddr,ptype:'Unit',tenancy:'Permanent',tenancySet:true});
+    save(LS.jobs,JOBS);save(LS.forms,FORMS);
+    const doc0=await PDFLib.PDFDocument.create();doc0.addPage();
+    const oldBytes=await doc0.save();
+    const keptPdf=CCSAPdf.retainRecord({id:id,name:'2026-11-08_1-Sample-St.pdf',day:'2026-11-08',addr:addr,street:'1 Sample St',stamp:'old',made:'2026-11-08T01:00:00.000Z',incomplete:false,bytes:oldBytes});
+    await pdfPut(keptPdf.record);
+    const csv=[header.join(','),'Lifestyle,1 Sample St,Yamba,400111222,0266490000,2026-11-08,,Pat Sample','Ray White Yamba,9 Kept St,Yamba,+61 400 333 444,,2026-11-08,,Kept','Ray White Maclean,4 Fresh St,Maclean,61400222333,+61 2 6649 1111,2026-11-08,,Fresh'].join('\n');
+    const st=await importFiles([new File([csv],'synthetic-jobs.csv',{type:'text/csv'})],'add');
+    const job=JOBS.find(x=>x.id===id);
+    const locked=JOBS.find(x=>x.id===keptId);
+    const fresh=JOBS.find(x=>/Fresh/.test(x.street||''));
+    const form=formFor(job);
+    const freshForm=formFor(fresh);
+    const built=await buildPDF(job,form);
+    if(!pdfjsLib.GlobalWorkerOptions.workerSrc)pdfjsLib.GlobalWorkerOptions.workerSrc=URL.createObjectURL(new Blob([document.getElementById('pdfw').textContent],{type:'text/javascript'}));
+    const doc=await pdfjsLib.getDocument({data:built.bytes.slice(),isEvalSupported:false}).promise;
+    const pg=await doc.getPage(1);
+    const items=(await pg.getTextContent()).items.map(it=>({s:it.str,x:+it.transform[4].toFixed(1),y:+it.transform[5].toFixed(1)}));
+    const notes=await doc.getPage(2);
+    const noteText=(await notes.getTextContent()).items.map(it=>it.str).join(' | ');
+    const vp=pg.getViewport({scale:1.7});
+    const full=document.createElement('canvas');full.width=vp.width;full.height=vp.height;
+    await pg.render({canvasContext:full.getContext('2d'),viewport:vp}).promise;
+    const h=Math.round((841.89-500)*1.7);
+    const head=document.createElement('canvas');head.width=full.width;head.height=h;
+    head.getContext('2d').drawImage(full,0,0,full.width,h,0,0,full.width,h);
+    const nvp=notes.getViewport({scale:1.6});
+    const noteCanvas=document.createElement('canvas');noteCanvas.width=nvp.width;noteCanvas.height=Math.round(150);
+    const nfull=document.createElement('canvas');nfull.width=nvp.width;nfull.height=nvp.height;
+    await notes.render({canvasContext:nfull.getContext('2d'),viewport:nvp}).promise;
+    noteCanvas.getContext('2d').drawImage(nfull,0,nfull.height-150,nfull.width,150,0,0,nfull.width,150);
+    const still=await pdfGet(id);
+    return {
+      previewAgent:preview[0].agent,previewP1:preview[0].p1,previewP2:preview[0].p2,previewFresh:preview[1].agent,previewFreshP1:preview[1].p1,previewFreshP2:preview[1].p2,
+      dup:st.dup,add:st.add,
+      agent:job.agent,p1:job.p1,p2:job.p2,section:job.section,ptype:form.ptype,formAgent:form.agent,tenancy:form.tenancy,
+      lockedAgent:locked.agent,lockedForm:FORMS[keptId].agent,lockedP1:locked.p1,lockedType:FORMS[keptId].ptype,
+      freshAgent:fresh.agent,freshP1:fresh.p1,freshP2:fresh.p2,freshForm:freshForm.agent,
+      slot:(items.find(it=>it.s==='Lifestyle Holiday')||null),
+      tenancyLabel:items.some(it=>/Tenancy:/.test(it.s)),
+      noteText:noteText,kept:keptPdf.record.bytes.byteLength,still:still.bytes.byteLength,
+      head:head.toDataURL('image/png'),notes:noteCanvas.toDataURL('image/png'),id:id
+    };
+  });
+  assert.equal(found.previewAgent,'Lifestyle');
+  assert.equal(found.previewP1,'0400 111 222');
+  assert.equal(found.previewP2,'02 6649 0000');
+  assert.equal(found.previewFresh,'RWM');
+  assert.equal(found.previewFreshP1,'0400 222 333');
+  assert.equal(found.previewFreshP2,'02 6649 1111');
+  assert.ok(found.dup>=1,'the existing address was updated, not skipped empty');
+  assert.ok(found.add>=1);
+  assert.equal(found.agent,'Lifestyle');
+  assert.equal(found.formAgent,'Lifestyle');
+  assert.equal(found.tenancy,'Holiday');
+  assert.equal(found.section,'Holiday');
+  assert.equal(found.ptype,'House');
+  assert.equal(found.p1,'0400 111 222');
+  assert.equal(found.p2,'pat@example.com');
+  assert.equal(found.lockedAgent,'McGrath');
+  assert.equal(found.lockedForm,'McGrath');
+  assert.equal(found.lockedP1,'0411 222 333');
+  assert.equal(found.lockedType,'Unit');
+  assert.equal(found.freshAgent,'RWM');
+  assert.equal(found.freshForm,'RWM');
+  assert.equal(found.freshP1,'0400 222 333');
+  assert.equal(found.freshP2,'02 6649 1111');
+  assert.ok(found.slot&&found.slot.y>600&&found.slot.x>380,'Lifestyle Holiday is in the agent slot');
+  assert.equal(found.tenancyLabel,false);
+  assert.match(found.noteText,/0400 111 222/);
+  assert.match(found.noteText,/pat@example.com/);
+  assert.equal(found.still,found.kept);
+  fs.writeFileSync(path.join(ART,'synthetic_lifestyle_phone_pdf.png'),Buffer.from(found.head.split(',')[1],'base64'));
+  fs.writeFileSync(path.join(ART,'synthetic_phone_notes_pdf.png'),Buffer.from(found.notes.split(',')[1],'base64'));
+  await page.goto(BASE+'#job/'+encodeURIComponent(found.id),{waitUntil:'domcontentloaded'});
+  await page.waitForSelector('#agent');
+  assert.equal(await page.$eval('#agent',el=>el.value),'Lifestyle');
+  assert.equal(await page.$eval('[data-tenancy] [data-v="Holiday"]',el=>el.classList.contains('on')),true);
+  assert.equal(await page.$eval('[data-chips="ptype"] [data-v="House"]',el=>el.classList.contains('on')),true);
+  assert.match(await page.$eval('main',el=>el.innerText),/0400 111 222/);
+  await page.evaluate(()=>document.getElementById('agent').scrollIntoView({block:'center'}));
+  await page.screenshot({path:path.join(ART,'worksheet_phone_agent_mobile.png')});
   await context.close();
 });

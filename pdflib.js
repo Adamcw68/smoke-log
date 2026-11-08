@@ -103,7 +103,7 @@
     const n=form.alarms||0;
     return JSON.stringify({
       date:isYMD(String(form.date||'').slice(0,10))?String(form.date).slice(0,10):'',
-      ident:clean(form.ident),agent:(typeof SheetFill!=='undefined'&&SheetFill.agentSlot)?SheetFill.agentSlot(form.agent,form.tenancy):clean(form.agent),tenancy:(typeof SheetFill!=='undefined'&&SheetFill.tenancyName)?SheetFill.tenancyName(form.tenancy):clean(form.tenancy||''),addr:clean(form.addr),
+      ident:clean(form.ident),agent:(typeof SheetFill!=='undefined'&&SheetFill.agentSlot)?SheetFill.agentSlot(form.agent,form.tenancy):clean(form.agent),tenancy:(typeof SheetFill!=='undefined'&&SheetFill.tenancyName)?SheetFill.tenancyName(form.tenancy):clean(form.tenancy||''),phone:clean(form.phoneLine||''),addr:clean(form.addr),
       marks:'smoke-strike-yn',
       tech:clean(form.tech)||DEFAULT_TECH,
       ptype:form.ptype||'',ptypeOther:clean(form.ptypeOther),levels:form.levels||'',beds:form.beds||'',
