@@ -379,7 +379,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="pdflib.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.17.0 (20261108)';
+const APP_VERSION='2.18.0 (20261108)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -1523,8 +1523,7 @@ async function buildPDF(j,f){
   const white=(pg,x0,top,x1,bot)=>pages[pg].drawRectangle({x:x0,y:H-bot,width:x1-x0,height:bot-top,color:WHITE});
   // header (page 1) – same boxes as fill_route.py
   cfit(0,f.ident,170.8,360.8,211,235,{label:'Property identifier'});
-  cfit(0,window.SheetFill?SheetFill.agentForForm(f,j,calendarMeta(j)):(clean(f.agent)||clean(j.agent)||''),413,552.8,211,235,{label:'Agent'});
-  {const ten=window.SheetFill?SheetFill.tenancyForForm(f,j,calendarMeta(j)):clean(f.tenancy||'');if(ten)pages[0].drawText('Tenancy: '+ten,{x:360,y:636,size:11,font,color:BLACK})}
+  {const meta=calendarMeta(j);const agent=window.SheetFill?SheetFill.agentForForm(f,j,meta):(clean(f.agent)||clean(j.agent)||'');const ten=window.SheetFill?SheetFill.tenancyForForm(f,j,meta):clean(f.tenancy||'');cfit(0,window.SheetFill?SheetFill.agentSlot(agent,ten):agent,413,552.8,211,235,{label:'Agent'})}
   cfit(0,f.addr,168,549.9,242.5,266.5,{label:'Property address'});
   {const tn=clean(f.tech)||DEFAULT_TECH;white(0,172,279,318,297);cfit(0,tn,170.8,319.6,273.4,297.4,{size:12,label:'Technician'})} // template prints 'Adam Westerman' in regular type: always cover it, then write the chosen name once (bold 12pt, centred)
   if(f.date){const[y,m,d]=f.date.split('-');cfit(0,d,425.6,462.1,273.4,297.4,{pad:1,label:'Day'});cfit(0,m,466.1,500.6,273.4,297.4,{pad:1,label:'Month'});
@@ -1553,15 +1552,15 @@ async function buildPDF(j,f){
     const e=b.expiry;cfit(pg,a.expiry,e[0],e[2],e[1],e[3],{label:'Expiry #'+(i+1)});
     QS.forEach(([k])=>{if(naBatt(a,k)){const c=b.yn[k];if(c)cfit(pg,'N/A (lithium)',c.Yes[2]+1,c.No[0]-1,c.Yes[1]-1,c.Yes[3]+1,{size:7,pad:0,min:4.5,label:'Battery N/A'});return}if(naClean(a,k)){const c=b.yn[k];if(c)cfit(pg,'N/A (new)',c.Yes[2]+1,c.No[0]-1,c.Yes[1]-1,c.Yes[3]+1,{size:7,pad:0,min:5,label:'Cleaned N/A'});return}const v=a.yn[k];if(v&&b.yn[k])ow(pg,b.yn[k][v],2.5)});
   });
-  // Smoke and insect questions are not used. One line crosses each question and both printed Yes and No choices. Neither is circled.
-  [{page:0,x:301.5,y:179.4,end:530.6},{page:0,x:301.5,y:150.7,end:535.7},{page:1,x:302.7,y:533.4,end:531.8},{page:1,x:302.7,y:504.8,end:536.4},{page:1,x:302.7,y:184.4,end:531.8},{page:1,x:302.7,y:155.6,end:536.4}].forEach(s=>pages[s.page].drawLine({start:{x:s.x,y:s.y},end:{x:s.end,y:s.y},thickness:1.3,color:BLACK}));
+  // The smoke question is not used: one line crosses the question and both printed choices. Insect spray stays unmarked.
+  [{page:0,x:301.5,y:179.4,end:530.6},{page:1,x:302.7,y:533.4,end:531.8},{page:1,x:302.7,y:184.4,end:531.8}].forEach(s=>pages[s.page].drawLine({start:{x:s.x,y:s.y},end:{x:s.end,y:s.y},thickness:1.3,color:BLACK}));
   // notes: comments + alarms 4+
   const lines=[];
   f.al.slice(3,n).forEach((a,k)=>{const i=k+4,bits=[];
     if(a.expiry)bits.push('expiry '+a.expiry);if(a.isNew)bits.push('NEW');
     const loc=[a.mount,a.room==='Bedroom'&&a.bedno?'Bedroom '+a.bedno:a.room==='Other'?a.other:a.room].filter(Boolean).join(' ');if(loc)bits.push(loc);
     if(a.adjacent)bits.push('adj. '+a.adjacent);const ty=[...a.power,...a.sensor].join('/');if(ty)bits.push(ty);
-    const mm=[a.manufacturer,a.model].filter(Boolean).join(' ');if(mm)bits.push(mm);if(a.db)bits.push(a.db+' dB @3m');bits.push('insect spray not used');bits.push('smoke check not used');
+    const mm=[a.manufacturer,a.model].filter(Boolean).join(' ');if(mm)bits.push(mm);if(a.db)bits.push(a.db+' dB @3m');bits.push('smoke check not used');
     if(a.isNew)bits.push('cleaned N/A (new)');if(isLith(a))bits.push('battery N/A (lithium)');const QA=qsFor(a),ans=QA.filter(([q])=>a.yn[q]);if(ans.length){const no=ans.filter(([q])=>a.yn[q]==='No').map(([,t])=>t);bits.push(no.length?'NO: '+no.join(', '):'all checks Yes'+(ans.length<QA.length?' ('+ans.length+'/'+QA.length+')':''))}
     lines.push('Alarm '+i+': '+(bits.join('; ')||'-'))});
   if(clean(f.comments))lines.push(...f.comments.split(/\n/).map(clean).filter(Boolean));

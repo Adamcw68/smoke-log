@@ -107,8 +107,8 @@ test('worksheet PDF prints agency codes, strikes obsolete rows through Yes and N
     const rows={
       smokeGap:diff(438,456,179.4),
       smokeChoices:diff(459,530,179.4),
-      insectGap:diff(400,455,150.7),
-      insectChoices:diff(465,536,150.7),
+      insectGap:Math.abs(diff(400,455,150.7)),
+      insectChoices:Math.abs(diff(465,536,150.7)),
       cleaned:Math.abs(diff(200,285,150.7)),
       affixed:Math.abs(diff(200,285,179.4)),
       aboveInsectNo:dark(c,sx(522),sx(533),155.4)
@@ -121,8 +121,8 @@ test('worksheet PDF prints agency codes, strikes obsolete rows through Yes and N
   },found.png);
   assert.ok(pngBytes.rows.smokeGap>8,'smoke line continues through the gap before Yes '+pngBytes.rows.smokeGap);
   assert.ok(pngBytes.rows.smokeChoices>8,'smoke line crosses Yes and No '+pngBytes.rows.smokeChoices);
-  assert.ok(pngBytes.rows.insectGap>8,'insect line continues through the gap before Yes '+pngBytes.rows.insectGap);
-  assert.ok(pngBytes.rows.insectChoices>8,'insect line crosses Yes and No '+pngBytes.rows.insectChoices);
+  assert.ok(pngBytes.rows.insectGap<20,'insect question stays unmarked '+pngBytes.rows.insectGap);
+  assert.ok(pngBytes.rows.insectChoices<20,'insect Yes and No stay uncircled and unstruck '+pngBytes.rows.insectChoices);
   assert.ok(pngBytes.rows.cleaned<30,'line must not cross the cleaned row '+pngBytes.rows.cleaned);
   assert.ok(pngBytes.rows.affixed<30,'line must not cross the affixed row '+pngBytes.rows.affixed);
   assert.ok(pngBytes.rows.aboveInsectNo<6,'insect No is not circled '+pngBytes.rows.aboveInsectNo);
@@ -220,28 +220,32 @@ test('an old blank worksheet picks up a comma calendar title without changing ho
     const tc=await pg.getTextContent();
     const items=tc.items.map(it=>({s:it.str,x:+it.transform[4].toFixed(1),y:+it.transform[5].toFixed(1)}));
     const ten=items.find(it=>/Tenancy:/.test(it.s));
-    const agent=items.find(it=>it.s==='RWY');
+    const agent=items.find(it=>it.s==='RWY Holiday');
     const vp=pg.getViewport({scale:1.7});
     const full=document.createElement('canvas');full.width=vp.width;full.height=vp.height;
     await pg.render({canvasContext:full.getContext('2d'),viewport:vp}).promise;
     const h=Math.round((841.89-500)*1.7);
     const c=document.createElement('canvas');c.width=full.width;c.height=h;
     c.getContext('2d').drawImage(full,0,0,full.width,h,0,0,full.width,h);
+    const top=Math.round((841.89-210)*1.7), bot=Math.round((841.89-120)*1.7);
+    const rows=document.createElement('canvas');rows.width=full.width;rows.height=bot-top;
+    rows.getContext('2d').drawImage(full,0,top,full.width,bot-top,0,0,full.width,bot-top);
     const oldStamp=CCSAPdf.worksheetStamp(Object.assign({},f,{agent:'',tenancy:''}));
     const doc0=await PDFLib.PDFDocument.create();doc0.addPage();
     const bytes=await doc0.save();
     const kept=CCSAPdf.retainRecord({id:'sample',name:'2026-11-08_1-Sample-St.pdf',day:'2026-11-08',addr:f.addr,street:j.street,stamp:oldStamp,made:'2026-11-08T01:00:00.000Z',incomplete:false,bytes});
     await pdfPut(kept.record);
     const st=CCSAPdf.statusOf(j,f,await pdfGet('sample'));
-    return {ten,agent,ptype:f.ptype,section:j.section,status:st.status,kept:kept.record.bytes.byteLength,still:(await pdfGet('sample')).bytes.byteLength,png:c.toDataURL('image/png')};
+    return {ten,agent,ptype:f.ptype,section:j.section,status:st.status,kept:kept.record.bytes.byteLength,still:(await pdfGet('sample')).bytes.byteLength,png:c.toDataURL('image/png'),rows:rows.toDataURL('image/png')};
   });
   assert.equal(placed.ptype,'House');
   assert.equal(placed.section,'Holiday');
-  assert.ok(placed.agent&&placed.agent.y>600,'agency stays on the agent row');
-  assert.ok(placed.ten&&placed.ten.y>600&&placed.ten.x>300,'tenancy is a header label, not the property-type row');
-  assert.match(placed.ten.s,/Holiday/);
+  assert.equal(placed.ten,undefined);
+  assert.ok(placed.agent&&placed.agent.y>600&&placed.agent.x>400,'combined agency and tenancy sit in the agent slot');
+  assert.equal(placed.agent.s,'RWY Holiday');
   assert.equal(placed.status,'stale');
   assert.equal(placed.still,placed.kept);
-  fs.writeFileSync(path.join(ART,'synthetic_agency_tenancy_pdf.png'),Buffer.from(placed.png.split(',')[1],'base64'));
+  fs.writeFileSync(path.join(ART,'synthetic_agent_slot_pdf.png'),Buffer.from(placed.png.split(',')[1],'base64'));
+  fs.writeFileSync(path.join(ART,'synthetic_insect_unmarked_rows.png'),Buffer.from(placed.rows.split(',')[1],'base64'));
   await context.close();
 });
