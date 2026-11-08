@@ -8,7 +8,7 @@ test('known agencies become the short code and unknown names stay',function(){
     ['RWY','RWY'],['rwy','RWY'],['Ray White Yamba','RWY'],['Ray White, Yamba','RWY'],['Raywhite Yamba','RWY'],
     ['RWM','RWM'],['Ray White Maclean','RWM'],
     ['R&H','R&H'],['R & H','R&H'],['Raine & Horne','R&H'],['Raine and Horne','R&H'],['Raine Horne','R&H'],
-    ['LIFE','LIFE'],['Lifestyle','LIFE'],['lifestyle','LIFE'],
+    ['LIFE','Lifestyle'],['Lifestyle','Lifestyle'],['lifestyle','Lifestyle'],
     ['Ray White','Ray White'],['McGrath','McGrath'],['  McGrath  ','McGrath'],
     ['','']
   ];
@@ -24,7 +24,7 @@ test('spreadsheet, route JSON and calendar titles use the same agency rules',fun
   assert.equal(fill.stripTail('2 Sample St Maclean RWM PERM').code,'RWM');
   assert.equal(fill.stripTail('2 Sample St Maclean RWM PERM').text,'2 Sample St Maclean');
   assert.equal(fill.stripTail('3 Sample St Yamba R&H').code,'R&H');
-  assert.equal(fill.stripTail('3 Sample St Yamba HOL LIFE').code,'LIFE');
+  assert.equal(fill.stripTail('3 Sample St Yamba HOL LIFE').code,'Lifestyle');
   assert.equal(fill.stripTail('3 Sample St Yamba HOL LIFE').text,'3 Sample St Yamba');
   assert.equal(fill.stripTail('4 Sample St Yamba PERM').code,'');
   assert.equal(fill.stripTail('4 Sample St Yamba PERM').text,'4 Sample St Yamba');
@@ -50,7 +50,7 @@ test('comma calendar titles fill agency and tenancy without guessing',function()
   assert.equal(rwm.tenancy,'Permanent');
   assert.equal(rwm.text,'4 River Rd Maclean');
   const life=fill.readTitle('9 Beach Rd, Yamba, Lifestyle, Holiday');
-  assert.equal(life.agent,'LIFE');
+  assert.equal(life.agent,'Lifestyle');
   assert.equal(life.tenancy,'Holiday');
   assert.equal(life.text,'9 Beach Rd, Yamba');
   const rh=fill.readTitle('3 King St, Raine & Horne, PERM');
@@ -103,7 +103,7 @@ test('calendar appointment keeps an unknown agent and shortens a known one',func
 });
 
 test('the agent slot joins a code and tenancy once',function(){
-  ['RWY','RWM','R&H','LIFE'].forEach(function(code){
+  ['RWY','RWM','R&H'].forEach(function(code){
     assert.equal(fill.agentSlot(code,'Holiday'),code+' Holiday');
     assert.equal(fill.agentSlot(code,'Permanent'),code+' Perm');
     assert.equal(fill.agentSlot(code,'PERM'),code+' Perm');
@@ -111,7 +111,9 @@ test('the agent slot joins a code and tenancy once',function(){
   assert.equal(fill.agentSlot('Ray White Yamba','Holiday'),'RWY Holiday');
   assert.equal(fill.agentSlot('Ray White Maclean','Permanent'),'RWM Perm');
   assert.equal(fill.agentSlot('Raine & Horne','Holiday'),'R&H Holiday');
-  assert.equal(fill.agentSlot('Lifestyle','Permanent'),'LIFE Perm');
+  assert.equal(fill.agentSlot('Lifestyle','Permanent'),'Lifestyle Perm');
+  assert.equal(fill.agentSlot('LIFE','Holiday'),'Lifestyle Holiday');
+  assert.equal(fill.agentSlot('LIFE Holiday','Holiday'),'Lifestyle Holiday');
   assert.equal(fill.agentSlot('RWY','') ,'RWY');
   assert.equal(fill.agentSlot('','Holiday'),'Holiday');
   assert.equal(fill.agentSlot('','Permanent'),'Perm');
@@ -125,6 +127,31 @@ test('the agent slot joins a code and tenancy once',function(){
   assert.equal(fill.agentSlot('Ray White','Holiday'),'Ray White Holiday');
   assert.doesNotMatch(fill.agentSlot('RWY Holiday','Holiday'),/Holiday Holiday/);
   assert.doesNotMatch(fill.agentSlot('RWY Perm','Permanent'),/Perm Perm/);
+});
+
+test('australian mobiles keep a leading zero and the 0### ### ### groups',function(){
+  assert.equal(fill.phoneFormat(400111222),'0400 111 222');
+  assert.equal(fill.phoneFormat('400111222'),'0400 111 222');
+  assert.equal(fill.phoneFormat('0400111222'),'0400 111 222');
+  assert.equal(fill.phoneFormat('0400 111 222'),'0400 111 222');
+  assert.equal(fill.phoneFormat('+61 400 111 222'),'0400 111 222');
+  assert.equal(fill.phoneFormat('+61400111222'),'0400 111 222');
+  assert.equal(fill.phoneFormat('61400111222'),'0400 111 222');
+  assert.equal(fill.phoneFormat('+61 0400 111 222'),'0400 111 222');
+  assert.equal(fill.phoneFormat('4.00111222e8'),'0400 111 222');
+  assert.equal(fill.phoneFormat('(0400) 111-222'),'0400 111 222');
+  assert.equal(fill.phoneFormat('02 6649 0000'),'02 6649 0000');
+  assert.equal(fill.phoneFormat('+61 2 6649 0000'),'02 6649 0000');
+  assert.equal(fill.phoneFormat('0266490000'),'02 6649 0000');
+  assert.equal(fill.phoneFormat(266490000),'266490000');
+  assert.equal(fill.phoneFormat('66490000'),'6649 0000');
+  assert.equal(fill.phoneFormat('1300123456'),'1300 123 456');
+  assert.equal(fill.phoneFormat('040011122'),'040011122');
+  assert.equal(fill.phoneFormat('12345'),'12345');
+  assert.equal(fill.phoneFormat('4.00e8'),'4.00e8');
+  assert.equal(fill.phoneFormat('pat@example.com'),'pat@example.com');
+  assert.equal(fill.phoneFormat(''),'');
+  assert.equal(fill.phoneFormat(null),'');
 });
 
 test('measured sound level accepts real readings and invents nothing',function(){

@@ -379,7 +379,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="pdflib.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.18.0 (20261108)';
+const APP_VERSION='2.19.0 (20261108)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -438,11 +438,34 @@ function serialToYMD(v){ // Excel serial or string -> {y,m,d}
 }
 const ymdISO=p=>p?p.y+'-'+pad2(p.m)+'-'+pad2(p.d):'';
 function expStr(v){const p=serialToYMD(v);return p?pad2(p.m)+'/'+p.y:clean(v)}
-function phone(v){
-  if(v==null||v==='')return'';
-  if(typeof v==='number'){const d=String(Math.trunc(v));if(d.length===9&&d[0]==='4')return'0'+d.slice(0,3)+' '+d.slice(3,6)+' '+d.slice(6);if(d.length===8)return d.slice(0,4)+' '+d.slice(4);return d}
-  return clean(v);
+function phone(v){return window.SheetFill?SheetFill.phoneFormat(v):clean(v)}
+function phoneShown(v){const s=phone(v);return s||''}
+function phoneLink(p){const text=phoneShown(p);if(!text)return'';const href=text.replace(/[^\d+]/g,'');return `<a href="tel:${href}">📞 ${esc(text)}</a>`}
+function phoneKeep(current,incoming,allowFill){
+  if(!window.SheetFill)return allowFill&&!clean(current)?clean(incoming):clean(current);
+  const cur=SheetFill.phoneFormat(current),next=SheetFill.phoneFormat(incoming);
+  if(allowFill&&!clean(current)&&next)return next;
+  if(cur&&next&&cur===next)return next;
+  if(cur)return cur;
+  return clean(current);
 }
+/* Blank worksheets take the job's agency. A chosen agency stays. Phones already stored gain their leading zero and spacing. */
+function settleJobs(){
+  if(!window.SheetFill)return;
+  let jobsChanged=false,formsChanged=false;
+  (JOBS||[]).forEach(j=>{
+    ['p1','p2'].forEach(k=>{const next=SheetFill.phoneFormat(j[k]);if(next&&next!==j[k]){j[k]=next;jobsChanged=true}});
+    const shown=SheetFill.print(j.agent);if(shown!==clean(j.agent||'')){j.agent=shown;jobsChanged=true}
+    const f=FORMS[j.id];if(!f)return;
+    if(f.agentSet){const a=SheetFill.print(f.agent);if(a!==clean(f.agent||'')){f.agent=a;formsChanged=true}}
+    else{const next=SheetFill.agentForForm(f,j,{});if(next!==clean(f.agent||'')){f.agent=next;formsChanged=true}}
+    const line=[j.p1,j.p2].map(p=>SheetFill.phoneFormat(p)).filter(Boolean).join(' / ');
+    if((f.phoneLine||'')!==line){f.phoneLine=line;formsChanged=true}
+  });
+  if(jobsChanged)save(LS.jobs,JOBS);
+  if(formsChanged)save(LS.forms,FORMS);
+}
+settleJobs();
 function jobKey(addr,ident){return(addr+'|'+ident).toLowerCase().replace(/[^a-z0-9|]+/g,'')}
 function parseRows(rows){
   const hdr=rows[0].map(clean), ix=n=>hdr.findIndex(h=>h.toLowerCase()===n.toLowerCase());
@@ -472,7 +495,7 @@ function normJSON(arr){ // accepts array of job objects (e.g. exported route fil
   if(!Array.isArray(arr))arr=arr.jobs||[];
   return arr.map((j,i)=>({row:j.row||i+2,section:j.section||'',agent:window.SheetFill?SheetFill.print(j.agent):clean(j.agent),tech:clean(j.tech),last:(j.last||'').slice(0,10),due:(j.due||'').slice(0,10),
     ident:clean(j.ident),street:clean(j.street||j.addr),town:clean(j.town),addr:clean(j.addr),directions:clean(j.directions),contact:clean(j.contact),
-    p1:clean(j.p1),p2:clean(j.p2),ptype:clean(j.ptype),beds:j.beds==null?null:parseInt(j.beds,10),alarms:j.alarms==null?null:parseInt(j.alarms,10),
+    p1:phone(j.p1),p2:phone(j.p2),ptype:clean(j.ptype),beds:j.beds==null?null:parseInt(j.beds,10),alarms:j.alarms==null?null:parseInt(j.alarms,10),
     ladder:clean(j.ladder),exp:(j.exp||[]).map(clean),ic:clean(j.ic),notes:clean(j.notes),extra:j.extra||[],svc:j.svc||null,order:j.order??null,arch:j.arch===undefined?undefined:(j.arch||null),calEventId:j.calEventId?String(j.calEventId):undefined,calPush:j.calPush&&typeof j.calPush==='object'?j.calPush:undefined,id:j.id?String(j.id):undefined,src:j.src?clean(j.src):undefined,srcn:j.srcn??undefined}));
 }
 function mergeJobs(list){
@@ -948,7 +971,17 @@ function addJobs(list,src,srcn,st){ // returns ids added
   list.forEach(j=>{const k=dupKey(j);let o=byKey.get(k);
     if(!o&&j.id){const byId=JOBS.find(x=>x.id===j.id);if(byId&&jobKey(byId.addr,byId.ident)===jobKey(j.addr,j.ident))o=byId}
     if(o&&!added.has(o.id)){ // duplicate of a job already on the list
-      // Archived jobs keep their time and order. Every other job, including ones already started, takes a moved appointment time. Worksheets are not touched.
+      // Archived jobs keep their time, order and agency. A blank active job can take the agency and phone from the sheet. A chosen agency stays.
+      const f=FORMS[o.id];
+      if(window.SheetFill){
+        ['p1','p2'].forEach(k=>{const next=phoneKeep(o[k],j[k],!isArch(o));if(next!==(o[k]||''))o[k]=next});
+        if(!isArch(o)){
+          const incoming=SheetFill.print(j.agent);
+          if(incoming&&!(f&&f.agentSet)&&!clean(o.agent)){o.agent=incoming;if(f&&!clean(f.agent))f.agent=incoming}
+          const ten=SheetFill.tenancyName(j.section);
+          if(ten&&!clean(o.section)&&!(f&&f.tenancySet)){o.section=ten;if(f&&!SheetFill.tenancyName(f.tenancy))f.tenancy=ten}
+        }
+      }
       if(!isArch(o)){
         let ch=false;
         if(j.svc&&j.svc!==o.svc){o.svc=j.svc;ch=true}
@@ -957,6 +990,7 @@ function addJobs(list,src,srcn,st){ // returns ids added
       st.dup++;return}
     const oid=j.id;let id=j.id&&!ids.has(j.id)?j.id:jobKey(j.addr,j.ident);if(ids.has(id)){let n=2;while(ids.has(jobKey(j.addr,j.ident)+'#'+n))n++;id=jobKey(j.addr,j.ident)+'#'+n}
     j.id=id;ids.add(id);added.add(id);if(oid&&oid!==id)st.remap[oid]=id;j.src=j.src||src;j.srcn=j.srcn??srcn;if(j.arch===undefined)j.arch=null;JOBS.push(j);byKey.set(k,j);st.add++});
+  save(LS.forms,FORMS);
   return added}
 async function importFiles(files,mode){
   files=[...files];if(!files.length)return;mode=mode||'add';
@@ -1015,7 +1049,10 @@ function formFor(j){
   techMig(f);if(!f.photos)f.photos=[];f.al.forEach(a=>{if(!a.photos)a.photos=[];migNew(a)});
   if(window.SheetFill){const meta=calendarMeta(j);
     if(!f.agentSet){const next=SheetFill.agentForForm(f,j,meta);if(next!==clean(f.agent))f.agent=next}
+    else{const shown=SheetFill.print(f.agent);if(shown!==clean(f.agent))f.agent=shown}
     if(!f.tenancySet){const ten=SheetFill.tenancyForForm(f,j,meta);if(ten!==clean(f.tenancy||'')){f.tenancy=ten;if(ten&&!clean(j.section)){j.section=ten;save(LS.jobs,JOBS)}}}
+    const line=[j.p1,j.p2].map(p=>SheetFill.phoneFormat(p)).filter(Boolean).join(' / ');
+    if((f.phoneLine||'')!==line)f.phoneLine=line;
   }
   return f;
 }
@@ -1333,7 +1370,7 @@ function card(j){
   <div class="addr">${esc(j.addr)}</div>
   <div class="meta">${esc(j.agent)}${j.ident?' · '+esc(j.ident):''}</div>${j.src?`<div class="srctag" title="Source spreadsheet">📄 ${esc(j.src)}</div>`:''}
   <div class="meta">👤 ${esc(j.contact||'—')} · 🔔 ${j.alarms??'?'} alarm${j.alarms==1?'':'s'} · 🪜 ${esc(j.ladder||'—')}</div>
-  <div class="row">${tel.map(p=>`<a href="tel:${p.replace(/[^\d+]/g,'')}">📞 ${esc(p)}</a>`).join('')||'<button disabled>No phone</button>'}<a href="${maps}" target="_blank" rel="noopener">🗺️ Map</a></div>
+  <div class="row">${tel.map(phoneLink).join('')||'<button disabled>No phone</button>'}<a href="${maps}" target="_blank" rel="noopener">🗺️ Map</a></div>
   <div class="row act"><a class="pri wide" href="#job/${encodeURIComponent(j.id)}">📝 Worksheet</a>${ar?`<button data-restore="${esc(j.id)}" class="unarch">↩️ Unarchive</button>`:`<button data-done="${esc(j.id)}" class="${done?'':'good'}">${done?'Undo done':'✓ Done'}</button><button data-arch="${esc(j.id)}" class="archbtn" aria-label="Archive job">📥 Archive</button>`}</div></div></div>`;
 }
 function paintHead(j){if(!j)return;const st=statusOf(j),h=$('header');h.className='st-'+st;
@@ -1412,7 +1449,7 @@ function renderJob(id){
   <section class="f"><h2>Job</h2>
    <div class="meta">${j.section?`<span class="badge ${j.section==='Holiday'?'hol':'perm'}">${esc(j.section)}</span>`:''}👤 ${esc(j.contact||'—')} ${j.directions?'· '+esc(j.directions):''}</div>
    ${j.notes||j.ic?`<div class="note" style="margin-top:6px">Sheet notes: ${esc([j.ic,j.notes].filter(Boolean).join(' · '))}${j.last?' · last service '+fmtDMY(j.last):''}</div>`:''}
-   <div class="row">${tel.map(p=>`<a href="tel:${p.replace(/[^\d+]/g,'')}">📞 ${esc(p)}</a>`).join('')}<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(j.addr)}" target="_blank" rel="noopener">🗺️ Map</a></div>
+   <div class="row">${tel.map(phoneLink).join('')}<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(j.addr)}" target="_blank" rel="noopener">🗺️ Map</a></div>
    <label class="l">Property identifier</label>${inp('ident',f.ident,'e.g. unit/complex name')}
    <label class="l" for="agent">Agent</label>${inp('agent',f.agent,'','text','id="agent" autocomplete="organization"')}
    <label class="l">Tenancy</label><div class="chips" data-tenancy="1" role="group" aria-label="Tenancy">${['Permanent','Holiday'].map(o=>`<button type="button" data-v="${o}" class="${(f.tenancy||'')===o?'on':''}">${o}</button>`).join('')}</div><p class="note" id="tenancy-note">Holiday or permanent let. This is separate from house, unit, or other building type.</p>
@@ -1563,6 +1600,7 @@ async function buildPDF(j,f){
     const mm=[a.manufacturer,a.model].filter(Boolean).join(' ');if(mm)bits.push(mm);if(a.db)bits.push(a.db+' dB @3m');bits.push('smoke check not used');
     if(a.isNew)bits.push('cleaned N/A (new)');if(isLith(a))bits.push('battery N/A (lithium)');const QA=qsFor(a),ans=QA.filter(([q])=>a.yn[q]);if(ans.length){const no=ans.filter(([q])=>a.yn[q]==='No').map(([,t])=>t);bits.push(no.length?'NO: '+no.join(', '):'all checks Yes'+(ans.length<QA.length?' ('+ans.length+'/'+QA.length+')':''))}
     lines.push('Alarm '+i+': '+(bits.join('; ')||'-'))});
+  const phones=[j.p1,j.p2].map(phoneShown).filter(Boolean);if(phones.length)lines.unshift('Phone: '+phones.join(' / '));
   if(clean(f.comments))lines.push(...f.comments.split(/\n/).map(clean).filter(Boolean));
   if(lines.length)drawNotes(doc,pages,font,lines,report);
   await addPhotoPages(doc,font,f,report);

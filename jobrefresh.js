@@ -57,9 +57,10 @@
     if(titled.tenancy&&!f.tenancySet&&!clean(f.tenancy)&&!clean(j.section)){j.section=titled.tenancy;formPatch.tenancy=titled.tenancy;changes.push('tenancy')}
     if(!j.arch){
       const contact=labeled(event.description,'Contact');
-      const phone=labeled(event.description,'Phone');
+      const phone=(typeof SheetFill!=='undefined'&&SheetFill.phoneFormat)?SheetFill.phoneFormat(labeled(event.description,'Phone')):labeled(event.description,'Phone');
       if(contact&&contact!==j.contact){j.contact=contact;changes.push('contact')}
-      if(phone&&phone!==j.p1){j.p1=phone;changes.push('phone')}}
+      if(phone&&phone!==((typeof SheetFill!=='undefined'&&SheetFill.phoneFormat)?SheetFill.phoneFormat(j.p1):j.p1)){j.p1=phone;changes.push('phone')}}
+    if(typeof SheetFill!=='undefined'&&SheetFill.phoneFormat){['p1','p2'].forEach(function(k){const shown=SheetFill.phoneFormat(j[k]);if(shown&&j[k]!==shown)j[k]=shown})}
     const msg=changes.length?(changes.indexOf('time')>=0?'Appointment time updated from the calendar. Inspection answers were kept.':'Appointment details updated from the calendar. Inspection answers were kept.'):'This appointment already matches the calendar. Inspection answers were kept.';
     return {ok:true,status:changes.length?'updated':'current',job:j,formPatch:formPatch,changes:changes,message:msg,writes:false,
       preserved:{done:!!f.done,comments:f.comments||'',arch:job.arch||null,notes:job.notes||'',last:job.last||'',alarms:f.al||null,photos:f.photos||null}}}
