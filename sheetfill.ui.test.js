@@ -1,4 +1,4 @@
-/* Browser checks for agency codes, the smoke line, insect spray No, and the measured dB field.
+/* Browser checks for agency codes, struck smoke and insect rows, and the measured dB field.
    Addresses are synthetic. */
 const test=require('node:test');
 const assert=require('node:assert/strict');
@@ -46,7 +46,7 @@ async function pageWith(data){
   return page;
 }
 
-test('worksheet PDF prints agency codes, strikes smoke, marks insect No, and keeps a real dB',{timeout:120000},async(t)=>{
+test('worksheet PDF prints agency codes, strikes obsolete rows through Yes and No, and keeps a real dB',{timeout:120000},async(t)=>{
   if(!puppeteer)return t.skip('puppeteer-core is not installed');
   browser=browser||await puppeteer.launch({executablePath:'/usr/bin/google-chrome',headless:'new',args:['--no-sandbox','--disable-dev-shm-usage']});
   const page=await browser.newPage();
@@ -95,20 +95,39 @@ test('worksheet PDF prints agency codes, strikes smoke, marks insect No, and kee
     const base=await baseDoc.getPage(1);
     const bc=document.createElement('canvas');bc.width=vp.width;bc.height=vp.height;
     await base.render({canvasContext:bc.getContext('2d'),viewport:vp}).promise;
-    function dark(canvas,x0,x1,y){
-      const g=canvas.getContext('2d').getImageData(Math.floor(x0),Math.floor(y),Math.max(1,Math.ceil(x1-x0)),2).data;
-      let n=0;for(let i=0;i<g.length;i+=4)if(g[i]<80&&g[i+1]<80&&g[i+2]<80)n++;
+    function dark(canvas,x0,x1,pdfY){
+      const y=(841.89-pdfY)*scale;
+      const g=canvas.getContext('2d').getImageData(Math.floor(x0),Math.max(0,Math.floor(y)-1),Math.max(1,Math.ceil(x1-x0)),3).data;
+      let n=0;for(let i=0;i<g.length;i+=4)if(g[i]<90&&g[i+1]<90&&g[i+2]<90)n++;
       return n;
     }
-    const scale=1.6, y=(841.89-(176.2+3.2))*scale;
-    const x0=301.5*scale, x1=(301.5+132.7)*scale;
-    const strike=dark(c,x0,x1,y)-dark(bc,x0,x1,y);
-    const blob=c.toDataURL('image/png');
-    return {strike,png:blob};
+    const scale=1.6;
+    const sx=x=>x*scale;
+    const diff=(x0,x1,pdfY)=>dark(c,sx(x0),sx(x1),pdfY)-dark(bc,sx(x0),sx(x1),pdfY);
+    const rows={
+      smokeGap:diff(438,456,179.4),
+      smokeChoices:diff(459,530,179.4),
+      insectGap:diff(400,455,150.7),
+      insectChoices:diff(465,536,150.7),
+      cleaned:Math.abs(diff(200,285,150.7)),
+      affixed:Math.abs(diff(200,285,179.4)),
+      aboveInsectNo:dark(c,sx(522),sx(533),155.4)
+    };
+    const crop=document.createElement('canvas');
+    const top=(841.89-220)*scale, bot=(841.89-125)*scale;
+    crop.width=c.width;crop.height=Math.ceil(bot-top);
+    crop.getContext('2d').drawImage(c,0,top,c.width,bot-top,0,0,c.width,bot-top);
+    return {rows,png:c.toDataURL('image/png'),crop:crop.toDataURL('image/png')};
   },found.png);
-  assert.ok(pngBytes.strike>40,'smoke line should be struck, extra dark pixels '+pngBytes.strike);
-  const buf=Buffer.from(pngBytes.png.split(',')[1],'base64');
-  fs.writeFileSync(path.join(ART,'synthetic_worksheet_pdf.png'),buf);
+  assert.ok(pngBytes.rows.smokeGap>8,'smoke line continues through the gap before Yes '+pngBytes.rows.smokeGap);
+  assert.ok(pngBytes.rows.smokeChoices>8,'smoke line crosses Yes and No '+pngBytes.rows.smokeChoices);
+  assert.ok(pngBytes.rows.insectGap>8,'insect line continues through the gap before Yes '+pngBytes.rows.insectGap);
+  assert.ok(pngBytes.rows.insectChoices>8,'insect line crosses Yes and No '+pngBytes.rows.insectChoices);
+  assert.ok(pngBytes.rows.cleaned<30,'line must not cross the cleaned row '+pngBytes.rows.cleaned);
+  assert.ok(pngBytes.rows.affixed<30,'line must not cross the affixed row '+pngBytes.rows.affixed);
+  assert.ok(pngBytes.rows.aboveInsectNo<6,'insect No is not circled '+pngBytes.rows.aboveInsectNo);
+  fs.writeFileSync(path.join(ART,'synthetic_worksheet_obsolete_rows.png'),Buffer.from(pngBytes.png.split(',')[1],'base64'));
+  fs.writeFileSync(path.join(ART,'synthetic_obsolete_check_rows.png'),Buffer.from(pngBytes.crop.split(',')[1],'base64'));
   await page.close();
 });
 

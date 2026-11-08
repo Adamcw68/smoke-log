@@ -186,7 +186,7 @@ test('changing the measured sound level or the sheet marks leaves the saved PDF 
   const measured=form();
   measured.al=measured.al.map(function(a){return Object.assign({},a,{db:'99.5'})});
   assert.notEqual(pdf.worksheetStamp(quiet),pdf.worksheetStamp(measured));
-  assert.match(pdf.worksheetStamp(quiet),/smoke-strike,insect-no/);
+  assert.match(pdf.worksheetStamp(quiet),/smoke-strike-yn,insect-strike-yn/);
   const rec=record({job:job(),form:quiet});
   const old=JSON.parse(rec.stamp);
   delete old.marks;

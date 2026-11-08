@@ -104,7 +104,7 @@
     return JSON.stringify({
       date:isYMD(String(form.date||'').slice(0,10))?String(form.date).slice(0,10):'',
       ident:clean(form.ident),agent:(typeof SheetFill!=='undefined'&&SheetFill.print)?SheetFill.print(form.agent):clean(form.agent),addr:clean(form.addr),
-      marks:'smoke-strike,insect-no',
+      marks:'smoke-strike-yn,insect-strike-yn',
       tech:clean(form.tech)||DEFAULT_TECH,
       ptype:form.ptype||'',ptypeOther:clean(form.ptypeOther),levels:form.levels||'',beds:form.beds||'',
       alarms:n,ladder:form.ladder||'',asPrev:!!form.asPrev,asPhotos:asPhotosOnPdf(form),
