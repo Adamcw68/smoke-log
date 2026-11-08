@@ -379,7 +379,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="pdflib.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.16.1 (20261108)';
+const APP_VERSION='2.17.0 (20261108)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -553,8 +553,14 @@ function calEventsFromJSON(d){
   if(x.start||x.dtstart||x.summary||x.location)return arr;return null}
 function compactAddr(s){
   return String(s||'').toLowerCase().replace(/\b(new south wales|australia)\b/g,' ').replace(/\b(nsw|qld|vic|act|tas|sa|wa|nt)\b/g,' ').replace(/\b\d{4}\b/g,' ').replace(/\b(unit|apt|apartment|flat|shop)\b/g,' ').replace(/[^a-z0-9]+/g,'')}
+function calendarMeta(j){
+  if(!window.SheetFill||!j)return {agent:'',tenancy:''};
+  const hits=(CAL_EVENTS||[]).filter(ev=>eventMatchesJob(j,ev));
+  if(!hits.length)return {agent:'',tenancy:''};
+  return SheetFill.readEvent(hits.length===1?hits[0]:pickEvent(j,hits));
+}
 function summaryAddr(summary){ // drop trailing agency / PERM / HOL tags; keep the street
-  if(window.SheetFill)summary=SheetFill.stripTail(summary).text;
+  if(window.SheetFill)summary=SheetFill.readTitle(summary).text;
   const parts=String(summary||'').trim().split(/\s+/),suf=/^(st|rd|dr|av|ave|ct|pl|ln|wy|cl|cres|tce)$/i,trail=/^(perm|permanent|holiday|hol|rwy)$/i;let n=0;
   while(parts.length>2&&n<4){const raw=parts[parts.length-1],t=raw.replace(/[^A-Za-z]/g,'');if(suf.test(t))break;
     if(!(trail.test(t)||(/^[A-Z]{2,4}$/.test(raw)&&!POST[t.toLowerCase()])))break;parts.pop();n++}
@@ -594,8 +600,14 @@ function applyCalendar(events){ // sets svc on non-archived matches; caller reco
   let changed=0;
   let formsChanged=false;
   hits.forEach((evs,id)=>{const j=JOBS.find(x=>x.id===id),ev=pickEvent(j,evs);let ch=false;if(j.svc!==ev.iso){j.svc=ev.iso;ch=true}if(ev.id&&j.calEventId!==ev.id){j.calEventId=ev.id;ch=true}
-    if(window.SheetFill&&!clean(j.agent)){const ag=SheetFill.fromEvent(ev);if(ag){j.agent=ag;ch=true}}
-    const f=FORMS[j.id];if(f&&window.SheetFill){const next=SheetFill.forForm(f.agent,j);if(next!==clean(f.agent)){f.agent=next;formsChanged=true}}
+    const meta=window.SheetFill?SheetFill.readEvent(ev):{agent:'',tenancy:''};
+    const f=FORMS[j.id];
+    if(meta.agent&&!clean(j.agent)&&!(f&&f.agentSet)){j.agent=meta.agent;ch=true}
+    if(meta.tenancy&&!clean(j.section)&&!(f&&f.tenancySet)){j.section=meta.tenancy;ch=true}
+    if(f&&window.SheetFill){
+      if(!f.agentSet){const next=SheetFill.agentForForm(f,j,meta);if(next!==clean(f.agent)){f.agent=next;formsChanged=true}}
+      if(!f.tenancySet){const ten=SheetFill.tenancyForForm(f,j,meta);if(ten!==clean(f.tenancy||'')){f.tenancy=ten;formsChanged=true}}
+    }
     if(ch)changed++});
   if(formsChanged)save(LS.forms,FORMS);
   return {events:events.length,matched:hits.size,changed,unmatched}}
@@ -627,7 +639,8 @@ function ensureJobForEvent(ev){
   const base=jobKey(addr,'')||('cal-'+String(ev.start||Date.parse(ev.iso)));
   let id=ev.jobId&&!JOBS.some(j=>j.id===ev.jobId)?String(ev.jobId):base,n=2;
   while(JOBS.some(j=>j.id===id)){const o=JOBS.find(j=>j.id===id);if(o&&eventMatchesJob(o,ev))return {job:o,created:false};id=base+'#'+n;n++}
-  const j={id,row:9000+JOBS.length,section:'',agent:window.SheetFill?SheetFill.fromEvent(ev):'',tech:'',last:'',due:String(ev.iso).slice(0,10),ident:'',street,town:'',addr,directions:'',contact:'',p1:'',p2:'',ptype:'',beds:null,alarms:1,ladder:'',exp:[],ic:'',notes:eventTitle(ev),extra:[],svc:ev.iso,order:null,arch:null,src:'Calendar'};
+  const meta=window.SheetFill?SheetFill.readEvent(ev):{agent:'',tenancy:''};
+  const j={id,row:9000+JOBS.length,section:meta.tenancy||'',agent:meta.agent||'',tech:'',last:'',due:String(ev.iso).slice(0,10),ident:'',street,town:'',addr,directions:'',contact:'',p1:'',p2:'',ptype:'',beds:null,alarms:1,ladder:'',exp:[],ic:'',notes:eventTitle(ev),extra:[],svc:ev.iso,order:null,arch:null,src:'Calendar'};
   JOBS.push(j);recomputeRouteOrder();save(LS.jobs,JOBS);
   return {job:j,created:true}}
 function openEventWorksheet(ev){
@@ -845,7 +858,7 @@ async function updateJobFromCalendar(id){
     const at=JOBS.findIndex(x=>x.id===id);if(at<0)return;
     const keptDone=!!(f&&f.done),keptArch=j.arch||null;
     JOBS[at]=patch.job;JOBS[at].arch=keptArch;
-    if(f){if(patch.formPatch.date)f.date=patch.formPatch.date;if(patch.formPatch.addr)f.addr=patch.formPatch.addr;if(patch.formPatch.agent)f.agent=patch.formPatch.agent;f.done=keptDone}
+    if(f){if(patch.formPatch.date)f.date=patch.formPatch.date;if(patch.formPatch.addr)f.addr=patch.formPatch.addr;if(patch.formPatch.agent)f.agent=patch.formPatch.agent;if(patch.formPatch.tenancy)f.tenancy=patch.formPatch.tenancy;f.done=keptDone}
     let msg=patch.message;
     if(f&&JobRefresh.applyAlarmInventory){
       const inv=JobRefresh.applyAlarmInventory(f,ev.description||'',{nowYear:new Date().getFullYear()});
@@ -1000,7 +1013,10 @@ function formFor(j){
     FORMS[j.id]=f}
   const n=Math.max(f.alarms||0,1);while(f.al.length<n)f.al.push(blankAlarm(j.exp[f.al.length]));
   techMig(f);if(!f.photos)f.photos=[];f.al.forEach(a=>{if(!a.photos)a.photos=[];migNew(a)});
-  if(window.SheetFill){const next=SheetFill.forForm(f.agent,j);if(next!==clean(f.agent))f.agent=next}
+  if(window.SheetFill){const meta=calendarMeta(j);
+    if(!f.agentSet){const next=SheetFill.agentForForm(f,j,meta);if(next!==clean(f.agent))f.agent=next}
+    if(!f.tenancySet){const ten=SheetFill.tenancyForForm(f,j,meta);if(ten!==clean(f.tenancy||'')){f.tenancy=ten;if(ten&&!clean(j.section)){j.section=ten;save(LS.jobs,JOBS)}}}
+  }
   return f;
 }
 let saveT;function touch(id){const f=FORMS[id];f.updated=new Date().toISOString();clearTimeout(saveT);saveT=setTimeout(()=>save(LS.forms,FORMS),150);if(CURJOB===id&&location.hash.startsWith('#job/'))paintHead(JOBS.find(x=>x.id===id))}
@@ -1399,6 +1415,7 @@ function renderJob(id){
    <div class="row">${tel.map(p=>`<a href="tel:${p.replace(/[^\d+]/g,'')}">📞 ${esc(p)}</a>`).join('')}<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(j.addr)}" target="_blank" rel="noopener">🗺️ Map</a></div>
    <label class="l">Property identifier</label>${inp('ident',f.ident,'e.g. unit/complex name')}
    <label class="l" for="agent">Agent</label>${inp('agent',f.agent,'','text','id="agent" autocomplete="organization"')}
+   <label class="l">Tenancy</label><div class="chips" data-tenancy="1" role="group" aria-label="Tenancy">${['Permanent','Holiday'].map(o=>`<button type="button" data-v="${o}" class="${(f.tenancy||'')===o?'on':''}">${o}</button>`).join('')}</div><p class="note" id="tenancy-note">Holiday or permanent let. This is separate from house, unit, or other building type.</p>
    <label class="l">Property address</label>${inp('addr',f.addr)}
    <label class="l">Technician's name</label>${techCtl(f)}
    <div><label class="l">Date of service</label>${inp('date',f.date,'','date')}</div>
@@ -1454,7 +1471,7 @@ function bindForm(j,f){
       else{const fin=SheetFill.soundFinal(typed);if(!fin.ok){t.value=prev;toast(fin.message);return}v=fin.value;t.value=v}}
     setPath(f,t.dataset.path,v);touch(j.id)};
   m.onchange=e=>{const t=e.target;if(t.dataset.path==='done'&&t.checked!==!!f.done)return;if(t.dataset.tother){addRecent(f.techOther);save(LS.forms,FORMS);return}
-    if(t.dataset.path==='agent'&&window.SheetFill){const next=SheetFill.print(t.value);if(next!==t.value){t.value=next;setPath(f,'agent',next);touch(j.id)}}
+    if(t.dataset.path==='agent'&&window.SheetFill){const next=SheetFill.print(t.value);t.value=next;setPath(f,'agent',next);f.agentSet=true;j.agent=next;save(LS.jobs,JOBS);touch(j.id)}
     if(/\.db$/.test(t.dataset.path||'')&&window.SheetFill){const fin=SheetFill.soundFinal(t.value);t.value=fin.ok?fin.value:(getPath(f,t.dataset.path)||'');setPath(f,t.dataset.path,t.value);touch(j.id);save(LS.forms,FORMS)}
     if(t.dataset.path==='done'||t.dataset.path==='asPhotos')save(LS.forms,FORMS);
     if(t.dataset.path==='done'){const pr=$('#donepr');if(pr){pr.hidden=!(t.checked&&!isArch(j));if(!pr.hidden)pr.scrollIntoView({block:'nearest',behavior:'smooth'})}}
@@ -1462,6 +1479,7 @@ function bindForm(j,f){
   m.onclick=e=>{
     const b=e.target.closest('button');if(!b||!b.parentElement||!m.contains(b))return;
     if(b.dataset.qslot){QSEL[j.id]=b.dataset.qslot;paintQuick(f);return}
+    if(b.parentElement.dataset.tenancy){const next=f.tenancy===b.dataset.v?'':b.dataset.v;f.tenancy=next;f.tenancySet=true;j.section=next;save(LS.jobs,JOBS);b.parentElement.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.v===next));touch(j.id);save(LS.forms,FORMS);return}
     if(b.dataset.tmode){techSet(f,b.dataset.tmode);touch(j.id);save(LS.forms,FORMS);paintTech(f);if(b.dataset.tmode==='other'&&!f.techOther){const i=$('#tother');if(i)i.focus()}return}
     if(b.dataset.tpick!=null){techSet(f,'other',b.dataset.tpick);addRecent(f.techOther);touch(j.id);save(LS.forms,FORMS);paintTech(f);return}
     if(b.dataset.ph){openPhoto(j,f,b.dataset.slot,b.dataset.ph);return}
@@ -1505,7 +1523,8 @@ async function buildPDF(j,f){
   const white=(pg,x0,top,x1,bot)=>pages[pg].drawRectangle({x:x0,y:H-bot,width:x1-x0,height:bot-top,color:WHITE});
   // header (page 1) – same boxes as fill_route.py
   cfit(0,f.ident,170.8,360.8,211,235,{label:'Property identifier'});
-  cfit(0,window.SheetFill?SheetFill.forForm(f.agent,j):(clean(f.agent)||clean(j.agent)||''),413,552.8,211,235,{label:'Agent'});
+  cfit(0,window.SheetFill?SheetFill.agentForForm(f,j,calendarMeta(j)):(clean(f.agent)||clean(j.agent)||''),413,552.8,211,235,{label:'Agent'});
+  {const ten=window.SheetFill?SheetFill.tenancyForForm(f,j,calendarMeta(j)):clean(f.tenancy||'');if(ten)pages[0].drawText('Tenancy: '+ten,{x:360,y:636,size:11,font,color:BLACK})}
   cfit(0,f.addr,168,549.9,242.5,266.5,{label:'Property address'});
   {const tn=clean(f.tech)||DEFAULT_TECH;white(0,172,279,318,297);cfit(0,tn,170.8,319.6,273.4,297.4,{size:12,label:'Technician'})} // template prints 'Adam Westerman' in regular type: always cover it, then write the chosen name once (bold 12pt, centred)
   if(f.date){const[y,m,d]=f.date.split('-');cfit(0,d,425.6,462.1,273.4,297.4,{pad:1,label:'Day'});cfit(0,m,466.1,500.6,273.4,297.4,{pad:1,label:'Month'});

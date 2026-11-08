@@ -40,6 +40,45 @@ test('spreadsheet, route JSON and calendar titles use the same agency rules',fun
   assert.equal(fill.forForm('',{agent:'',src:'Sheet',notes:'1 Sample St Yamba RWY'}),'');
 });
 
+test('comma calendar titles fill agency and tenancy without guessing',function(){
+  const rwy=fill.readTitle('12 Smith St, Yamba, RWY, Holiday');
+  assert.equal(rwy.agent,'RWY');
+  assert.equal(rwy.tenancy,'Holiday');
+  assert.equal(rwy.text,'12 Smith St, Yamba');
+  const rwm=fill.readTitle('4 River Rd Maclean RWM PERM');
+  assert.equal(rwm.agent,'RWM');
+  assert.equal(rwm.tenancy,'Permanent');
+  assert.equal(rwm.text,'4 River Rd Maclean');
+  const life=fill.readTitle('9 Beach Rd, Yamba, Lifestyle, Holiday');
+  assert.equal(life.agent,'LIFE');
+  assert.equal(life.tenancy,'Holiday');
+  assert.equal(life.text,'9 Beach Rd, Yamba');
+  const rh=fill.readTitle('3 King St, Raine & Horne, PERM');
+  assert.equal(rh.agent,'R&H');
+  assert.equal(rh.tenancy,'Permanent');
+  assert.equal(fill.readTitle('3 King St, Raine and Horne').agent,'R&H');
+  assert.equal(fill.readTitle('1 Life St').agent,'');
+  assert.equal(fill.readTitle('1 Life St').tenancy,'');
+  const unknown=fill.readTitle('5 Queen St, Some Agency, Holiday');
+  assert.equal(unknown.agent,'');
+  assert.equal(unknown.tenancy,'Holiday');
+  assert.equal(fill.readTitle('8 Lane, Ray White, Holiday').agent,'');
+  assert.equal(fill.readTitle('8 Lane, Ray White, Holiday').tenancy,'Holiday');
+  const explicit=fill.readEvent({summary:'1 Sample St, Yamba, RWY, Holiday',description:'Agent: McGrath'});
+  assert.equal(explicit.agent,'McGrath');
+  assert.equal(explicit.tenancy,'Holiday');
+  const blank={agent:'',tenancy:'',agentSet:false,tenancySet:false,ptype:'House'};
+  const job={agent:'',section:'',src:'Sheet',notes:'gate code',ptype:'House'};
+  const meta={agent:'RWY',tenancy:'Holiday'};
+  assert.equal(fill.agentForForm(blank,job,meta),'RWY');
+  assert.equal(fill.tenancyForForm(blank,job,meta),'Holiday');
+  assert.equal(fill.agentForForm({agent:'McGrath'},job,meta),'McGrath');
+  assert.equal(fill.tenancyForForm({tenancy:'Holiday',tenancySet:true},job,{tenancy:'Permanent'}),'Holiday');
+  assert.equal(fill.tenancyForForm({tenancy:''},{section:'Permanent',ptype:'Unit'},{}),'Permanent');
+  assert.equal(fill.agentForForm({agent:'',agentSet:true},job,meta),'');
+  assert.equal(blank.ptype,'House');
+});
+
 test('calendar appointment keeps an unknown agent and shortens a known one',function(){
   const job={addr:'1 Sample St',agent:'',svc:'2026-11-08T09:00:00+11:00'};
   const known=jr.appointmentPatch(job,{agent:''},{iso:'2026-11-08T09:00:00+11:00',description:'Agent: Ray White Yamba',location:'1 Sample St'});
@@ -50,6 +89,17 @@ test('calendar appointment keeps an unknown agent and shortens a known one',func
   const bare=jr.appointmentPatch({addr:'1 Sample St',agent:'Ray White'},{agent:'Ray White'},{description:'Agent: Ray White',location:'1 Sample St',iso:'2026-11-08T09:00:00+11:00'});
   assert.equal(bare.job.agent,'Ray White');
   assert.equal(bare.formPatch.agent,undefined);
+  const titled=jr.appointmentPatch({addr:'1 Sample St, Yamba NSW 2464',agent:'',section:''},{agent:'',ptype:'House'},{summary:'1 Sample St, Yamba, RWY, Holiday',description:'',location:'1 Sample St, Yamba NSW 2464',iso:'2026-11-08T09:00:00+11:00'});
+  assert.equal(titled.job.agent,'RWY');
+  assert.equal(titled.formPatch.agent,'RWY');
+  assert.equal(titled.job.section,'Holiday');
+  assert.equal(titled.formPatch.tenancy,'Holiday');
+  assert.equal(titled.job.ptype,undefined);
+  const kept=jr.appointmentPatch({agent:'McGrath',section:'Permanent'},{agent:'McGrath',tenancy:'Permanent',ptype:'Unit'},{summary:'1 Sample St, Yamba, RWY, Holiday',description:'',iso:'2026-11-08T09:00:00+11:00'});
+  assert.equal(kept.job.agent,'McGrath');
+  assert.equal(kept.job.section,'Permanent');
+  assert.equal(kept.formPatch.agent,undefined);
+  assert.equal(kept.formPatch.tenancy,undefined);
 });
 
 test('measured sound level accepts real readings and invents nothing',function(){
