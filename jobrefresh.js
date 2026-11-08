@@ -49,7 +49,8 @@
     if(loc&&loc!==j.addr&&(!f.addr||f.addr===job.addr)){j.addr=loc;formPatch.addr=loc;changes.push('address')}
     const access=labeled(event.description,'Access');
     if(access&&access!==j.directions){j.directions=access;changes.push('access')}
-    const agent=labeled(event.description,'Agent');
+    const agentRaw=labeled(event.description,'Agent');
+    const agent=(typeof SheetFill!=='undefined'&&SheetFill.print)?SheetFill.print(agentRaw):agentRaw;
     if(agent&&agent!==j.agent&&(!f.agent||f.agent===job.agent)){j.agent=agent;formPatch.agent=agent;changes.push('agent')}
     if(!j.arch){
       const contact=labeled(event.description,'Contact');

@@ -181,6 +181,23 @@ test('share sheet results and empty PDFs are refused',function(){
   assert.equal(pdf.uniqueFileNames(['a.pdf','a.pdf','b.pdf']).join(','),'a.pdf,a-2.pdf,b.pdf');
 });
 
+test('changing the measured sound level or the sheet marks leaves the saved PDF in place and stale',function(){
+  const quiet=form();
+  const measured=form();
+  measured.al=measured.al.map(function(a){return Object.assign({},a,{db:'99.5'})});
+  assert.notEqual(pdf.worksheetStamp(quiet),pdf.worksheetStamp(measured));
+  assert.match(pdf.worksheetStamp(quiet),/smoke-strike,insect-no/);
+  const rec=record({job:job(),form:quiet});
+  const old=JSON.parse(rec.stamp);
+  delete old.marks;
+  rec.stamp=JSON.stringify(old);
+  const st=pdf.statusOf(job(),quiet,rec);
+  assert.equal(st.status,'stale');
+  assert.equal(st.include,false);
+  assert.ok(rec.bytes.byteLength>5);
+  assert.equal(rec.bytes[0],0x25);
+});
+
 test('a saved PDF whose worksheet disappeared is not treated as current',function(){
   const j=job({id:'a'});
   const rec=record({job:j,form:form()});
