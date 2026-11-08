@@ -122,6 +122,36 @@
     return '';
   }
   function forForm(formAgent,job){return agentForForm({agent:formAgent},job,{})}
+  function shortTenancy(v){
+    const name=tenancyName(v);
+    if(name==='Permanent')return 'Perm';
+    if(name==='Holiday')return 'Holiday';
+    const k=key(v);
+    if(k==='perm')return 'Perm';
+    return '';
+  }
+  /* Split "RWY Holiday" or "Ray White Yamba, Perm" so the status is not printed twice. */
+  function splitCombined(agent){
+    let raw=clean(agent),status='';
+    if(!raw)return {base:'',status:''};
+    const only=shortTenancy(raw);
+    if(only&&/^(holiday|perm|permanent)$/.test(key(raw)))return {base:'',status:only};
+    for(let n=0;n<3;n++){
+      const m=raw.match(/^(.*?)(?:[,\s]+)(holiday|perm|permanent)$/i);
+      if(!m||!clean(m[1]))break;
+      if(!status)status=shortTenancy(m[2]);
+      raw=clean(m[1]);
+    }
+    return {base:print(raw),status:status};
+  }
+  /* One Agent slot: code plus Perm or Holiday. A missing part is left out. */
+  function agentSlot(agent,tenancy){
+    const parts=splitCombined(agent);
+    const ten=shortTenancy(tenancy)||parts.status;
+    const base=parts.base;
+    if(base&&ten)return base+' '+ten;
+    return base||ten||'';
+  }
   function soundDraft(raw){
     let s=String(raw==null?'':raw).replace(/[^\d.]/g,'');
     const dot=s.indexOf('.');
@@ -139,5 +169,5 @@
     if(!Number.isFinite(n)||n<0||n>200)return {ok:false,blank:false,value:'',message:'That is not a measured sound level. Leave the field blank if it was not measured.'};
     return {ok:true,blank:false,value:String(n),message:''};
   }
-  return {print:print,stripTail:stripTail,readTitle:readTitle,readEvent:readEvent,fromEvent:fromEvent,forForm:forForm,agentForForm:agentForForm,tenancyName:tenancyName,tenancyForForm:tenancyForForm,soundDraft:soundDraft,soundFinal:soundFinal};
+  return {print:print,stripTail:stripTail,readTitle:readTitle,readEvent:readEvent,fromEvent:fromEvent,forForm:forForm,agentForForm:agentForForm,tenancyName:tenancyName,tenancyForForm:tenancyForForm,agentSlot:agentSlot,soundDraft:soundDraft,soundFinal:soundFinal};
 });

@@ -102,6 +102,31 @@ test('calendar appointment keeps an unknown agent and shortens a known one',func
   assert.equal(kept.formPatch.tenancy,undefined);
 });
 
+test('the agent slot joins a code and tenancy once',function(){
+  ['RWY','RWM','R&H','LIFE'].forEach(function(code){
+    assert.equal(fill.agentSlot(code,'Holiday'),code+' Holiday');
+    assert.equal(fill.agentSlot(code,'Permanent'),code+' Perm');
+    assert.equal(fill.agentSlot(code,'PERM'),code+' Perm');
+  });
+  assert.equal(fill.agentSlot('Ray White Yamba','Holiday'),'RWY Holiday');
+  assert.equal(fill.agentSlot('Ray White Maclean','Permanent'),'RWM Perm');
+  assert.equal(fill.agentSlot('Raine & Horne','Holiday'),'R&H Holiday');
+  assert.equal(fill.agentSlot('Lifestyle','Permanent'),'LIFE Perm');
+  assert.equal(fill.agentSlot('RWY','') ,'RWY');
+  assert.equal(fill.agentSlot('','Holiday'),'Holiday');
+  assert.equal(fill.agentSlot('','Permanent'),'Perm');
+  assert.equal(fill.agentSlot('',''),'');
+  assert.equal(fill.agentSlot('RWY Holiday','Holiday'),'RWY Holiday');
+  assert.equal(fill.agentSlot('RWY Perm','') ,'RWY Perm');
+  assert.equal(fill.agentSlot('RWY Holiday','Permanent'),'RWY Perm');
+  assert.equal(fill.agentSlot('RWY, Holiday','Holiday'),'RWY Holiday');
+  assert.equal(fill.agentSlot('McGrath','Holiday'),'McGrath Holiday');
+  assert.equal(fill.agentSlot('McGrath',''),'McGrath');
+  assert.equal(fill.agentSlot('Ray White','Holiday'),'Ray White Holiday');
+  assert.doesNotMatch(fill.agentSlot('RWY Holiday','Holiday'),/Holiday Holiday/);
+  assert.doesNotMatch(fill.agentSlot('RWY Perm','Permanent'),/Perm Perm/);
+});
+
 test('measured sound level accepts real readings and invents nothing',function(){
   assert.deepEqual(fill.soundFinal(''),{ok:true,blank:true,value:'',message:''});
   assert.deepEqual(fill.soundFinal('   '),{ok:true,blank:true,value:'',message:''});
