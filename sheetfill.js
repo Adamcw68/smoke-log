@@ -101,15 +101,17 @@
   }
   function fromEvent(ev){return readEvent(ev).agent}
   /* A typed agency stays. A blank one can take the job, then a known calendar tag. */
-  function agentForForm(form,job,meta){
+  function agentRaw(form,job,meta){
     form=form||{};job=job||{};meta=meta||{};
-    if(form.agentSet)return print(form.agent);
-    const current=clean(form.agent);
-    if(current)return print(current);
-    if(clean(job.agent))return print(job.agent);
-    if(meta.agent)return meta.agent;
+    if(form.agentSet)return clean(form.agent);
+    if(clean(form.agent))return clean(form.agent);
+    if(clean(job.agent))return clean(job.agent);
+    if(meta.agent)return clean(meta.agent);
     if(job.src==='Calendar')return readTitle(job.notes||'').agent||'';
     return '';
+  }
+  function agentForForm(form,job,meta){
+    return agencyFields(agentRaw(form,job,meta)).agent;
   }
   /* Tenancy is Permanent or Holiday. It is not the house, unit, or other building type. */
   function tenancyForForm(form,job,meta){
@@ -119,6 +121,8 @@
     if(current)return current;
     const section=tenancyName(job.section);
     if(section)return section;
+    const embedded=agencyFields(form.agent).tenancy||(!form.agentSet&&agencyFields(job.agent).tenancy)||'';
+    if(embedded)return embedded;
     if(meta.tenancy)return meta.tenancy;
     if(job.src==='Calendar')return readTitle(job.notes||'').tenancy||'';
     return '';
@@ -132,12 +136,25 @@
     if(k==='perm')return 'Perm';
     return '';
   }
-  /* Split "RWY Holiday" or "Ray White Yamba, Perm" so the status is not printed twice. */
+  function knownAgency(v){
+    const raw=clean(v);
+    if(!raw)return false;
+    if(print(raw)!==raw)return true;
+    return !!CODES[key(raw)];
+  }
+  function leadStatus(raw){
+    const m=clean(raw).match(/^(holiday|perm|permanent)(?:[,\s]+)(.*)$/i);
+    if(!m||!clean(m[2]))return null;
+    return {status:shortTenancy(m[1]),rest:clean(m[2])};
+  }
+  /* "RWY Holiday" and "Holiday RWY" both become the agency, then the status. */
   function splitCombined(agent){
     let raw=clean(agent),status='';
     if(!raw)return {base:'',status:''};
     const only=shortTenancy(raw);
     if(only&&/^(holiday|perm|permanent)$/.test(key(raw)))return {base:'',status:only};
+    const lead=leadStatus(raw);
+    if(lead&&knownAgency(lead.rest)){status=lead.status;raw=lead.rest}
     for(let n=0;n<3;n++){
       const m=raw.match(/^(.*?)(?:[,\s]+)(holiday|perm|permanent)$/i);
       if(!m||!clean(m[1]))break;
@@ -146,11 +163,19 @@
     }
     return {base:print(raw),status:status};
   }
-  /* One Agent slot: code plus Perm or Holiday. A missing part is left out. */
+  function agencyFields(raw){
+    const parts=splitCombined(raw);
+    return {agent:parts.base,tenancy:parts.status==='Perm'?'Permanent':parts.status==='Holiday'?'Holiday':''};
+  }
+  /* One Agent slot: agency first, then Perm or Holiday. A missing part is left out. */
   function agentSlot(agent,tenancy){
     const parts=splitCombined(agent);
     const ten=shortTenancy(tenancy)||parts.status;
-    const base=parts.base;
+    let base=parts.base;
+    if(ten){
+      const lead=leadStatus(base);
+      if(lead&&lead.status===ten)base=print(lead.rest);
+    }
     if(base&&ten)return base+' '+ten;
     return base||ten||'';
   }
@@ -202,5 +227,5 @@
     if(!Number.isFinite(n)||n<0||n>200)return {ok:false,blank:false,value:'',message:'That is not a measured sound level. Leave the field blank if it was not measured.'};
     return {ok:true,blank:false,value:String(n),message:''};
   }
-  return {print:print,stripTail:stripTail,readTitle:readTitle,readEvent:readEvent,fromEvent:fromEvent,forForm:forForm,agentForForm:agentForForm,tenancyName:tenancyName,tenancyForForm:tenancyForForm,agentSlot:agentSlot,phoneFormat:phoneFormat,soundDraft:soundDraft,soundFinal:soundFinal};
+  return {print:print,stripTail:stripTail,readTitle:readTitle,readEvent:readEvent,fromEvent:fromEvent,forForm:forForm,agentForForm:agentForForm,tenancyName:tenancyName,tenancyForForm:tenancyForForm,agentSlot:agentSlot,agencyFields:agencyFields,phoneFormat:phoneFormat,soundDraft:soundDraft,soundFinal:soundFinal};
 });

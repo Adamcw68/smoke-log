@@ -127,6 +127,22 @@ test('the agent slot joins a code and tenancy once',function(){
   assert.equal(fill.agentSlot('Ray White','Holiday'),'Ray White Holiday');
   assert.doesNotMatch(fill.agentSlot('RWY Holiday','Holiday'),/Holiday Holiday/);
   assert.doesNotMatch(fill.agentSlot('RWY Perm','Permanent'),/Perm Perm/);
+  assert.equal(fill.agentSlot('Holiday RWY',''),'RWY Holiday');
+  assert.equal(fill.agentSlot('Holiday RWY','Permanent'),'RWY Perm');
+  assert.equal(fill.agentSlot('Perm Lifestyle',''),'Lifestyle Perm');
+  assert.equal(fill.agentSlot('HOLIDAY, RWM',''),'RWM Holiday');
+  assert.equal(fill.agentSlot('Holiday Ray White Yamba',''),'RWY Holiday');
+  assert.equal(fill.agentSlot('R&H Perm',''),'R&H Perm');
+  assert.equal(fill.agentSlot('Holiday McGrath',''),'Holiday McGrath');
+  assert.equal(fill.agentSlot('Holiday McGrath','Holiday'),'McGrath Holiday');
+  assert.equal(fill.agencyFields('Holiday RWY').agent,'RWY');
+  assert.equal(fill.agencyFields('Holiday RWY').tenancy,'Holiday');
+  assert.equal(fill.agencyFields('Perm, Lifestyle').agent,'Lifestyle');
+  assert.equal(fill.agencyFields('Perm, Lifestyle').tenancy,'Permanent');
+  assert.equal(fill.agentForForm({agent:'Holiday RWY'},{agent:'McGrath'},{}),'RWY');
+  assert.equal(fill.tenancyForForm({agent:'Holiday RWY',tenancy:''},{section:''},{}),'Holiday');
+  assert.equal(fill.tenancyForForm({agent:'Holiday RWY',tenancy:'',tenancySet:true},{section:'Holiday'},{}),'');
+  assert.equal(fill.tenancyForForm({agent:'RWY',tenancy:''},{section:'Permanent'},{}),'Permanent');
 });
 
 test('australian mobiles keep a leading zero and the 0### ### ### groups',function(){
