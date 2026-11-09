@@ -35,7 +35,10 @@ test('the status line uses the four sync states',function(){
   assert.equal(sync.statusLabel({configured:true,user:{uid:'u'},phase:'offline'}),'Offline - changes saved on this device');
   assert.equal(sync.statusLabel({configured:true,user:{uid:'u'},phase:'synced'}),'Synced');
   assert.match(sync.panelHTML({configured:true,user:null}),/Sign in/);
-  assert.match(sync.panelHTML({configured:true,user:{email:'adam@example.com',uid:'u'},phase:'synced',lastSync:'2026-11-09T08:00:00.000Z'}),/adam@example.com/);
+  const synced=sync.panelHTML({configured:true,user:{email:'adam@example.com',uid:'u'},phase:'synced',lastSync:'2026-11-09T08:00:00.000Z'});
+  assert.match(synced,/adam@example.com/);
+  assert.match(synced,/Last sync \d{1,2} [A-Z][a-z]{2} \d{4}, \d{1,2}:\d{2} [ap]m/);
+  assert.doesNotMatch(synced,/UTC/);
   assert.match(sync.panelHTML({configured:true,user:{uid:'u'},phase:'synced'}),/Make PDF/);
 });
 

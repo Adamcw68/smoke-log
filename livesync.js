@@ -46,8 +46,14 @@
     return 'Synced';
   }
   function fmtWhen(iso){
-    if(!iso)return '';
-    return String(iso).replace('T',' ').replace(/\..*$/,'').replace(/Z$/,'').slice(0,16)+' UTC';
+    const d=new Date(iso);
+    if(!iso||isNaN(d.getTime()))return '';
+    const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    let h=d.getHours();
+    const min=String(d.getMinutes()).padStart(2,'0');
+    const ap=h>=12?'pm':'am';
+    h=h%12;if(h===0)h=12;
+    return d.getDate()+' '+months[d.getMonth()]+' '+d.getFullYear()+', '+h+':'+min+' '+ap;
   }
   function panelHTML(state){
     state=state||{};
