@@ -1,0 +1,13 @@
+{
+  "name": "ccsa-log",
+  "private": true,
+  "description": "Test tools for CCSA Log. The phone app itself is the static files and does not need this install.",
+  "scripts": {
+    "test:sync": "firebase emulators:exec --only auth,firestore --project ccsa-log-test \"node --test livesync.test.js livesync.emu.test.js\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
+    "firebase": "^11.9.1",
+    "firebase-tools": "^14.11.0"
+  }
+}
