@@ -50,11 +50,13 @@
     const access=labeled(event.description,'Access');
     if(access&&access!==j.directions){j.directions=access;changes.push('access')}
     const agentRaw=labeled(event.description,'Agent');
-    const agent=(typeof SheetFill!=='undefined'&&SheetFill.print)?SheetFill.print(agentRaw):agentRaw;
+    const named=(typeof SheetFill!=='undefined'&&SheetFill.agencyFields)?SheetFill.agencyFields(agentRaw):{agent:agentRaw,tenancy:''};
+    const agent=named.agent;
     const titled=(typeof SheetFill!=='undefined'&&SheetFill.readEvent)?SheetFill.readEvent(event):{agent:'',tenancy:''};
     if(agent&&agent!==j.agent&&!f.agentSet&&(!f.agent||f.agent===job.agent)){j.agent=agent;formPatch.agent=agent;changes.push('agent')}
     else if(!agent&&!clean(j.agent)&&!clean(f.agent)&&!f.agentSet&&titled.agent){j.agent=titled.agent;formPatch.agent=titled.agent;changes.push('agent')}
     if(titled.tenancy&&!f.tenancySet&&!clean(f.tenancy)&&!clean(j.section)){j.section=titled.tenancy;formPatch.tenancy=titled.tenancy;changes.push('tenancy')}
+    else if(named.tenancy&&!f.tenancySet&&!clean(f.tenancy)&&!clean(j.section)){j.section=named.tenancy;formPatch.tenancy=named.tenancy;changes.push('tenancy')}
     if(!j.arch){
       const contact=labeled(event.description,'Contact');
       const phone=(typeof SheetFill!=='undefined'&&SheetFill.phoneFormat)?SheetFill.phoneFormat(labeled(event.description,'Phone')):labeled(event.description,'Phone');

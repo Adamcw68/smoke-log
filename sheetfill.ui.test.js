@@ -108,7 +108,8 @@ test('worksheet PDF prints agency codes, strikes obsolete rows through Yes and N
       smokeGap:diff(438,456,179.4),
       smokeChoices:diff(459,530,179.4),
       insectGap:Math.abs(diff(400,455,150.7)),
-      insectChoices:Math.abs(diff(465,536,150.7)),
+      insectYes:dark(c,sx(462),sx(486),156),
+      insectNo:dark(c,sx(516),sx(538),156),
       cleaned:Math.abs(diff(200,285,150.7)),
       affixed:Math.abs(diff(200,285,179.4)),
       aboveInsectNo:dark(c,sx(522),sx(533),155.4)
@@ -121,11 +122,12 @@ test('worksheet PDF prints agency codes, strikes obsolete rows through Yes and N
   },found.png);
   assert.ok(pngBytes.rows.smokeGap>8,'smoke line continues through the gap before Yes '+pngBytes.rows.smokeGap);
   assert.ok(pngBytes.rows.smokeChoices>8,'smoke line crosses Yes and No '+pngBytes.rows.smokeChoices);
-  assert.ok(pngBytes.rows.insectGap<20,'insect question stays unmarked '+pngBytes.rows.insectGap);
-  assert.ok(pngBytes.rows.insectChoices<20,'insect Yes and No stay uncircled and unstruck '+pngBytes.rows.insectChoices);
+  assert.ok(pngBytes.rows.insectGap<20,'insect question is not struck through '+pngBytes.rows.insectGap);
+  assert.ok(pngBytes.rows.insectNo>8,'insect No is circled '+pngBytes.rows.insectNo);
+  assert.ok(pngBytes.rows.insectYes<8,'insect Yes is not circled '+pngBytes.rows.insectYes);
   assert.ok(pngBytes.rows.cleaned<30,'line must not cross the cleaned row '+pngBytes.rows.cleaned);
   assert.ok(pngBytes.rows.affixed<30,'line must not cross the affixed row '+pngBytes.rows.affixed);
-  assert.ok(pngBytes.rows.aboveInsectNo<6,'insect No is not circled '+pngBytes.rows.aboveInsectNo);
+  assert.ok(pngBytes.rows.aboveInsectNo>6,'the insect No circle sits on that choice '+pngBytes.rows.aboveInsectNo);
   fs.writeFileSync(path.join(ART,'synthetic_worksheet_obsolete_rows.png'),Buffer.from(pngBytes.png.split(',')[1],'base64'));
   fs.writeFileSync(path.join(ART,'synthetic_obsolete_check_rows.png'),Buffer.from(pngBytes.crop.split(',')[1],'base64'));
   await page.close();
@@ -246,7 +248,7 @@ test('an old blank worksheet picks up a comma calendar title without changing ho
   assert.equal(placed.status,'stale');
   assert.equal(placed.still,placed.kept);
   fs.writeFileSync(path.join(ART,'synthetic_agent_slot_pdf.png'),Buffer.from(placed.png.split(',')[1],'base64'));
-  fs.writeFileSync(path.join(ART,'synthetic_insect_unmarked_rows.png'),Buffer.from(placed.rows.split(',')[1],'base64'));
+  fs.writeFileSync(path.join(ART,'synthetic_check_rows_pdf.png'),Buffer.from(placed.rows.split(',')[1],'base64'));
   await context.close();
 });
 
@@ -350,5 +352,136 @@ test('a sheet import fills a blank worksheet, keeps the mobile, and prints the a
   assert.match(await page.$eval('main',el=>el.innerText),/0400 111 222/);
   await page.evaluate(()=>document.getElementById('agent').scrollIntoView({block:'center'}));
   await page.screenshot({path:path.join(ART,'worksheet_phone_agent_mobile.png')});
+  await context.close();
+});
+
+test('insect No is circled, battery follows the answer, and the agency stays first',{timeout:120000},async(t)=>{
+  if(!puppeteer)return t.skip('puppeteer-core is not installed');
+  browser=browser||await puppeteer.launch({executablePath:'/usr/bin/google-chrome',headless:'new',args:['--no-sandbox','--disable-dev-shm-usage']});
+  const context=await browser.createBrowserContext();
+  const page=await context.newPage();
+  await page.setViewport({width:390,height:844,deviceScaleFactor:1});
+  await page.goto(BASE,{waitUntil:'domcontentloaded'});
+  await page.waitForFunction(()=>window.SheetFill&&window.PDFLib);
+  await page.evaluate(()=>{
+    const id='circle';
+    const job={id:id,row:1,section:'',agent:'',tech:'',last:'',due:'2026-11-09',ident:'',street:'1 Circle St',town:'Yamba',addr:'1 Circle St, Yamba NSW 2464',directions:'',contact:'',p1:'0400111222',p2:'',ptype:'House',beds:2,alarms:1,ladder:'Sm',exp:[],ic:'',notes:'',extra:[],svc:'2026-11-09T09:00:00+11:00',order:1,arch:null,src:'Synthetic'};
+    const alarm={isNew:false,newAns:'No',mount:'Ceiling',room:'Hallway',bedno:'',other:'',adjacent:'',power:['240v'],sensor:['Photo-Electric'],manufacturer:'Brooks',model:'Sample',db:'',expiry:'11/2036',yn:{cleaned:'Yes',comply:'Yes',battery:'',located:'Yes',button:'Yes',affixed:'Yes'},photos:[]};
+    const form={techMode:'def',techOther:'',tech:'Adam Westerman',date:'2026-11-09',time:'',ident:'Circle',agent:'',addr:job.addr,ptype:'House',ptypeOther:'',levels:1,beds:2,alarms:1,ladder:'Sm',asPrev:false,asPhotos:false,asPhotosSet:false,photos:[],comments:'',done:false,updated:null,al:[alarm]};
+    localStorage.setItem('ccsa.jobs.v1',JSON.stringify([job]));
+    localStorage.setItem('ccsa.forms.v1',JSON.stringify({[id]:form}));
+    localStorage.setItem('ccsa.settings.v1',JSON.stringify({tech:'Adam Westerman',techV:2,techRecent:[],ocr:false}));
+  });
+  await page.reload({waitUntil:'domcontentloaded'});
+  await page.waitForFunction(()=>window.SheetFill);
+  await page.evaluate(()=>{location.hash='#job/circle'});
+  await page.waitForSelector('#agent');
+  assert.equal(await page.$eval('body',el=>/Insect surface spray/.test(el.innerText)),false);
+  await page.$eval('#agent',el=>{el.value='Holiday RWY';el.dispatchEvent(new Event('change',{bubbles:true}))});
+  assert.equal(await page.$eval('#agent',el=>el.value),'RWY');
+  assert.equal(await page.$eval('[data-tenancy] [data-v="Holiday"]',el=>el.classList.contains('on')),true);
+  const found=await page.evaluate(async()=>{
+    function alarm(over){
+      return Object.assign({isNew:false,newAns:'No',mount:'Ceiling',room:'Hallway',bedno:'',other:'',adjacent:'',power:['240v'],sensor:['Photo-Electric'],manufacturer:'Brooks',model:'Sample',db:'',expiry:'11/2036',yn:{cleaned:'Yes',comply:'Yes',battery:'',located:'Yes',button:'Yes',affixed:'Yes'},photos:[]},over||{});
+    }
+    const j={id:'s',street:'1 Circle St',addr:'1 Circle St, Yamba NSW 2464',agent:'Holiday RWY',section:'',exp:[],src:'Synthetic',notes:'',p1:'',p2:''};
+    const f={tech:'Adam Westerman',date:'2026-11-09',ident:'Circle',agent:'Holiday RWY',tenancy:'',addr:j.addr,ptype:'House',levels:1,beds:2,alarms:3,ladder:'Sm',asPrev:false,asPhotos:false,asPhotosSet:false,photos:[],comments:'',al:[
+      alarm({yn:{cleaned:'Yes',comply:'Yes',battery:'Yes',located:'Yes',button:'Yes',affixed:'Yes'}}),
+      alarm({power:['Lithium'],yn:{cleaned:'Yes',comply:'Yes',battery:'',located:'Yes',button:'Yes',affixed:'Yes'}}),
+      alarm({power:['9v'],yn:{cleaned:'Yes',comply:'Yes',battery:'',located:'Yes',button:'Yes',affixed:'Yes'}})
+    ]};
+    const noBatt=await buildPDF(j,Object.assign({},f,{alarms:1,al:[alarm({yn:{cleaned:'Yes',comply:'Yes',battery:'No',located:'Yes',button:'Yes',affixed:'Yes'}})]}));
+    const built=await buildPDF(j,f);
+    const fourth=await buildPDF(j,Object.assign({},f,{alarms:4,al:f.al.concat([alarm({power:['Lithium'],yn:{cleaned:'',comply:'Yes',battery:'',located:'Yes',button:'Yes',affixed:'Yes'}})])}));
+    if(!pdfjsLib.GlobalWorkerOptions.workerSrc)pdfjsLib.GlobalWorkerOptions.workerSrc=URL.createObjectURL(new Blob([document.getElementById('pdfw').textContent],{type:'text/javascript'}));
+    async function text(bytes,n){
+      const doc=await pdfjsLib.getDocument({data:bytes.slice(),isEvalSupported:false}).promise;
+      const pg=await doc.getPage(n);
+      return (await pg.getTextContent()).items.map(it=>it.str).join(' | ');
+    }
+    async function paint(bytes,pageNo){
+      const doc=await pdfjsLib.getDocument({data:bytes.slice(),isEvalSupported:false}).promise;
+      const pg=await doc.getPage(pageNo);
+      const vp=pg.getViewport({scale:2});
+      const c=document.createElement('canvas');c.width=vp.width;c.height=vp.height;
+      await pg.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+      return c;
+    }
+    const tplBin=atob(document.getElementById('tpl').textContent.trim());
+    const tpl=new Uint8Array(tplBin.length);for(let i=0;i<tplBin.length;i++)tpl[i]=tplBin.charCodeAt(i);
+    const baseDoc=await pdfjsLib.getDocument({data:tpl,isEvalSupported:false}).promise;
+    async function basePaint(pageNo){
+      const pg=await baseDoc.getPage(pageNo);
+      const vp=pg.getViewport({scale:2});
+      const c=document.createElement('canvas');c.width=vp.width;c.height=vp.height;
+      await pg.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+      return c;
+    }
+    function dark(canvas,x0,y0,x1,y1){
+      const g=canvas.getContext('2d').getImageData(x0,y0,Math.max(1,x1-x0),Math.max(1,y1-y0)).data;
+      let n=0;for(let i=0;i<g.length;i+=4)if(g[i]<80&&g[i+1]<80&&g[i+2]<80)n++;
+      return n;
+    }
+    function extra(canvas,base,box){
+      const s=2,x0=Math.floor((box[0]-8)*s),y0=Math.floor((box[1]-8)*s),x1=Math.ceil((box[2]+8)*s),y1=Math.ceil((box[3]+6)*s);
+      return dark(canvas,x0,y0,x1,y1)-dark(base,x0,y0,x1,y1);
+    }
+    function crop(canvas,y0,y1){
+      const c=document.createElement('canvas');c.width=canvas.width;c.height=Math.ceil(y1-y0);
+      c.getContext('2d').drawImage(canvas,0,y0,canvas.width,y1-y0,0,0,canvas.width,y1-y0);
+      return c.toDataURL('image/png');
+    }
+    const page1=await paint(built.bytes,1);
+    const base1=await basePaint(1);
+    const page2=await paint(built.bytes,2);
+    const base2=await basePaint(2);
+    const noPage=await paint(noBatt.bytes,1);
+    const g=JSON.parse(document.getElementById('geom').textContent);
+    const b0=g.blocks[0].yn,b1=g.blocks[1].yn,b2=g.blocks[2].yn;
+    const head=document.createElement('canvas');
+    const h=Math.round((841.89-500)*2);
+    head.width=page1.width;head.height=h;
+    head.getContext('2d').drawImage(page1,0,0,page1.width,h,0,0,page1.width,h);
+    return {
+      slot:await text(built.bytes,1),
+      lithiumText:await text(built.bytes,2),
+      notes:await text(fourth.bytes,2),
+      yesBatt:extra(page1,base1,b0.battery.Yes),
+      yesBattNo:extra(page1,base1,b0.battery.No),
+      insectNo:extra(page1,base1,b0.insect.No),
+      insectYes:extra(page1,base1,b0.insect.Yes),
+      lithNo:extra(page2,base2,b1.battery.No),
+      lithYes:extra(page2,base2,b1.battery.Yes),
+      lithInsect:extra(page2,base2,b1.insect.No),
+      blankYes:extra(page2,base2,b2.battery.Yes),
+      blankNo:extra(page2,base2,b2.battery.No),
+      blankInsect:extra(page2,base2,b2.insect.No),
+      recordedNo:extra(noPage,base1,b0.battery.No),
+      recordedNoYes:extra(noPage,base1,b0.battery.Yes),
+      head:head.toDataURL('image/png'),
+      rows:crop(page1,590*2,710*2),
+      lith:crop(page2,230*2,360*2)
+    };
+  });
+  assert.match(found.slot,/RWY Holiday/);
+  assert.doesNotMatch(found.slot,/Holiday RWY/);
+  assert.doesNotMatch(found.slot+' '+found.lithiumText,/N\/A \(lithium\)/);
+  assert.ok(found.yesBatt>20,'battery Yes is circled '+found.yesBatt);
+  assert.ok(found.yesBattNo<25,'battery No is not circled when the answer is Yes '+found.yesBattNo);
+  assert.ok(found.recordedNo>20,'battery No is circled when that answer was recorded '+found.recordedNo);
+  assert.ok(found.recordedNoYes<25,'battery Yes stays open when the answer is No '+found.recordedNoYes);
+  assert.ok(found.lithNo>20,'lithium circles battery No '+found.lithNo);
+  assert.ok(found.lithYes<25,'lithium does not circle battery Yes '+found.lithYes);
+  assert.ok(Math.abs(found.blankYes)<25,'a blank battery Yes stays open '+found.blankYes);
+  assert.ok(Math.abs(found.blankNo)<25,'a blank battery No stays open '+found.blankNo);
+  assert.ok(found.insectNo>20,'insect No is circled '+found.insectNo);
+  assert.ok(found.insectYes<25,'insect Yes is not circled '+found.insectYes);
+  assert.ok(found.lithInsect>20,'insect No is circled on the lithium alarm '+found.lithInsect);
+  assert.ok(found.blankInsect>20,'insect No is circled when battery was not answered '+found.blankInsect);
+  assert.match(found.notes,/insect spray No/);
+  assert.match(found.notes,/new battery No/);
+  fs.writeFileSync(path.join(ART,'synthetic_agent_order_pdf.png'),Buffer.from(found.head.split(',')[1],'base64'));
+  fs.writeFileSync(path.join(ART,'synthetic_battery_insect_rows.png'),Buffer.from(found.rows.split(',')[1],'base64'));
+  fs.writeFileSync(path.join(ART,'synthetic_lithium_battery_rows.png'),Buffer.from(found.lith.split(',')[1],'base64'));
   await context.close();
 });
