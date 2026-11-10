@@ -104,9 +104,15 @@
   function parseClause(raw,nowYear){
     const body=String(raw||'');
     const fields={};
-    let work=body.replace(/\bnew\s+batter(?:y|ies)\b/ig,' ').replace(/\bbatter(?:y|ies)\s+(?:changed|replaced|installed)\b/ig,' ').replace(/\btest(?:ed)?\s+button\b/ig,' ');
+    let work=body.replace(/\binstalled\s+new\s+batter(?:y|ies)\b/ig,' ').replace(/\bnew\s+batter(?:y|ies)\b/ig,' ').replace(/\bbatter(?:y|ies)\s+(?:changed|replaced|installed)\b/ig,' ').replace(/\btest(?:ed)?\s+button(?:\s+works)?\b/ig,' ').replace(/\b(?:sound\s+tested|passed(?:\s+sound\s+test)?|cleaned|located\s+correctly)\b/ig,' ');
     const roomHit=ROOMS.find(function(pair){return new RegExp('\\b'+pair[0]+'\\b','i').test(work)});
     if(roomHit)fields.room=roomHit[1];
+    if(!fields.room){
+      const words=work.toLowerCase().match(/[a-z]{5,}/g)||[];
+      const names=[['entryway','Entryway'],['hallway','Hallway'],['bedroom','Bedroom'],['laundry','Laundry'],['dining','Dining'],['lounge','Lounge']];
+      for(let w=0;w<words.length&&!fields.room;w++){
+        const hit=names.find(function(pair){return pair[0].indexOf(words[w])===0});
+        if(hit)fields.room=hit[1]}}
     const bed=work.match(/\bbed(?:room)?\s*(?:no\.?|number|#)?\s*(\d+)\b/i);
     if(bed){fields.bedno=String(+bed[1]);fields.room='Bedroom'}
     if(/\bceiling\b/i.test(work))fields.mount='Ceiling';
@@ -134,7 +140,7 @@
     let expiry='',mfd='',dateUnclear=false;
     const dateToken='(\\d{1,2}[\\/\\-.]\\d{1,2}[\\/\\-.]\\d{4}|\\d{1,2}[\\/\\-.]\\d{4})';
     const asMonth=function(raw){if(lr&&lr.normalizeExpiry){const n=lr.normalizeExpiry(raw);return n?n.display:''}return monthYear(raw)};
-    const expWord=work.match(new RegExp('\\b(?:rep(?:lace(?:ment)?)?|exp(?:iry|ires)?)\\s*[:\\-]?\\s*'+dateToken,'i'));
+    const expWord=work.match(new RegExp('\\b(?:replace(?:ment)?(?:\\s+alarm)?(?:\\s+(?:by|before))?|rep|exp(?:iry|ires)?)\\s*[:\\-]?\\s*'+dateToken,'i'));
     const madeWord=work.match(new RegExp('\\b(?:made|mfd|mfg|manufactured)\\s*[:\\-]?\\s*'+dateToken,'i'));
     if(expWord)expiry=asMonth(expWord[1]);
     if(madeWord)mfd=asMonth(madeWord[1]);
@@ -166,7 +172,7 @@
     return ''}
   function leftover(work){
     let s=' '+String(work||'').toLowerCase()+' ';
-    ['photo-electric','photoelectric','photo electric','ionization','ionisation','entryway','hallway','bedroom','laundry','dining','lounge','clipsal','brooks','kidde','cavius','quell','arlec','ceiling','lithium','backup','mains','replace','replacement','expiry','expires','manufactured','manufacturer','model','alarm','photo','electric','heat','ion','hall','entry','wall','hpm','sma-4','sma4','nimh','ni-mh','new','rep','exp','made','mfd','mfg','type','volt','volts','adjacent','adj','bed','no','number','db'].forEach(function(w){
+    ['photo-electric','photoelectric','photo electric','ionization','ionisation','entryway','hallway','bedroom','laundry','dining','lounge','clipsal','brooks','kidde','cavius','quell','arlec','ceiling','lithium','backup','mains','replace','replacement','expiry','expires','manufactured','manufacturer','model','alarm','photo','electric','heat','ion','hall','entry','wall','hpm','sma-4','sma4','nimh','ni-mh','new','rep','exp','made','mfd','mfg','type','volt','volts','adjacent','adj','bed','no','number','db','tested','sound','cleaned','passed','button','works','located','correctly','smoke','installed','battery','storey','single'].forEach(function(w){
       s=s.replace(new RegExp('\\b'+w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','g'),' ')});
     s=s.replace(/\b\d+\s*v\b/g,' ');
     s=s.replace(/\b\d{1,2}\s*[\/\-.]\s*\d{1,2}\s*[\/\-.]\s*\d{2,4}\b/g,' ');
@@ -175,43 +181,71 @@
     s=s.replace(/\bv\b/g,' ');
     s=s.replace(/[^a-z]+/g,' ').trim();
     return s}
+  function unwrapVisit(piece){
+    return String(piece||'').replace(/^(?:---+)?\s*last visit\b\s*(?:\([^)]*\))?\s*:?\s*/i,'').trim()}
+  function pushAlarm(alarms,index,raw,parsed){
+    alarms.push({index:index,raw:raw,fields:parsed.fields,uncertain:parsed.uncertain||Object.keys(parsed.fields).length===0,rest:parsed.rest})}
   function parseInventoryText(text,nowYear){
     const alarms=[];
     explode(text).forEach(function(piece){
-      if(skipLine(piece))return;
-      const head=alarmHead(piece);
-      if(!head)return;
-      const parsed=parseClause(head.body||head.raw,nowYear);
-      alarms.push({index:head.index,raw:head.raw,fields:parsed.fields,uncertain:parsed.uncertain||Object.keys(parsed.fields).length===0,rest:parsed.rest})});
+      const line=unwrapVisit(piece);
+      if(!line||/^-{2,}/.test(line)||skipLine(line))return;
+      const head=alarmHead(line);
+      if(head){pushAlarm(alarms,head.index,line,parseClause(head.body||line,nowYear));return}
+      const numbered=line.match(/^(\d{1,2})\.\s+(.+)$/);
+      if(numbered){const n=+numbered[1];if(n>=1&&n<=12)pushAlarm(alarms,n-1,line,parseClause(numbered[2],nowYear));return}
+      const many=line.match(/^(\d{1,2})\s*x\s+(.+)$/i);
+      if(many){
+        const n=+many[1];if(n<1||n>12)return;
+        const parsed=parseClause(many[2],nowYear);
+        const shared={};
+        if(parsed.fields.power)shared.power=parsed.fields.power;
+        if(parsed.fields.sensor)shared.sensor=parsed.fields.sensor;
+        for(let i=0;i<n;i++)alarms.push({index:i,raw:line,fields:shared,uncertain:false,rest:''})}});
     return alarms}
+  function titleCaseType(word){return word.charAt(0).toUpperCase()+word.slice(1).toLowerCase()}
   function parseProperty(standing){
     const out={};
     String(standing||'').split('\n').forEach(function(line){
-      let m=line.match(/^ladder\s*:\s*(sm|med|lg|xl)\b/i);
+      const s=unwrapVisit(line).trim();
+      if(!s||/^-{2,}/.test(s)||skipLine(s))return;
+      let m=s.match(/^ladder\s*:\s*(sm|med|lg|xl)\b/i);
       if(m){const k=m[1].toLowerCase();out.ladder=k==='sm'?'Sm':k==='med'?'Med':k==='xl'?'XL':'Lg';return}
-      m=line.match(/^bedrooms?\s*:\s*(\d+)\b/i);
+      m=s.match(/^(?:bedrooms?\s*:\s*)?(\d+)\s*bed(?:room)?s?\b/i);
       if(m){out.beds=+m[1];return}
-      m=line.match(/^levels?\s*:\s*(\d+)\b/i);
+      m=s.match(/^bedrooms?\s*:\s*(\d+)\b/i);
+      if(m){out.beds=+m[1];return}
+      if(/single\s+storey/i.test(s)){out.levels=1;return}
+      m=s.match(/^(?:levels?\s*:\s*)?(\d+|two|three)\s+storey/i);
+      if(m){out.levels=m[1]==='two'?2:m[1]==='three'?3:+m[1];return}
+      m=s.match(/^levels?\s*:\s*(\d+)\b/i);
       if(m){out.levels=+m[1];return}
-      m=line.match(/^property type\s*:\s*(house|unit|townhouse|duplex|villa|other)\b/i);
-      if(m)out.ptype=m[1].charAt(0).toUpperCase()+m[1].slice(1).toLowerCase()});
+      m=s.match(/^(?:property type\s*:\s*)?(house|unit|townhouse|duplex|villa|other)$/i);
+      if(m){out.ptype=titleCaseType(m[1]);return}
+      m=s.match(/^(\d{1,2})$/);
+      if(m&&out.beds==null){const n=+m[1];if(n>=1&&n<=20)out.beds=n}});
     return out}
+  function plainDescription(description){
+    return String(description||'').replace(/\r\n/g,'\n').replace(/<br\s*\/?>/gi,'\n').replace(/<\/p>/gi,'\n').replace(/<[^>]+>/g,'').replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&')}
   function parseAlarmSources(description,nowYear){
-    const parts=splitVisits(description);
+    const parts=splitVisits(plainDescription(description));
     let alarms=parseInventoryText(parts.standing,nowYear);
     let fromVisit=false;
     if(!alarms.length&&parts.visits.length){
       alarms=parseInventoryText(parts.visits[parts.visits.length-1],nowYear);
       fromVisit=!!alarms.length}
-    const seen={};
-    alarms=alarms.filter(function(item){if(seen[item.index])return false;seen[item.index]=true;return true});
+    const best={};
+    alarms.forEach(function(item){const prev=best[item.index];if(!prev||(prev.shared&&!item.shared))best[item.index]=item});
+    alarms=Object.keys(best).map(function(k){return best[k]}).sort(function(a,b){return a.index-b.index});
     return {alarms:alarms,property:parseProperty(parts.standing),fromVisit:fromVisit}}
-  function consider(conflicts,filled,local,source,meta){
+  function consider(conflicts,filled,local,source,meta,asBlank){
     if(source==null||emptyValue(source))return;
     const same=Array.isArray(source)?sameList(local,source):clean(local)===clean(source)||(meta.field==='expiry'||meta.field==='mfd')&&monthYear(local)===source;
     if(same)return;
-    if(emptyValue(local)){filled.push(Object.assign({value:source},meta));return}
+    if(asBlank||emptyValue(local)){filled.push(Object.assign({value:source},meta));return}
     conflicts.push({index:meta.index,field:meta.field,label:FIELD_LABEL[meta.field]||meta.field,local:Array.isArray(local)?local.slice():local,source:Array.isArray(source)?source.slice():source})}
+  function untouchedAlarm(a){
+    return !clean(a.room)&&!(a.power||[]).length&&!(a.sensor||[]).length&&!clean(a.model)&&!clean(a.manufacturer)&&!clean(a.mount)&&a.newAns!=='Yes'&&a.newAns!=='No'&&!a.isNew}
   function applyAlarmInventory(form,description,opts){
     opts=opts||{};
     const nowYear=opts.nowYear||new Date().getFullYear();
@@ -225,8 +259,10 @@
       while(alarms.length<=item.index)alarms.push(cloneAlarm(null));
       const local=alarms[item.index];
       const fields=item.fields||{};
+      const sheetExp=(opts.sheetExpiry||[])[item.index];
+      const generatedExpiry=untouchedAlarm(local)&&sheetExp&&monthYear(local.expiry)===monthYear(sheetExp);
       ['room','mount','bedno','other','adjacent','manufacturer','model','db','expiry','mfd'].forEach(function(key){
-        consider(conflicts,filled,local[key],fields[key],{index:item.index,field:key})});
+        consider(conflicts,filled,local[key],fields[key],{index:item.index,field:key},key==='expiry'&&generatedExpiry)});
       if(fields.power)consider(conflicts,filled,local.power,fields.power,{index:item.index,field:'power'});
       if(fields.sensor)consider(conflicts,filled,local.sensor,fields.sensor,{index:item.index,field:'sensor'});
       if(fields.isNew){
@@ -252,7 +288,7 @@
       comments=comments?comments.replace(/\s*$/,'')+'\n\n'+block:block}
     const count=Math.max(+(f.alarms||0)||0,alarms.length);
     const changed=filled.length>0||comments!==(f.comments||'')||alarms.length>(f.al||[]).length;
-    return {writes:false,filled:filled.length,alarms:changed?alarms:(f.al||[]),alarmCount:count,comments:comments,property:property,conflicts:conflicts,reference:reference,changed:changed,fromVisit:src.fromVisit}}
+    return {writes:false,filled:filled.length,alarms:changed?alarms:(f.al||[]),alarmCount:count,recognised:src.alarms.length,comments:comments,property:property,conflicts:conflicts,reference:reference,changed:changed,fromVisit:src.fromVisit}}
   function acceptAlarmField(alarm,conflict){
     const a=cloneAlarm(alarm);
     if(!conflict)return a;

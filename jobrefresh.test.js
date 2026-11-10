@@ -234,4 +234,93 @@ test('the worksheet update reads alarm text and does not post a calendar change'
   assert.match(fn,/applyAlarmInventory/);
   assert.match(fn,/flushWorksheet/);
   assert.doesNotMatch(fn,/PATCH|POST/);
+  assert.match(html,/No property or alarm details were recognised/);
+  assert.match(html,/JobRefresh\.applyAlarmInventory\(sheet,ev\.description/);
+});
+
+const REAL={
+  visit:'Last visit (25/11/2025): A1 240v photo entryway rep 2/2030 NEW; A2 240v photo lounge rep 2/2030 NEW\n\n--- LAST VISIT (25/11/2025, $35 58B Scullin St Townsend RWM NEW) ---\nDuplex  \nSingle storey \n2 bed\n\n1. Tested, sound tested and cleaned 240v photoelectric smoke alarm located entryway ...',
+  prose:'Unit\n2 bed\n\n1. Tested, sound tested and cleaned  lithium photoelectric smoke alarm, alarm  located hallway,  lithium battery, passed sound test. Replace alarm by 11/2031.',
+  batteries:'Last visit (25/11/2025): A1 9v photo entryway installed new battery rep 11/2035 NEW; A2 9v photo lounge installed new battery r rep 11/2035 NEW; A3 9v photo hallway installed new battery  rep 11/2035 NEW',
+  html:'Unit<br>2 bed<br><br>1. Tested, sound tested and cleaned 240v photoelectric  smoke alarm located hallwa...',
+  count:'Last visit (12/11/2024): A1 240v photo hallway rep 7/2033 NEW; A2 240v photo b [text cut off]\n4 x 240v photoelectric smoke alarm test button works located correctly',
+  holiday:'House\nsingle storey (elevated)\n5\n211/2031'
+};
+test('real last-visit shorthand fills property, storeys, beds and both alarms',function(){
+  const out=jr.applyAlarmInventory(emptyForm({done:false,al:[{yn:{},photos:['p'],power:[],sensor:[],room:'',expiry:'',newAns:'',isNew:false}]}),REAL.visit,{nowYear:2026});
+  assert.equal(out.property.ptype,'Duplex');
+  assert.equal(out.property.levels,1);
+  assert.equal(out.property.beds,2);
+  assert.equal(out.recognised,2);
+  assert.equal(out.alarmCount,2);
+  assert.equal(out.alarms[0].room,'Entryway');
+  assert.equal(out.alarms[0].expiry,'02/2030');
+  assert.deepEqual(out.alarms[0].power,['240v']);
+  assert.equal(out.alarms[1].room,'Lounge');
+  assert.equal(out.alarms[0].yn.cleaned,undefined);
+  assert.equal(out.alarms[0].yn.button,undefined);
+  assert.notEqual(out.alarms[0].isNew,false);
+});
+test('a numbered service note sets one alarm and does not mark this visit passed',function(){
+  const f=emptyForm({done:false,comments:'Gate code works'});
+  const out=jr.applyAlarmInventory(f,REAL.prose,{nowYear:2026});
+  assert.equal(out.property.ptype,'Unit');
+  assert.equal(out.property.beds,2);
+  assert.equal(out.recognised,1);
+  assert.equal(out.alarms[0].room,'Hallway');
+  assert.deepEqual(out.alarms[0].power,['Lithium']);
+  assert.deepEqual(out.alarms[0].sensor,['Photo-Electric']);
+  assert.equal(out.alarms[0].expiry,'11/2031');
+  assert.equal(out.alarms[0].yn.battery,undefined);
+  assert.equal(out.alarms[0].yn.button,undefined);
+  assert.equal(out.alarms[0].isNew,false);
+  assert.equal(f.done,false);
+  assert.match(out.comments,/Gate code works/);
+});
+test('installed new battery is not an inspection result and HTML breaks still parse',function(){
+  const bat=jr.applyAlarmInventory(emptyForm(),REAL.batteries,{nowYear:2026});
+  assert.equal(bat.recognised,3);
+  assert.equal(bat.alarms[0].expiry,'11/2035');
+  assert.equal(bat.alarms[2].room,'Hallway');
+  assert.equal(bat.alarms[0].yn.battery,undefined);
+  assert.equal(bat.alarms[0].isNew,true);
+  const html=jr.applyAlarmInventory(emptyForm(),REAL.html,{nowYear:2026});
+  assert.equal(html.property.ptype,'Unit');
+  assert.equal(html.property.beds,2);
+  assert.equal(html.alarms[0].room,'Hallway');
+  assert.deepEqual(html.alarms[0].power,['240v']);
+  assert.equal(html.alarms[0].expiry||'','');
+});
+test('a shared 4 x line raises the alarm count without inventing the cut-off room',function(){
+  const out=jr.applyAlarmInventory(emptyForm(),REAL.count,{nowYear:2026});
+  assert.equal(out.recognised,4);
+  assert.equal(out.alarmCount,4);
+  assert.equal(out.alarms[0].room,'Hallway');
+  assert.equal(out.alarms[0].expiry,'07/2033');
+  assert.equal(out.alarms[1].room||'','');
+  assert.deepEqual(out.alarms[3].power,['240v']);
+  assert.deepEqual(out.alarms[3].sensor,['Photo-Electric']);
+  assert.equal(out.alarms[0].yn.button,undefined);
+  assert.equal(out.alarms[0].yn.located,undefined);
+});
+test('a holiday note fills house, one storey and five beds and ignores 211/2031',function(){
+  const out=jr.applyAlarmInventory(emptyForm(),REAL.holiday,{nowYear:2026});
+  assert.equal(out.property.ptype,'House');
+  assert.equal(out.property.levels,1);
+  assert.equal(out.property.beds,5);
+  assert.equal(out.recognised,0);
+  assert.equal(out.alarms[0].expiry||'','');
+  assert.equal(out.changed,true);
+});
+test('a sheet expiry on a blank alarm does not block the calendar date, a typed one does',function(){
+  const blank=emptyForm({al:[{expiry:'01/2020',room:'',power:[],sensor:[],yn:{},newAns:'',isNew:false,photos:['keep']}]});
+  const filled=jr.applyAlarmInventory(blank,'A1 240v photo entryway rep 2/2030',{nowYear:2026,sheetExpiry:['01/2020']});
+  assert.equal(filled.alarms[0].expiry,'02/2030');
+  assert.deepEqual(filled.alarms[0].photos,['keep']);
+  const typed=jr.applyAlarmInventory(emptyForm({al:[{expiry:'01/2029',room:'Hallway',power:['9v'],sensor:[],yn:{cleaned:'Yes'},newAns:'No',isNew:false,photos:['keep']}]}),'A1 240v photo entryway rep 2/2030 NEW',{nowYear:2026,sheetExpiry:['01/2029']});
+  assert.equal(typed.alarms[0].expiry,'01/2029');
+  assert.equal(typed.alarms[0].room,'Hallway');
+  assert.equal(typed.alarms[0].yn.cleaned,'Yes');
+  assert.ok(typed.conflicts.some(function(c){return c.field==='expiry'&&c.source==='02/2030'}));
+  assert.ok(typed.conflicts.some(function(c){return c.field==='ptype'||c.field==='room'}));
 });
