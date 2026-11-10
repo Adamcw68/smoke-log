@@ -380,7 +380,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="pdflib.js"></script><script src="transfer.js"></script><script src="firebase-config.js"></script><script src="livesync.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.22.0 (20261109)';
+const APP_VERSION='2.23.0 (20261110)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -624,7 +624,7 @@ function applyCalendar(events){ // sets svc on non-archived matches; caller reco
     if(!cands.length){unmatched++;return}
     const j=pickJob(cands,ev);if(!j){unmatched++;return}
     if(!hits.has(j.id))hits.set(j.id,[]);hits.get(j.id).push(ev)});
-  let changed=0;
+  let changed=0,detailJobs=0;
   let formsChanged=false;
   hits.forEach((evs,id)=>{const j=JOBS.find(x=>x.id===id),ev=pickEvent(j,evs);let ch=false;if(j.svc!==ev.iso){j.svc=ev.iso;ch=true}if(ev.id&&j.calEventId!==ev.id){j.calEventId=ev.id;ch=true}
     const meta=window.SheetFill?SheetFill.readEvent(ev):{agent:'',tenancy:''};
@@ -635,9 +635,16 @@ function applyCalendar(events){ // sets svc on non-archived matches; caller reco
       if(!f.agentSet){const next=SheetFill.agentForForm(f,j,meta);if(next!==clean(f.agent)){f.agent=next;formsChanged=true}}
       if(!f.tenancySet){const ten=SheetFill.tenancyForForm(f,j,meta);if(ten!==clean(f.tenancy||'')){f.tenancy=ten;formsChanged=true}}
     }
+    if(ev.description&&window.JobRefresh&&JobRefresh.applyAlarmInventory){
+      const sheet=FORMS[j.id]||formFor(j);
+      const keptDone=!!sheet.done;
+      const inv=JobRefresh.applyAlarmInventory(sheet,ev.description,{nowYear:new Date().getFullYear(),sheetExpiry:j.exp||[]});
+      if(inv.changed){sheet.al=inv.alarms;sheet.alarms=inv.alarmCount;sheet.comments=inv.comments;Object.keys(inv.property||{}).forEach(k=>{sheet[k]=inv.property[k]});sheet.done=keptDone;formsChanged=true;detailJobs++}
+      if(inv.conflicts&&inv.conflicts.length){CAL_REVIEW[j.id]=inv.conflicts;formsChanged=true}
+      else if(inv.changed)delete CAL_REVIEW[j.id]}
     if(ch)changed++});
   if(formsChanged)save(LS.forms,FORMS);
-  return {events:events.length,matched:hits.size,changed,unmatched}}
+  return {events:events.length,matched:hits.size,changed,unmatched,details:detailJobs}}
 /* v2.9: last imported/synced events stay on the phone so each one can open its worksheet. */
 const LS_CALEV='ccsa.calevents.v1';
 let CAL_EVENTS=load(LS_CALEV,[]);
@@ -758,6 +765,7 @@ function calResultMsg(r){
   const pl=(n,w)=>n+' '+w+(n===1?'':'s');
   let msg=`Matched ${pl(r.matched,'job')} to the calendar`+(r.changed?`, updated ${pl(r.changed,'appointment time')}`:'')+'. The job list follows calendar order.';
   if(r.unmatched)msg+=` ${pl(r.unmatched,'event')} had no matching address.`;
+  if(r.details)msg+=` Filled property or alarm details on ${pl(r.details,'worksheet')}.`;
   return msg}
 function friendlyCalErr(e){
   const m=String(e&&e.message||e||'Calendar sync failed'),t=String(e&&e.type||'');
@@ -888,11 +896,17 @@ async function updateJobFromCalendar(id){
     if(f){if(patch.formPatch.date)f.date=patch.formPatch.date;if(patch.formPatch.addr)f.addr=patch.formPatch.addr;if(patch.formPatch.agent)f.agent=patch.formPatch.agent;if(patch.formPatch.tenancy)f.tenancy=patch.formPatch.tenancy;f.done=keptDone}
     let msg=patch.message;
     if(f&&JobRefresh.applyAlarmInventory){
-      const inv=JobRefresh.applyAlarmInventory(f,ev.description||'',{nowYear:new Date().getFullYear()});
+      const inv=JobRefresh.applyAlarmInventory(f,ev.description||'',{nowYear:new Date().getFullYear(),sheetExpiry:j.exp||[]});
       if(inv.changed){f.al=inv.alarms;f.alarms=inv.alarmCount;f.comments=inv.comments;Object.keys(inv.property||{}).forEach(k=>{f[k]=inv.property[k]})}
       f.done=keptDone;JOBS[at].arch=keptArch;
       if(inv.conflicts&&inv.conflicts.length)CAL_REVIEW[id]=inv.conflicts;else delete CAL_REVIEW[id];
-      if(inv.filled)msg=msg.replace('Inspection answers were kept.','Filled '+inv.filled+' alarm detail'+(inv.filled===1?'':'s')+' from the calendar. Inspection answers were kept.');
+      const bits=[];
+      if(inv.property&&inv.property.ptype)bits.push(inv.property.ptype);
+      if(inv.property&&inv.property.levels)bits.push(inv.property.levels+(inv.property.levels===1?' storey':' storeys'));
+      if(inv.property&&inv.property.beds)bits.push(inv.property.beds+' bed'+(inv.property.beds===1?'':'s'));
+      if(inv.recognised)bits.push(inv.recognised+' alarm'+(inv.recognised===1?'':'s'));
+      if(inv.filled)msg=(patch.changes&&patch.changes.length?patch.message+' ':'')+'Filled '+inv.filled+' worksheet detail'+(inv.filled===1?'':'s')+' from the calendar'+(bits.length?' ('+bits.join(', ')+')':'')+'. Inspection answers were kept.';
+      else if(!(patch.changes&&patch.changes.length))msg='No property or alarm details were recognised in that calendar event. The worksheet was not changed.';
       if(inv.conflicts&&inv.conflicts.length)msg+=' '+inv.conflicts.length+' difference'+(inv.conflicts.length===1?' needs':'s need')+' a look before replacing what is typed.';
       if(inv.reference&&inv.reference.length)msg+=' Unread alarm text was kept with the worksheet.'}
     rememberCalEvent(ev);recomputeRouteOrder();save(LS.jobs,JOBS);save(LS.forms,FORMS);
