@@ -16,6 +16,16 @@ test('placeholders turn sync off and a real config leaves it on',function(){
   assert.equal(sync.configReady({apiKey:'AIzaSyExample',authDomain:'ccsa-smoke-log.firebaseapp.com',projectId:'ccsa-smoke-log',appId:'1:1:web:abc'}),true);
 });
 
+test('an unauthorised GitHub Pages domain tells Adam which Firebase setting to add',function(){
+  const msg=sync.signInFailure('auth/unauthorized-domain','adamcw68.github.io');
+  assert.match(msg,/adamcw68\.github\.io/);
+  assert.match(msg,/Authorized domains/);
+  assert.match(msg,/were not changed/);
+  assert.match(sync.signInFailure('auth/popup-closed-by-user','adamcw68.github.io'),/cancelled/);
+  assert.match(sync.signInFailure('auth/popup-blocked','adamcw68.github.io'),/popups/);
+  assert.match(sync.signInFailure('auth/internal-error','adamcw68.github.io'),/did not finish/);
+});
+
 test('iOS home screen uses redirect and a normal browser uses the popup',function(){
   assert.equal(sync.preferRedirect({userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',standalone:true}),true);
   assert.equal(sync.preferRedirect({userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',standalone:false,displayMode:'browser'}),false);
