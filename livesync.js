@@ -392,6 +392,13 @@
     try{displayMode=window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches?'standalone':''}catch(e){}
     return {userAgent:nav.userAgent||'',platform:nav.platform||'',maxTouchPoints:nav.maxTouchPoints||0,standalone:nav.standalone===true,displayMode:displayMode};
   }
+  function signInFailure(code, host){
+    const site=host||'this site';
+    if(code==='auth/popup-closed-by-user'||code==='auth/cancelled-popup-request')return 'Sign-in was cancelled. Worksheets on this device were not changed.';
+    if(code==='auth/unauthorized-domain')return 'Google sign-in is blocked for '+site+'. In the Firebase console open Authentication, then Settings, then Authorized domains, and add '+site+'. Worksheets on this device were not changed.';
+    if(code==='auth/popup-blocked')return 'The browser blocked the Google window. Allow popups for this site, then tap Sign in again. Worksheets on this device were not changed.';
+    return 'Sign-in did not finish. Worksheets on this device were not changed.';
+  }
   async function signIn(){
     if(!state.configured){state.error="Sync isn't set up yet";paint();return}
     if(!auth){state.error='Sync is not connected yet. Your worksheets on this device were not changed.';paint();return}
@@ -406,8 +413,8 @@
       if(!preferRedirect(browserEnv())&&(code==='auth/popup-blocked'||code==='auth/operation-not-supported-in-this-environment')){
         try{await fb.signInWithRedirect(auth,provider);return}catch(e2){}
       }
-      if(code==='auth/popup-closed-by-user'||code==='auth/cancelled-popup-request'){state.error='Sign-in was cancelled. Worksheets on this device were not changed.';paint();return}
-      state.error='Sign-in did not finish. Worksheets on this device were not changed.';
+      const host=typeof location!=='undefined'?location.hostname:'';
+      state.error=signInFailure(code,host);
       paint();
     }
   }
@@ -492,7 +499,7 @@
     return {configured:state.configured,user:state.user,phase:state.phase,lastSync:state.lastSync,unsyncedPhotos:state.unsyncedPhotos,error:state.error};
   }
   return {
-    configReady:configReady,preferRedirect:preferRedirect,docId:docId,photoFits:photoFits,statusLabel:statusLabel,panelHTML:panelHTML,
+    configReady:configReady,preferRedirect:preferRedirect,signInFailure:signInFailure,docId:docId,photoFits:photoFits,statusLabel:statusLabel,panelHTML:panelHTML,
     reconcile:reconcile,queueOp:queueOp,drainOps:drainOps,plain:plain,
     boot:boot,signIn:signIn,signOut:signOut,afterSave:afterSave,afterPhoto:afterPhoto,afterPhotoDelete:afterPhotoDelete,beforeClearAll:beforeClearAll,
     state:current
