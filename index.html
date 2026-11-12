@@ -380,7 +380,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="pdflib.js"></script><script src="transfer.js"></script><script src="firebase-config.js"></script><script src="livesync.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.23.1 (20261110)';
+const APP_VERSION='2.24.1 (20261112)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -640,7 +640,9 @@ function applyCalendar(events){ // sets svc on non-archived matches; caller reco
       const keptDone=!!sheet.done;
       const inv=JobRefresh.applyAlarmInventory(sheet,ev.description,{nowYear:new Date().getFullYear(),sheetExpiry:j.exp||[]});
       if(inv.changed){sheet.al=inv.alarms;sheet.alarms=inv.alarmCount;sheet.comments=inv.comments;Object.keys(inv.property||{}).forEach(k=>{sheet[k]=inv.property[k]});sheet.done=keptDone;formsChanged=true;detailJobs++}
-      if(inv.conflicts&&inv.conflicts.length){CAL_REVIEW[j.id]=inv.conflicts;formsChanged=true}
+      const agencyConflicts=window.SheetFill?SheetFill.visitConflicts(sheet,meta):[];
+      const review=agencyConflicts.concat(inv.conflicts||[]);
+      if(review.length){CAL_REVIEW[j.id]=review;formsChanged=true}
       else if(inv.changed)delete CAL_REVIEW[j.id]}
     if(ch)changed++});
   if(formsChanged)save(LS.forms,FORMS);
@@ -857,7 +859,7 @@ function bindCalReview(id,f){
   const m=$('main');
   m.querySelectorAll('[data-caluse]').forEach(b=>b.onclick=()=>{
     const rows=CAL_REVIEW[id]||[],c=rows[+b.dataset.caluse];if(!c||!f)return;
-    if(c.index==null)f[c.field]=c.source;
+    if(c.index==null){f[c.field]=c.source;const job=JOBS.find(x=>x.id===id);if(job&&c.field==='agent'){job.agent=c.source;f.agentSet=true;save(LS.jobs,JOBS)}if(job&&c.field==='tenancy'){job.section=c.source;f.tenancySet=true;save(LS.jobs,JOBS)}}
     else if(c.field==='new')setNewAns(f.al[c.index],'Yes');
     else f.al[c.index]=JobRefresh.acceptAlarmField(f.al[c.index],c);
     rows.splice(+b.dataset.caluse,1);if(!rows.length)delete CAL_REVIEW[id];
@@ -899,15 +901,18 @@ async function updateJobFromCalendar(id){
       const inv=JobRefresh.applyAlarmInventory(f,ev.description||'',{nowYear:new Date().getFullYear(),sheetExpiry:j.exp||[]});
       if(inv.changed){f.al=inv.alarms;f.alarms=inv.alarmCount;f.comments=inv.comments;Object.keys(inv.property||{}).forEach(k=>{f[k]=inv.property[k]})}
       f.done=keptDone;JOBS[at].arch=keptArch;
-      if(inv.conflicts&&inv.conflicts.length)CAL_REVIEW[id]=inv.conflicts;else delete CAL_REVIEW[id];
+      const meta=window.SheetFill?SheetFill.readEvent(ev):{agent:'',tenancy:''};
+      const agencyConflicts=window.SheetFill?SheetFill.visitConflicts(f,meta):[];
+      const review=agencyConflicts.concat(inv.conflicts||[]);
+      if(review.length)CAL_REVIEW[id]=review;else delete CAL_REVIEW[id];
       const bits=[];
       if(inv.property&&inv.property.ptype)bits.push(inv.property.ptype);
       if(inv.property&&inv.property.levels)bits.push(inv.property.levels+(inv.property.levels===1?' storey':' storeys'));
       if(inv.property&&inv.property.beds)bits.push(inv.property.beds+' bed'+(inv.property.beds===1?'':'s'));
       if(inv.recognised)bits.push(inv.recognised+' alarm'+(inv.recognised===1?'':'s'));
       if(inv.filled)msg=(patch.changes&&patch.changes.length?patch.message+' ':'')+'Filled '+inv.filled+' worksheet detail'+(inv.filled===1?'':'s')+' from the calendar'+(bits.length?' ('+bits.join(', ')+')':'')+'. Inspection answers were kept.';
-      else if(!(patch.changes&&patch.changes.length))msg='No property or alarm details were recognised in that calendar event. The worksheet was not changed.';
-      if(inv.conflicts&&inv.conflicts.length)msg+=' '+inv.conflicts.length+' difference'+(inv.conflicts.length===1?' needs':'s need')+' a look before replacing what is typed.';
+      else if(!(patch.changes&&patch.changes.length)&&!agencyConflicts.length)msg='No property or alarm details were recognised in that calendar event. The worksheet was not changed.';
+      if(review.length)msg+=' '+review.length+' difference'+(review.length===1?' needs':'s need')+' a look before replacing what is typed.';
       if(inv.reference&&inv.reference.length)msg+=' Unread alarm text was kept with the worksheet.'}
     rememberCalEvent(ev);recomputeRouteOrder();save(LS.jobs,JOBS);save(LS.forms,FORMS);
     say(msg);if(location.hash==='#job/'+encodeURIComponent(id))renderJob(id)}
