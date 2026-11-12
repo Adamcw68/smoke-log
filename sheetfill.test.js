@@ -75,6 +75,37 @@ test('comma calendar titles fill agency and tenancy without guessing',function()
   assert.equal(fill.agentForForm({agent:'McGrath'},job,meta),'McGrath');
   assert.equal(fill.tenancyForForm({tenancy:'Holiday',tenancySet:true},job,{tenancy:'Permanent'}),'Holiday');
   assert.equal(fill.tenancyForForm({tenancy:''},{section:'Permanent',ptype:'Unit'},{}),'Permanent');
+  const real=[
+    ['9 Riverwood Terrace Maclean, Raine & Horne Maclean, Holiday','R&H','Holiday'],
+    ['50 Jubilee St Townsend, R & H Maclean, PERM','R&H','Permanent'],
+    ['606 South Arm Rd South Arm, R&H Maclean, PERM','R&H','Permanent'],
+    ['46 Farlows Lane Maclean, Lifestyle Maclean, PERM','Lifestyle','Permanent'],
+    ['key 14 Coonawarra Court Yamba, Lifestyle Yamba, PERM','Lifestyle','Permanent'],
+    ['19 Church St Maclean, Ray White Maclean, PERM','RWM','Permanent'],
+    ['Pippi House  9 Pacific Pde Yamba  RWY Holiday','RWY','Holiday'],
+    ['8/5 Beach St Yamba, Raine & Horne Yamba , Holiday','R&H','Holiday'],
+    ['3/22 Clarence St Yamba, Elders, Holiday','Elders','Holiday']
+  ];
+  real.forEach(function(row){
+    const got=fill.readTitle(row[0]);
+    assert.equal(got.agent,row[1],row[0]);
+    assert.equal(got.tenancy,row[2],row[0]);
+  });
+  const stra=fill.readEvent({summary:'8 Campbell Lane Yamba, Lifestyle Yamba, Holiday',description:'Contact / access: Approved STRA Upgrade'});
+  assert.equal(stra.agent,'Lifestyle');
+  assert.equal(stra.tenancy,'Holiday');
+  const perm=fill.readEvent({summary:'46 Farlows Lane Maclean, Lifestyle Maclean, PERM',description:'Passed NSW STRA'});
+  assert.equal(perm.agent,'Lifestyle');
+  assert.equal(perm.tenancy,'Permanent');
+  const banner=fill.readEvent({summary:'4/25 Queen St Yamba',description:'--- LAST VISIT (04/11/2025, Green Dolphin 4/25 Queen St Yamba Lifestyle Perm) ---'});
+  assert.equal(banner.agent,'Lifestyle');
+  assert.equal(banner.tenancy,'Permanent');
+  const titleWins=fill.readEvent({summary:'1 Sample St, Yamba, RWY, Holiday',description:'--- LAST VISIT (04/11/2025, 1 Sample St Lifestyle Perm) ---'});
+  assert.equal(titleWins.agent,'RWY');
+  assert.equal(titleWins.tenancy,'Holiday');
+  const typed=fill.visitConflicts({agent:'McGrath',tenancy:'Permanent'},{agent:'Lifestyle',tenancy:'Holiday'});
+  assert.deepEqual(typed.map(function(c){return c.field}),['agent','tenancy']);
+  assert.equal(fill.visitConflicts({agent:'',tenancy:''},{agent:'Lifestyle',tenancy:'Permanent'}).length,0);
   assert.equal(fill.agentForForm({agent:'',agentSet:true},job,meta),'');
   assert.equal(blank.ptype,'House');
 });

@@ -21,7 +21,8 @@
     'rwy':'RWY','ray white yamba':'RWY',
     'rwm':'RWM','ray white maclean':'RWM',
     'r and h':'R&H','raine and horne':'R&H','raine horne':'R&H',
-    'life':'Lifestyle','lifestyle':'Lifestyle'
+    'life':'Lifestyle','lifestyle':'Lifestyle',
+    'elders':'Elders'
   };
   /* Whole agency cell. "Ray White" alone is not enough to choose Yamba or Maclean. */
   function print(v){
@@ -29,16 +30,20 @@
     if(!raw)return '';
     return CODES[key(raw)]||raw;
   }
+  const TOWN='yamba|maclean|townsend|grafton|iluka|lawrence|angourie|harwood|ulmarra|gulmarrad|wooloweyah';
   const PHRASES=[
     [/[, ]+ray\s*white\s*yamba$/i,'RWY'],
     [/[, ]+ray\s*white\s*maclean$/i,'RWM'],
-    [/[, ]+raine\s*(?:&|and)\s*horne$/i,'R&H'],
-    [/[, ]+(?:lifestyle|life)$/i,'Lifestyle']
+    [new RegExp('[, ]+raine\\s*(?:&|and)\\s*horne(?:\\s+(?:'+TOWN+'))?$','i'),'R&H'],
+    [new RegExp('[, ]+r\\s*&\\s*h(?:\\s+(?:'+TOWN+'))?$','i'),'R&H'],
+    [new RegExp('[, ]+r&h(?:\\s+(?:'+TOWN+'))?$','i'),'R&H'],
+    [new RegExp('[, ]+(?:lifestyle|life)(?:\\s+(?:'+TOWN+'))?$','i'),'Lifestyle'],
+    [new RegExp('[, ]+elders(?:\\s+(?:'+TOWN+'))?$','i'),'Elders']
   ];
   function tokenKind(token){
     const k=key(token);
     if(k==='perm'||k==='permanent')return {kind:'tenancy',value:'Permanent'};
-    if(k==='hol'||k==='holiday')return {kind:'tenancy',value:'Holiday'};
+    if(k==='hol'||k==='holiday'||k==='stra')return {kind:'tenancy',value:'Holiday'};
     if(CODES[k])return {kind:'agent',value:CODES[k]};
     return null;
   }
@@ -85,6 +90,13 @@
     const m=String(description||'').match(/^agent\s*:\s*(.+)$/im);
     return m?clean(m[1]):'';
   }
+  /* A past-visit banner can carry the same trailing agency and PERM/Holiday as a title.
+     "Approved STRA Upgrade" in the body is not a rental type. */
+  function readBanner(description){
+    const m=String(description||'').match(/---\s*LAST VISIT\s*\(([^)]*)\)/i);
+    if(!m)return {agent:'',tenancy:''};
+    return readTitle(m[1]);
+  }
   function tenancyName(v){
     const k=key(v);
     if(k==='perm'||k==='permanent')return 'Permanent';
@@ -96,8 +108,19 @@
     ev=ev||{};
     const title=readTitle(ev.summary||'');
     const loc=readTitle(ev.location||'');
+    const banner=readBanner(ev.description);
     const line=agentLine(ev.description);
-    return {agent:line?print(line):(title.agent||loc.agent||''),tenancy:title.tenancy||loc.tenancy||''};
+    return {agent:line?print(line):(title.agent||loc.agent||banner.agent||''),tenancy:title.tenancy||loc.tenancy||banner.tenancy||''};
+  }
+  /* A blank agent or tenancy can be filled. A different typed value is a conflict, not a silent change. */
+  function visitConflicts(form,meta){
+    form=form||{};meta=meta||{};
+    const out=[];
+    const localAgent=clean(form.agent);
+    const localTen=tenancyName(form.tenancy);
+    if(meta.agent&&(localAgent||form.agentSet)&&localAgent!==meta.agent)out.push({index:null,field:'agent',label:'Agent',local:localAgent,source:meta.agent});
+    if(meta.tenancy&&(localTen||form.tenancySet)&&localTen!==meta.tenancy)out.push({index:null,field:'tenancy',label:'Tenancy',local:localTen,source:meta.tenancy});
+    return out;
   }
   function fromEvent(ev){return readEvent(ev).agent}
   /* A typed agency stays. A blank one can take the job, then a known calendar tag. */
@@ -227,5 +250,5 @@
     if(!Number.isFinite(n)||n<0||n>200)return {ok:false,blank:false,value:'',message:'That is not a measured sound level. Leave the field blank if it was not measured.'};
     return {ok:true,blank:false,value:String(n),message:''};
   }
-  return {print:print,stripTail:stripTail,readTitle:readTitle,readEvent:readEvent,fromEvent:fromEvent,forForm:forForm,agentForForm:agentForForm,tenancyName:tenancyName,tenancyForForm:tenancyForForm,agentSlot:agentSlot,agencyFields:agencyFields,phoneFormat:phoneFormat,soundDraft:soundDraft,soundFinal:soundFinal};
+  return {print:print,stripTail:stripTail,readTitle:readTitle,readEvent:readEvent,visitConflicts:visitConflicts,fromEvent:fromEvent,forForm:forForm,agentForForm:agentForForm,tenancyName:tenancyName,tenancyForForm:tenancyForForm,agentSlot:agentSlot,agencyFields:agencyFields,phoneFormat:phoneFormat,soundDraft:soundDraft,soundFinal:soundFinal};
 });
