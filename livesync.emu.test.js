@@ -6,6 +6,8 @@ const {initializeTestEnvironment,assertFails,assertSucceeds}=require('@firebase/
 const {doc,getDoc,setDoc,onSnapshot}=require('firebase/firestore');
 require('./transfer.js');
 const sync=require('./livesync.js');
+const portal=require('./portaldata.js');
+const invoices=require('./invoice.js');
 
 const PROJECT='demo-ccsa-log';
 let env;
@@ -70,4 +72,59 @@ test('two devices for one account see a job, an offline edit, and a photo',async
   assert.equal(photo.data().b64,'AQIDBAU=');
   assert.equal(sync.photoFits(900000),false);
   stop();
+});
+
+test('an agency login reads only its own portal and cannot write',async()=>{
+  await env.clearFirestore();
+  const sample=portal.demoPortal();
+  const rwm=sample.agencies.rwm;
+  const life=sample.agencies.lifestyle;
+  assert.ok(rwm&&life);
+  assert.equal(portal.bundleClean(sample).length,0);
+  await env.withSecurityRulesDisabled(async(ctx)=>{
+    const db=ctx.firestore();
+    await setDoc(doc(db,'admins/adam'),{email:'adam@example.com',since:'2026-11-13'});
+    await setDoc(doc(db,'agencyUsers/agent-rwm'),{agencyId:'rwm',agencyCode:'RWM',email:'rwm@example.com',role:'agent',createdAt:'2026-11-13T00:00:00.000Z',disabled:false});
+    await setDoc(doc(db,'agencyUsers/agent-life'),{agencyId:'lifestyle',agencyCode:'Lifestyle',email:'life@example.com',role:'agent',createdAt:'2026-11-13T00:00:00.000Z',disabled:false});
+    await setDoc(doc(db,'agencyUsers/agent-off'),{agencyId:'rwm',agencyCode:'RWM',email:'off@example.com',role:'agent',createdAt:'2026-11-13T00:00:00.000Z',disabled:true});
+  });
+  const admin=env.authenticatedContext('adam').firestore();
+  const prop=rwm.properties[0];
+  const job=rwm.jobs[0];
+  const cert=rwm.certificates[0];
+  const lifeProp=life.properties[0];
+  await assertSucceeds(setDoc(doc(admin,'portal/rwm/properties/'+prop.id),prop));
+  await assertSucceeds(setDoc(doc(admin,'portal/rwm/jobs/'+job.id),job));
+  await assertSucceeds(setDoc(doc(admin,'portal/rwm/certificates/'+cert.id),cert));
+  await assertSucceeds(setDoc(doc(admin,'portal/lifestyle/properties/'+lifeProp.id),lifeProp));
+  await assertFails(setDoc(doc(admin,'portal/rwm/properties/'+prop.id),Object.assign({},prop,{contact:'Jane Tenant'})));
+  await assertFails(setDoc(doc(admin,'portal/rwm/properties/'+prop.id),Object.assign({},prop,{address:'18 River Street 0400111222'})));
+  const agent=env.authenticatedContext('agent-rwm').firestore();
+  await assertSucceeds(getDoc(doc(agent,'portal/rwm/properties/'+prop.id)));
+  await assertSucceeds(getDoc(doc(agent,'portal/rwm/certificates/'+cert.id)));
+  await assertFails(getDoc(doc(agent,'portal/lifestyle/properties/'+lifeProp.id)));
+  await assertFails(setDoc(doc(agent,'portal/rwm/jobs/'+job.id),job));
+  await assertFails(getDoc(doc(agent,'users/adam/jobs/circle')));
+  const other=env.authenticatedContext('agent-life').firestore();
+  await assertFails(getDoc(doc(other,'portal/rwm/certificates/'+cert.id)));
+  await assertSucceeds(getDoc(doc(other,'portal/lifestyle/properties/'+lifeProp.id)));
+  await assertFails(getDoc(doc(other,'agencyUsers/agent-rwm')));
+  const off=env.authenticatedContext('agent-off').firestore();
+  await assertFails(getDoc(doc(off,'portal/rwm/properties/'+prop.id)));
+  const stranger=env.authenticatedContext('stranger').firestore();
+  await assertFails(getDoc(doc(stranger,'portal/rwm/properties/'+prop.id)));
+  await assertFails(setDoc(doc(stranger,'admins/stranger'),{email:'stranger@example.com',since:'2026-11-13'}));
+  const signedOut=env.unauthenticatedContext().firestore();
+  await assertFails(getDoc(doc(signedOut,'portal/rwm/jobs/'+job.id)));
+  await assertSucceeds(getDoc(doc(agent,'agencyUsers/agent-rwm')));
+  const invoice=invoices.demoInvoices(sample.agencies.rwm,sample.today)[0];
+  const lifeInvoice=invoices.demoInvoices(sample.agencies.lifestyle,sample.today)[0];
+  assert.equal(invoices.tenantHits([invoice,lifeInvoice]).length,0);
+  await assertSucceeds(setDoc(doc(admin,'portal/rwm/invoices/'+invoice.id),invoice));
+  await assertSucceeds(setDoc(doc(admin,'portal/lifestyle/invoices/'+lifeInvoice.id),lifeInvoice));
+  await assertSucceeds(getDoc(doc(agent,'portal/rwm/invoices/'+invoice.id)));
+  await assertFails(getDoc(doc(agent,'portal/lifestyle/invoices/'+lifeInvoice.id)));
+  await assertFails(setDoc(doc(agent,'portal/rwm/invoices/'+invoice.id),invoice));
+  await assertFails(setDoc(doc(admin,'portal/rwm/invoices/'+invoice.id),Object.assign({},invoice,{contact:'Jane Tenant'})));
+  await assertFails(getDoc(doc(signedOut,'portal/rwm/invoices/'+invoice.id)));
 });
