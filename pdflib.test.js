@@ -102,6 +102,14 @@ test('a day lists saved PDFs in appointment order and leaves the rest out',funct
   assert.equal(pdf.dayPlan(jobs,forms,records,'2026-01-01').rows.length,0);
   assert.match(pdf.HELP,/share sheet/);
   assert.match(pdf.HELP,/does not email/);
+  assert.match(pdf.HELP,/worksheet pages only/);
+  assert.match(pdf.HELP,/Photos stay on this phone/);
+  assert.equal(pdf.sharePageKind('Photos\n1 Sample St\nPhoto page 1 of 1\nAlarm 1 - photo 1'),'photo');
+  assert.equal(pdf.sharePageKind('Photo page 2 of 3'),'photo');
+  assert.equal(pdf.sharePageKind('CCSA worksheets 2026-11-08\nThis page is a list only. It is not a worksheet.'),'summary');
+  assert.equal(pdf.sharePageKind('9 Synthetic St\nRWY Holiday\n92'),'worksheet');
+  assert.equal(pdf.sharePageKind('Notes:\nSee the photo on the phone'),'worksheet');
+  assert.equal(pdf.sharePageKind(''),'worksheet');
   assert.equal(jobsCopy,JSON.stringify(jobs));
   assert.equal(formsCopy,JSON.stringify(forms));
   assert.equal(records[0].bytes[0],0x25);

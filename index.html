@@ -380,7 +380,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="pdflib.js"></script><script src="transfer.js"></script><script src="firebase-config.js"></script><script src="livesync.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.24.1 (20261112)';
+const APP_VERSION='2.25.0 (20261113)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -1699,13 +1699,15 @@ async function renderPDF(id){
    ${r.report.length?`<p class="note">ℹ️ ${esc(r.report.join(' · '))}</p>`:'<p class="note">All entries fit at full size.</p>'}
    ${keptNote?`<p class="note" id="keptnote">${esc(keptNote)}</p>`:''}
    <div class="stack">
+   <p class="note" id="sendnote">Share and download send the worksheet pages only. Photo pages and any summary page are left out. Photos stay on this phone, and Open / preview still shows them.</p>
    ${canShare?'<button class="btn pri" id="share">Share PDF (email, Drive…)</button>':''}
-   <a class="btn ${canShare?'':'pri'}" id="dl" href="${url}" download="${esc(name)}">⬇️ Download PDF</a>
+   <button type="button" class="btn ${canShare?'':'pri'}" id="dl">⬇️ Download PDF</button>
    <a class="btn" id="tolib" href="#library/${encodeURIComponent(window.CCSAPdf?CCSAPdf.serviceDay(j,f):'')}">📚 PDF library for this day</a>
    <a class="btn" href="${url}" target="_blank" rel="noopener">👁️ Open / preview</a>
    <button class="btn ${f.done?'':'good'}" id="mark">${f.done?'✓ Marked done (undo)':'✓ Mark job done'}</button></div></section><section class="f"><h2>Preview</h2><div id="prev" class="note">Rendering preview…</div></section></div>`;
   previewPDF(r.bytes);
-  if(canShare)$('#share').onclick=async()=>{try{await navigator.share({files:[file],title:name,text:'Smoke alarm worksheet – '+j.addr})}catch(e){if(e.name!=='AbortError')toast('Share failed – use Download')}};
+  if(canShare)$('#share').onclick=async()=>{try{const data=await worksheetOnlyBytes(bytes);const shareFile=new File([data],name,{type:'application/pdf'});await navigator.share({files:[shareFile],title:name,text:'Smoke alarm worksheet – '+j.addr})}catch(e){if(e.name!=='AbortError')toast(e.message&&/worksheet pages/.test(e.message)?e.message:'Share failed – use Download')}};
+  $('#dl').onclick=async()=>{try{downloadBytes(await worksheetOnlyBytes(bytes),name,'application/pdf')}catch(e){toast(e.message||'Download failed. Nothing was sent.')}};
   $('#mark').onclick=()=>{const go=()=>{f.done=!f.done;touch(id);save(LS.forms,FORMS);renderPDF(id);if(f.done)offerArchive(j);else hideSnack()};if(f.done)go();else cleanGate(j,f,'mark done',go)};
   {const miss=missingClean(f);if(miss.length){const w=document.createElement('div');w.className='cwarn';w.id='cwarn';w.innerHTML=`⚠️ Cleaning not recorded: <b>${alNames(miss)}</b> <button type="button" class="btn" id="cwfix">🧽 Fix</button>`;$('.pdfbox').prepend(w);$('#cwfix').onclick=()=>gotoFix(id,miss[0])}
    const un=unansNew(f);if(un.length){const w=document.createElement('div');w.className='cwarn info';w.id='nwarn';w.innerHTML=`ℹ️ <b>New alarm?</b> not answered: <b>${alNames(un)}</b> – treated as No`;$('.pdfbox').prepend(w)}}
@@ -1743,16 +1745,49 @@ function shareSupport(files){let set=false,one=false;const nav=navigator;
 async function shareFiles(files,title){try{await navigator.share({files:files,title:title});return CCSAPdf.shareResult(null)}catch(e){return CCSAPdf.shareResult(e)}}
 function setLibMsg(m){const el=$('#libmsg');if(el)el.textContent=m||'';else if(m)toast(m)}
 function exactBytes(data){const raw=data instanceof Uint8Array?data:new Uint8Array(data||new ArrayBuffer(0));return raw.slice()}
+async function pageRoles(bytes){
+  if(!window.pdfjsLib||!window.CCSAPdf)throw new Error('Could not check the PDF pages. Nothing was sent.');
+  if(!pdfjsLib.GlobalWorkerOptions.workerSrc)pdfjsLib.GlobalWorkerOptions.workerSrc=URL.createObjectURL(new Blob([$('#pdfw').textContent],{type:'text/javascript'}));
+  const doc=await pdfjsLib.getDocument({data:exactBytes(bytes),isEvalSupported:false}).promise;
+  const roles=[];
+  for(let i=1;i<=doc.numPages;i++){
+    const pg=await doc.getPage(i),tc=await pg.getTextContent(),items=Array.isArray(tc.items)?tc.items:[];
+    const text=items.map(it=>it.str||'').join('\n'),flat=items.map(it=>it.str||'').join(' ');
+    roles.push(CCSAPdf.sharePageKind(text+'\n'+flat));
+  }
+  try{await doc.destroy()}catch(e){}
+  return roles;
+}
+/* Copy used for share, download, ZIP and the combined day PDF. The stored file is unchanged. */
+async function worksheetOnlyBytes(bytes){
+  const raw=exactBytes(bytes);
+  const roles=await pageRoles(raw);
+  const keep=[];
+  roles.forEach((role,i)=>{if(role==='worksheet')keep.push(i)});
+  if(!keep.length)throw new Error('No worksheet pages to send.');
+  if(keep.length===roles.length)return raw;
+  const src=await PDFLib.PDFDocument.load(raw);
+  const out=await PDFLib.PDFDocument.create();
+  const pages=await out.copyPages(src,keep);
+  pages.forEach(p=>out.addPage(p));
+  return out.save();
+}
+async function sendPack(plan){
+  const packed=CCSAPdf.packFiles(plan);
+  if(!packed.ok)return packed;
+  const pdfs=[];
+  for(const f of packed.pdfs)pdfs.push({name:f.name,data:new Uint8Array(await worksheetOnlyBytes(f.data))});
+  return {ok:true,pdfs:pdfs,zip:CCSAPdf.zipStore(pdfs)};
+}
 async function buildDayPdf(plan){
   if(!plan||!plan.included.length)throw new Error('Nothing saved is ready to combine.');
-  const {PDFDocument,StandardFonts,rgb}=PDFLib;
-  const out=await PDFDocument.create();const font=await out.embedFont(StandardFonts.Helvetica);const bold=await out.embedFont(StandardFonts.HelveticaBold);
-  const ink=rgb(0.1,0.1,0.1);let page=out.addPage([595.28,841.89]),y=800;
-  CCSAPdf.contentsLines(plan).forEach((line,i)=>{const f=i?font:bold,size=i?11:16;
-    CCSAPdf.wrapLine(line,92).forEach(part=>{if(y<48){page=out.addPage([595.28,841.89]);y=800}page.drawText(part,{x:40,y:y,size:size,font:f,color:ink});y-=size+5})});
+  const {PDFDocument}=PDFLib;
+  const out=await PDFDocument.create();
   for(const row of plan.included){
-    let src;try{src=await PDFDocument.load(exactBytes(row.record.bytes))}catch(e){throw new Error('Could not read '+(row.name||'a saved PDF')+'. Combined PDF was not made.')}
+    let stripped;try{stripped=await worksheetOnlyBytes(exactBytes(row.record.bytes))}catch(e){throw new Error((e&&e.message)||('Could not read '+(row.name||'a saved PDF')+'. Combined PDF was not made.'))}
+    let src;try{src=await PDFDocument.load(stripped)}catch(e){throw new Error('Could not read '+(row.name||'a saved PDF')+'. Combined PDF was not made.')}
     const pages=await out.copyPages(src,src.getPageIndices());pages.forEach(p=>out.addPage(p))}
+  if(!out.getPageCount())throw new Error('No worksheet pages to send.');
   return out.save()}
 function filesFromPack(pack){return pack.pdfs.map(f=>new File([exactBytes(f.data)],f.name,{type:'application/pdf'}))}
 async function currentPlan(day){let records=[];try{records=await pdfAll()}catch(e){records=[]}return CCSAPdf.dayPlan(JOBS,FORMS,records||[],day)}
@@ -1805,7 +1840,7 @@ async function renderLibrary(day){
   $('#libnext').onclick=()=>go(CCSAPdf.addDays(day,1));
   $('#libtoday').onclick=()=>go(CCSAPdf.sydneyToday());
   $('#libdate').onchange=()=>go($('#libdate').value);
-  const need=async()=>{const p=await currentPlan(day);const packed=CCSAPdf.packFiles(p);if(!packed.ok)throw new Error(packed.reason);return packed};
+  const need=async()=>{const p=await currentPlan(day);const packed=await sendPack(p);if(!packed.ok)throw new Error(packed.reason);return packed};
   const tell=res=>setLibMsg(res.message);
   if($('#shareDay'))$('#shareDay').onclick=async()=>{try{const packed=await need();const res=await shareFiles(filesFromPack(packed),'CCSA worksheets '+day);tell(res)}catch(e){setLibMsg(e.message||'Share failed. Nothing was sent.')}};
   if($('#shareZip'))$('#shareZip').onclick=async()=>{try{const packed=await need();const name='CCSA-'+day+'-worksheets.zip';const file=new File([packed.zip],name,{type:'application/zip'});const sup=shareSupport([file]);if(sup.mode==='download'||sup.mode==='none'){setLibMsg(sup.message);return}tell(await shareFiles([file],name))}catch(e){setLibMsg(e.message||'Share failed. Nothing was sent.')}};
@@ -1819,8 +1854,9 @@ async function renderLibrary(day){
     if(b.dataset.libmake){const j=JOBS.find(x=>x.id===id),f=FORMS[id];if(!j||!f){location.hash='#job/'+encodeURIComponent(id);return}cleanGate(j,f,'make PDF',()=>{location.hash='#pdf/'+encodeURIComponent(id)});return}
     let rec;try{rec=await pdfGet(id)}catch(err){rec=null}
     if(!rec||!rec.bytes||!rec.bytes.byteLength){setLibMsg('No saved PDF on this phone. Nothing was generated.');return}
-    if(b.dataset.libsave){downloadBytes(exactBytes(rec.bytes),rec.name,'application/pdf');setLibMsg('Download started on this phone. Nothing was sent.');return}
-    const file=new File([exactBytes(rec.bytes)],rec.name,{type:'application/pdf'});
+    let sent;try{sent=await worksheetOnlyBytes(exactBytes(rec.bytes))}catch(err){setLibMsg(err.message||'Nothing was sent.');return}
+    if(b.dataset.libsave){downloadBytes(sent,rec.name,'application/pdf');setLibMsg('Download started on this phone. The file is the worksheet pages only. Nothing was emailed.');return}
+    const file=new File([sent],rec.name,{type:'application/pdf'});
     const sup=shareSupport([file]);
     if(sup.mode==='download'||sup.mode==='none'){setLibMsg(sup.message);return}
     tell(await shareFiles([file],rec.name));
@@ -1849,14 +1885,16 @@ async function renderKept(id){
    <div class="fn" id="keptname">${esc(rec.name)}</div>
    <div class="note">${(bytes.length/1024).toFixed(0)} KB${rec.addr?' · '+esc(rec.addr):''}</div>
    <div class="stack">
+    <p class="note" id="sendnote">Share and Save send the worksheet pages only. Photo pages stay in the preview on this phone.</p>
     ${(sup.mode==='files'||sup.mode==='one')?'<button type="button" class="btn pri" id="shareKept">Share PDF</button>':''}
-    <a class="btn" id="dlKept" href="${url}" download="${esc(rec.name)}">⬇️ Save PDF</a>
+    <button type="button" class="btn" id="dlKept">⬇️ Save PDF</button>
     <a class="btn" href="${url}" target="_blank" rel="noopener">👁️ Open / preview</a>
     ${j?`<a class="btn" href="#job/${encodeURIComponent(id)}">Worksheet</a>`:''}
     ${j&&f&&st.status!=='ready'?`<button type="button" class="btn" id="remakeKept">Make PDF again</button>`:''}
    </div></section><section class="f"><h2>Preview</h2><div id="prev" class="note">Rendering preview…</div></section></div>`;
   previewPDF(bytes);
-  if($('#shareKept'))$('#shareKept').onclick=async()=>{const res=await shareFiles([file],rec.name);toast(res.message)};
+  if($('#shareKept'))$('#shareKept').onclick=async()=>{try{const data=await worksheetOnlyBytes(bytes);const res=await shareFiles([new File([data],rec.name,{type:'application/pdf'})],rec.name);toast(res.message)}catch(e){toast(e.message||'Share failed. Nothing was sent.')}};
+  $('#dlKept').onclick=async()=>{try{downloadBytes(await worksheetOnlyBytes(bytes),rec.name,'application/pdf')}catch(e){toast(e.message||'Download failed. Nothing was sent.')}};
   if($('#remakeKept'))$('#remakeKept').onclick=()=>cleanGate(j,f,'make PDF',()=>{location.hash='#pdf/'+encodeURIComponent(id)});
 }
 

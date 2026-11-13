@@ -291,15 +291,12 @@ test('empty day and unsupported or single-file share use ZIP and combined PDF',{
     const rb=ready.bytes instanceof Uint8Array?ready.bytes:new Uint8Array(ready.bytes);
     let same=!!got&&got.data.length===rb.length;
     if(same){for(let i=0;i<rb.length;i++)if(got.data[i]!==rb[i]){same=false;break}}
-    const notes=new TextDecoder().decode(entries.find(e=>e.name==='day-notes.txt').data);
-    return {names:entries.map(e=>e.name),same:same,notes:notes};
+    const notes=entries.find(e=>e.name==='day-notes.txt');
+    return {names:entries.map(e=>e.name),same:same,hasNotes:!!notes};
   });
-  assert.deepEqual(zipCheck.names,['2026-11-08_1-Sample-St.pdf','2026-11-08_8-Second-St.pdf','day-notes.txt']);
+  assert.deepEqual(zipCheck.names,['2026-11-08_1-Sample-St.pdf','2026-11-08_8-Second-St.pdf']);
   assert.equal(zipCheck.same,true);
-  assert.match(zipCheck.notes,/3 Dirty St/);
-  assert.match(zipCheck.notes,/4 Stale St/);
-  assert.match(zipCheck.notes,/not a worksheet/);
-  assert.doesNotMatch(zipCheck.notes,/Original note/);
+  assert.equal(zipCheck.hasNotes,false);
   await page.evaluate(()=>{window.__blobs=[]});
   await page.click('#combineDay');
   await page.waitForFunction(()=>window.__blobs.some(b=>b.type==='application/pdf'&&b.bytes&&b.bytes[0]===0x25));
@@ -309,14 +306,18 @@ test('empty day and unsupported or single-file share use ZIP and combined PDF',{
       pdfjsLib.GlobalWorkerOptions.workerSrc=URL.createObjectURL(new Blob([document.getElementById('pdfw').textContent],{type:'text/javascript'}));
     }
     const doc=await pdfjsLib.getDocument({data:blob.bytes.slice(),isEvalSupported:false}).promise;
-    const content=await (await doc.getPage(1)).getTextContent();
-    const items=Array.isArray(content.items)?content.items:[];
-    return {pages:doc.numPages,text:items.map(i=>i.str||'').join(' ')};
+    let text='';
+    for(let i=1;i<=doc.numPages;i++){
+      const content=await (await doc.getPage(i)).getTextContent();
+      const items=Array.isArray(content.items)?content.items:[];
+      text+=' '+items.map(it=>it.str||'').join(' ');
+    }
+    return {pages:doc.numPages,text:text};
   });
-  assert.equal(combined.pages,3);
-  assert.match(combined.text,/Left out/);
-  assert.match(combined.text,/not a worksheet/);
-  assert.match(combined.text,/3 Dirty St/);
+  assert.equal(combined.pages,2);
+  assert.doesNotMatch(combined.text,/This page is a list only/);
+  assert.doesNotMatch(combined.text,/Left out/);
+  assert.doesNotMatch(combined.text,/Photo page/);
   const single=await newPage(libraryData(),'single');
   await single.goto(BASE+'#library/'+DAY,{waitUntil:'domcontentloaded'});
   await single.waitForSelector('#libroot');
@@ -411,7 +412,7 @@ test('worksheet rules stay, photos stay in the saved PDF, and reload keeps them'
   assert.equal(after.cleaned,'Yes');
   assert.equal(after.isNew,true);
   const sw=await page.evaluate(async()=>await (await fetch('sw.js')).text());
-  assert.match(sw,/ccsa-v2\.22\.0-20261109/);
+  assert.match(sw,/ccsa-v2\.25\.0-20261113/);
   assert.match(sw,/pdflib\.js/);
   assert.match(sw,/sheetfill\.js/);
   assertNoAppError(page);

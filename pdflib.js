@@ -7,7 +7,7 @@
   if(root)root.CCSAPdf=api;
 })(typeof globalThis!=='undefined'?globalThis:this,function(){
   const DEFAULT_TECH='Adam Westerman';
-  const HELP='Saved PDFs stay on this phone after you tap Make PDF. The day is the date of service on the worksheet, or the appointment day in Sydney time when there is no worksheet. Share day opens the share sheet: you choose who receives the files and tap Send. This app does not email or upload them. A job is left out when its PDF was never saved, the worksheet changed after saving, or cleaning is not recorded.';
+  const HELP='Saved PDFs stay on this phone after you tap Make PDF. The day is the date of service on the worksheet, or the appointment day in Sydney time when there is no worksheet. Share day opens the share sheet: you choose who receives the files and tap Send. This app does not email or upload them. What you send is the worksheet pages only: no photo pages and no summary page. Photos stay on this phone. A job is left out when its PDF was never saved, the worksheet changed after saving, or cleaning is not recorded.';
   function pad2(n){return String(n).padStart(2,'0')}
   function clean(v){return v==null?'':String(v).replace(/\s+/g,' ').trim()}
   function plain(s){return String(s??'').replace(/[‘’]/g,"'").replace(/[“”]/g,'"').replace(/[–—]/g,'-').replace(/[^\x20-\x7E]/g,'?')}
@@ -223,6 +223,13 @@
     return lines;
   }
   function dayNotes(plan){return contentsLines(plan).join('\n')}
+  /* A page sent to someone else is a worksheet page. Photo pages and the day summary are not. */
+  function sharePageKind(text){
+    const s=String(text||'');
+    if(/Photo page\s+\d+\s+of\s+\d+/i.test(s)||/(^|\n)\s*Photos\s*(\n|$)/.test(s))return 'photo';
+    if(/This page is a list only/i.test(s))return 'summary';
+    return 'worksheet';
+  }
   function uniqueFileNames(names){
     const used=new Set();
     return (names||[]).map(function(name){
@@ -374,7 +381,7 @@
     isYMD:isYMD,sydneyDay:sydneyDay,sydneyToday:sydneyToday,sydneyClock:sydneyClock,addDays:addDays,fmtDay:fmtDay,
     fileBase:fileBase,pdfFileName:pdfFileName,worksheetStamp:worksheetStamp,cleaningMissing:cleaningMissing,
     serviceDay:serviceDay,sortValue:sortValue,statusOf:statusOf,dayPlan:dayPlan,summarise:summarise,
-    contentsLines:contentsLines,dayNotes:dayNotes,uniqueFileNames:uniqueFileNames,
+    contentsLines:contentsLines,dayNotes:dayNotes,sharePageKind:sharePageKind,uniqueFileNames:uniqueFileNames,
     crc32:crc32,zipStore:zipStore,unzipStore:unzipStore,packFiles:packFiles,
     shareChoice:shareChoice,shareResult:shareResult,retainRecord:retainRecord,pdfMagic:pdfMagic,wrapLine:wrapLine,plain:plain
   };
