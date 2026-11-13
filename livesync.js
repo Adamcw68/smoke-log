@@ -381,8 +381,10 @@
       catch(e2){db=storeMod.getFirestore(app)}
     }
     fb={
-      doc:storeMod.doc,collection:storeMod.collection,getDocs:storeMod.getDocs,onSnapshot:storeMod.onSnapshot,setDoc:storeMod.setDoc,
-      GoogleAuthProvider:authMod.GoogleAuthProvider,signInWithPopup:authMod.signInWithPopup,signInWithRedirect:authMod.signInWithRedirect,getRedirectResult:authMod.getRedirectResult,onAuthStateChanged:authMod.onAuthStateChanged,signOut:authMod.signOut
+      doc:storeMod.doc,collection:storeMod.collection,getDoc:storeMod.getDoc,getDocs:storeMod.getDocs,onSnapshot:storeMod.onSnapshot,setDoc:storeMod.setDoc,deleteDoc:storeMod.deleteDoc,writeBatch:storeMod.writeBatch,
+      GoogleAuthProvider:authMod.GoogleAuthProvider,signInWithPopup:authMod.signInWithPopup,signInWithRedirect:authMod.signInWithRedirect,getRedirectResult:authMod.getRedirectResult,onAuthStateChanged:authMod.onAuthStateChanged,signOut:authMod.signOut,
+      getAuth:authMod.getAuth,createUserWithEmailAndPassword:authMod.createUserWithEmailAndPassword,sendPasswordResetEmail:authMod.sendPasswordResetEmail,
+      initializeApp:appMod.initializeApp,getApp:appMod.getApp
     };
     return authMod;
   }
@@ -498,10 +500,13 @@
   function current(){
     return {configured:state.configured,user:state.user,phase:state.phase,lastSync:state.lastSync,unsyncedPhotos:state.unsyncedPhotos,error:state.error};
   }
+  function client(){
+    return {auth:auth,db:db,fb:fb,ready:!!(auth&&db&&fb)};
+  }
   return {
     configReady:configReady,preferRedirect:preferRedirect,signInFailure:signInFailure,docId:docId,photoFits:photoFits,statusLabel:statusLabel,panelHTML:panelHTML,
     reconcile:reconcile,queueOp:queueOp,drainOps:drainOps,plain:plain,
     boot:boot,signIn:signIn,signOut:signOut,afterSave:afterSave,afterPhoto:afterPhoto,afterPhotoDelete:afterPhotoDelete,beforeClearAll:beforeClearAll,
-    state:current
+    client:client,state:current
   };
 });

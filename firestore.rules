@@ -1,9 +1,227 @@
 rules_version = '2';
+// Agency portal. An agent reads only portal/{their agencyId}.
+// Adam's first admins/{uid} document is created in the Firebase console.
+// Deploy: npx firebase deploy --only firestore:rules --project ccsa-smoke-log
+// portal-property-keys: id,agencyId,agencyCode,address,street,town,ident,tenancy,compliance,lastService,due,alarmCount,publishedAt
+// portal-job-keys: id,propertyId,agencyId,agencyCode,address,street,town,ident,tenancy,status,serviceDate,appointment,appointmentTime,lastService,due,result,alarmCount,priorDate,priorResult,publishedAt
+// portal-certificate-keys: id,propertyId,jobId,agencyId,agencyCode,address,ident,tenancy,date,tech,statement,result,alarms,publishedAt
+// portal-invoice-keys: id,number,propertyId,jobId,agencyId,agencyCode,address,ident,tenancy,issueDate,dueDate,status,paidAt,gstRegistered,businessName,abn,businessAddress,businessPhone,businessEmail,bankName,bsb,accountName,accountNumber,terms,lines,exCents,gstCents,totalCents,publishedAt
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    function signedIn() {
+      return request.auth != null;
     }
+    function isAdmin() {
+      return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    function agentDoc() {
+      return get(/databases/$(database)/documents/agencyUsers/$(request.auth.uid)).data;
+    }
+    function isAgent() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/agencyUsers/$(request.auth.uid))
+        && agentDoc().role == 'agent'
+        && agentDoc().disabled == false
+        && agentDoc().agencyId is string
+        && agentDoc().agencyId.size() > 0;
+    }
+    function ownsAgency(agencyId) {
+      return isAgent() && agentDoc().agencyId == agencyId;
+    }
+    function portalKind(kind) {
+      return kind == 'properties' || kind == 'jobs' || kind == 'certificates' || kind == 'invoices';
+    }
+    function agencyKey(id) {
+      return id is string && id.matches('^[a-z0-9-]{1,40}$');
+    }
+    function dayOrEmpty(v) {
+      return v is string && (v == '' || v.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'));
+    }
+    function timeOrEmpty(v) {
+      return v is string && (v == '' || v.matches('^[0-9]{2}:[0-9]{2}$'));
+    }
+    function plainText(v, max) {
+      return v is string && v.size() < max && !v.matches('.*@.*') && !v.matches('.*[0-9]{8}.*');
+    }
+    function tenancyOk(v) {
+      return v == '' || v == 'Permanent' || v == 'Holiday';
+    }
+    function resultOk(v) {
+      return v == '' || v == 'pass' || v == 'replace' || v == 'fail' || v == 'incomplete';
+    }
+    function docIdOk(id) {
+      return id is string && id.size() > 0 && id.size() < 160 && id.matches('^[a-z0-9-]+$');
+    }
+    function validProperty(agencyId, docId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['id','agencyId','agencyCode','address','street','town','ident','tenancy','compliance','lastService','due','alarmCount','publishedAt'])
+        && data.id == docId
+        && docIdOk(docId)
+        && data.agencyId == agencyId
+        && agencyKey(agencyId)
+        && plainText(data.agencyCode, 80)
+        && plainText(data.address, 300)
+        && data.address.size() > 0
+        && plainText(data.street, 160)
+        && plainText(data.town, 80)
+        && plainText(data.ident, 160)
+        && tenancyOk(data.tenancy)
+        && (data.compliance == 'compliant' || data.compliance == 'due soon' || data.compliance == 'overdue' || data.compliance == 'failed')
+        && dayOrEmpty(data.lastService)
+        && dayOrEmpty(data.due)
+        && data.alarmCount is int
+        && data.alarmCount >= 0
+        && data.alarmCount < 40
+        && data.publishedAt is string
+        && data.publishedAt.size() < 40;
+    }
+    function validJob(agencyId, docId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['id','propertyId','agencyId','agencyCode','address','street','town','ident','tenancy','status','serviceDate','appointment','appointmentTime','lastService','due','result','alarmCount','priorDate','priorResult','publishedAt'])
+        && data.id == docId
+        && docIdOk(docId)
+        && data.agencyId == agencyId
+        && agencyKey(agencyId)
+        && docIdOk(data.propertyId)
+        && plainText(data.agencyCode, 80)
+        && plainText(data.address, 300)
+        && data.address.size() > 0
+        && plainText(data.street, 160)
+        && plainText(data.town, 80)
+        && plainText(data.ident, 160)
+        && tenancyOk(data.tenancy)
+        && (data.status == 'upcoming' || data.status == 'booked' || data.status == 'completed')
+        && dayOrEmpty(data.serviceDate)
+        && dayOrEmpty(data.appointment)
+        && timeOrEmpty(data.appointmentTime)
+        && dayOrEmpty(data.lastService)
+        && dayOrEmpty(data.due)
+        && resultOk(data.result)
+        && data.alarmCount is int
+        && data.alarmCount >= 0
+        && data.alarmCount < 40
+        && dayOrEmpty(data.priorDate)
+        && resultOk(data.priorResult)
+        && data.publishedAt is string
+        && data.publishedAt.size() < 40;
+    }
+    function validCertificate(agencyId, docId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['id','propertyId','jobId','agencyId','agencyCode','address','ident','tenancy','date','tech','statement','result','alarms','publishedAt'])
+        && data.id == docId
+        && docIdOk(docId)
+        && data.agencyId == agencyId
+        && agencyKey(agencyId)
+        && docIdOk(data.propertyId)
+        && docIdOk(data.jobId)
+        && plainText(data.agencyCode, 80)
+        && plainText(data.address, 300)
+        && data.address.size() > 0
+        && plainText(data.ident, 160)
+        && tenancyOk(data.tenancy)
+        && data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && plainText(data.tech, 80)
+        && plainText(data.statement, 900)
+        && (data.result == 'pass' || data.result == 'replace' || data.result == 'fail' || data.result == 'incomplete')
+        && data.alarms is list
+        && data.alarms.size() < 30
+        && data.publishedAt is string
+        && data.publishedAt.size() < 40;
+    }
+    function validInvoice(agencyId, docId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['id','number','propertyId','jobId','agencyId','agencyCode','address','ident','tenancy','issueDate','dueDate','status','paidAt','gstRegistered','businessName','abn','businessAddress','businessPhone','businessEmail','bankName','bsb','accountName','accountNumber','terms','lines','exCents','gstCents','totalCents','publishedAt'])
+        && data.id == docId
+        && docIdOk(docId)
+        && data.agencyId == agencyId
+        && agencyKey(agencyId)
+        && docIdOk(data.propertyId)
+        && data.jobId is string
+        && data.jobId.size() > 0
+        && data.jobId.size() < 120
+        && data.number.matches('^INV-[0-9]{4,}$')
+        && plainText(data.agencyCode, 80)
+        && plainText(data.address, 300)
+        && data.address.size() > 0
+        && plainText(data.ident, 160)
+        && tenancyOk(data.tenancy)
+        && data.issueDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && data.dueDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && (data.status == 'unpaid' || data.status == 'paid' || data.status == 'overdue')
+        && dayOrEmpty(data.paidAt)
+        && data.gstRegistered is bool
+        && plainText(data.businessName, 120)
+        && data.businessName.size() > 0
+        && (data.abn == '' || data.abn.matches('^[0-9 ]{11,14}$'))
+        && plainText(data.businessAddress, 300)
+        && data.businessPhone is string
+        && data.businessPhone.size() < 40
+        && (data.businessEmail == '' || (data.businessEmail is string && data.businessEmail.size() < 200 && data.businessEmail.matches('.+@.+[.].+')))
+        && plainText(data.bankName, 80)
+        && (data.bsb == '' || data.bsb.matches('^[0-9]{3}-?[0-9]{3}$'))
+        && plainText(data.accountName, 80)
+        && (data.accountNumber == '' || data.accountNumber.matches('^[0-9]{1,12}$'))
+        && plainText(data.terms, 300)
+        && data.lines is list
+        && data.lines.size() > 0
+        && data.lines.size() < 30
+        && data.exCents is int
+        && data.gstCents is int
+        && data.totalCents is int
+        && data.exCents >= 0
+        && data.gstCents >= 0
+        && data.totalCents >= 0
+        && data.publishedAt is string
+        && data.publishedAt.size() < 40;
+    }
+    function validPortal(agencyId, kind, docId) {
+      return (kind == 'properties' && validProperty(agencyId, docId))
+        || (kind == 'jobs' && validJob(agencyId, docId))
+        || (kind == 'certificates' && validCertificate(agencyId, docId))
+        || (kind == 'invoices' && validInvoice(agencyId, docId));
+    }
+
+    match /users/{userId}/{document=**} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /admins/{uid} {
+      allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasOnly(['email', 'since'])
+        && request.resource.data.email is string
+        && request.resource.data.email.size() < 200
+        && request.resource.data.since is string
+        && request.resource.data.since.size() < 40;
+      allow delete: if false;
+    }
+
+    match /agencyUsers/{uid} {
+      allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasOnly(['agencyId', 'agencyCode', 'email', 'role', 'createdAt', 'disabled'])
+        && request.resource.data.role == 'agent'
+        && request.resource.data.disabled is bool
+        && agencyKey(request.resource.data.agencyId)
+        && request.resource.data.agencyCode is string
+        && request.resource.data.agencyCode.size() > 0
+        && request.resource.data.agencyCode.size() < 80
+        && request.resource.data.email is string
+        && request.resource.data.email.size() < 200
+        && request.resource.data.email.matches('.+@.+[.].+')
+        && request.resource.data.createdAt is string
+        && request.resource.data.createdAt.size() < 40;
+      allow delete: if isAdmin();
+    }
+
+    match /portal/{agencyId}/{kind}/{docId} {
+      allow read: if portalKind(kind) && (isAdmin() || ownsAgency(agencyId));
+      allow create, update: if isAdmin() && portalKind(kind) && validPortal(agencyId, kind, docId);
+      allow delete: if isAdmin() && portalKind(kind);
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
