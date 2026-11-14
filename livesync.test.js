@@ -40,6 +40,17 @@ test('installed iPhone app does not use a redirect, and a normal browser tries a
   assert.equal(sync.signInPlan(androidHome),'popup-then-redirect');
   assert.equal(sync.signInPlan(desktop),'popup-then-redirect');
   assert.equal(sync.signInPlan(instagram),'open-browser');
+  const iosHosted={userAgent:iosHome.userAgent,standalone:true,host:'ccsa-smoke-log.web.app',authDomain:'ccsa-smoke-log.web.app'};
+  assert.equal(sync.sameOriginAuth(iosHosted),true);
+  assert.equal(sync.signInPlan(iosHosted),'popup-then-redirect');
+  assert.equal(sync.openingHelp(iosHosted),null);
+  assert.equal(sync.browserHelp(iosHosted),null);
+  assert.match(sync.hostingNotice('adamcw68.github.io'),/ccsa-smoke-log\.web\.app/);
+  assert.match(sync.hostingNotice('adamcw68.github.io'),/Export worksheets/);
+  assert.match(sync.hostingNotice('adamcw68.github.io'),/stay here/);
+  assert.equal(sync.hostingNotice('ccsa-smoke-log.web.app'),'');
+  assert.equal(sync.hostingNotice('ccsa-smoke-log.firebaseapp.com'),'');
+  assert.equal(sync.hostingNotice('127.0.0.1'),'');
   const iphone=sync.browserHelp(iosHome);
   assert.match(iphone.label,/Safari/);
   assert.match(iphone.text,/does not receive that sign-in/);
@@ -62,6 +73,22 @@ test('installed iPhone app does not use a redirect, and a normal browser tries a
   assert.equal(sync.redirectFollowUp({pending:true,hasUser:false,code:'',env:iosHome}).help,true);
   assert.equal(sync.redirectFollowUp({pending:true,hasUser:true,code:'',env:iosHome}).error,'');
   assert.match(sync.redirectFollowUp({pending:true,hasUser:false,code:'auth/web-storage-unsupported',host:'adamcw68.github.io',env:androidHome}).error,/auth\/web-storage-unsupported/);
+});
+
+test('a phone with no worksheets receives the signed-in account copy',function(){
+  const remote={
+    jobs:[job('a','1 Circle St, Yamba NSW 2464','2026-11-09T02:00:00.000Z','RWY')],
+    forms:{a:form('2026-11-09T02:00:00.000Z','99.5','RWY')},
+    photos:[{id:'remote-shot',ts:'2026-11-09T02:00:00.000Z',b64:'aaa'}],
+    tombstones:[]
+  };
+  const out=sync.reconcile({jobs:[],forms:{},photos:[],tombstones:[]},remote);
+  assert.equal(out.jobs.length,1);
+  assert.equal(out.jobs[0].addr,'1 Circle St, Yamba NSW 2464');
+  assert.equal(out.forms.a.agent,'RWY');
+  assert.equal(out.forms.a.al[0].db,'99.5');
+  assert.deepEqual(out.pullPhotos.map(function(p){return p.id}),['remote-shot']);
+  assert.deepEqual(out.pushJobs,[]);
 });
 
 test('a photo that cannot fit in one Firestore record stays local',function(){
