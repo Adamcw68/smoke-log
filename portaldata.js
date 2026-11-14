@@ -532,6 +532,41 @@
       '6. Sign in to Sync in this app, create an agency login, and publish. Publishing copies addresses, dates, alarm results and certificates. It does not copy tenant names, phone numbers or email addresses, and it does not write to Google Calendar.'
     ].join('\n');
   }
+  function escHtml(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+  function eyeIcon(shown){
+    const slash=shown?'<path d="M3 3l18 18" fill="none" stroke="currentColor" stroke-width="2"/>':'';
+    return '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/>'+slash+'</svg>';
+  }
+  /* A password field stays type=password until the eye is tapped. The button is type=button so Enter still submits the form. */
+  function passwordField(opts){
+    opts=opts||{};
+    const id=escHtml(opts.id||'password');
+    const auto=escHtml(opts.autocomplete||'current-password');
+    let html='<div class="pw"><input class="t" id="'+id+'" type="password" autocomplete="'+auto+'"';
+    if(opts.name)html+=' name="'+escHtml(opts.name)+'"';
+    if(opts.required)html+=' required';
+    if(opts.value!=null)html+=' value="'+escHtml(opts.value)+'"';
+    html+='>'+'<button type="button" class="pweye" aria-label="Show password" aria-pressed="false">'+eyeIcon(false)+'</button></div>';
+    return html;
+  }
+  function bindPasswordEyes(root){
+    const el=root&&root.addEventListener?root:(typeof document!=='undefined'?document:null);
+    if(!el||el.__pweyes)return;
+    el.__pweyes=true;
+    el.addEventListener('click',function(e){
+      const b=e.target&&e.target.closest?e.target.closest('.pweye'):null;
+      if(!b||!el.contains(b))return;
+      const input=b.parentNode&&b.parentNode.querySelector('input');
+      if(!input)return;
+      const show=input.type==='password';
+      const val=input.value;
+      input.type=show?'text':'password';
+      if(input.value!==val)input.value=val;
+      b.setAttribute('aria-label',show?'Hide password':'Show password');
+      b.setAttribute('aria-pressed',show?'true':'false');
+      b.innerHTML=eyeIcon(show);
+    });
+  }
   function visibleAgency(portal,agencyId){
     const bucket=portal&&portal.agencies&&portal.agencies[agencyId];
     if(!bucket)return {id:agencyId||'',jobs:[],certificates:[],properties:[]};
@@ -573,6 +608,8 @@
     visibleAgency:visibleAgency,
     authError:authError,
     setupSteps:setupSteps,
-    statementFor:statementFor
+    statementFor:statementFor,
+    passwordField:passwordField,
+    bindPasswordEyes:bindPasswordEyes
   };
 });

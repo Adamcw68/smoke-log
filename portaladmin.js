@@ -51,8 +51,8 @@
     const tools=admin?`<details open><summary>Create an agency login</summary>
       <label class="l" for="portalagency">Agency</label><select class="t" id="portalagency">${options}</select>
       <label class="l" for="portalemail">Email</label><input class="t" id="portalemail" type="email" autocomplete="off" value="${esc(state.draftEmail)}">
-      <label class="l" for="portalpass">Temporary password</label><input class="t" id="portalpass" type="text" autocomplete="off" value="${esc(state.password)}">
-      <p class="note">Shown so you can pass it on. It is not saved in the portal.</p>
+      <label class="l" for="portalpass">Temporary password</label>${lib().passwordField({id:'portalpass',autocomplete:'new-password',value:state.password})}
+      <p class="note">Tap Show password to read it. It is not saved in the portal.</p>
       <div class="row"><button type="button" id="portalnewpass">New password</button><button type="button" class="pri" id="portalcreate" ${state.busy?'disabled':''}>Create login</button></div>
       ${once}
       </details>
@@ -370,6 +370,7 @@
   function boot(next){
     hooks=next||{};
     state.password=state.password||tempPassword();
+    if(typeof document!=='undefined'&&lib()&&lib().bindPasswordEyes)lib().bindPasswordEyes(document);
     try{state.auto=!hooks.storage||hooks.storage.getItem('ccsa.portal.auto')!=='0'}catch(e){state.auto=true}
     const cfg=hooks.config?hooks.config():null;
     state.configured=!!(cfg&&cfg.apiKey&&!/YOUR_/i.test(JSON.stringify(cfg)));
