@@ -66,7 +66,7 @@ test('worksheet PDF prints agency codes, strikes obsolete rows through Yes and N
       const r=await buildPDF(j,f);
       return {text:await textOf(r.bytes),bytes:Array.from(r.bytes)};
     }
-    const names=[['Ray White Yamba','RWY'],['Ray White Maclean','RWM'],['Raine & Horne','R&H'],['Lifestyle','Lifestyle'],['McGrath','McGrath']];
+    const names=[['Ray White Yamba','Ray White Maclean/Yamba'],['Ray White Maclean','Ray White Maclean/Yamba'],['Raine & Horne','Raine & Horne Maclean/Yamba'],['Lifestyle','Lifestyle Maclean/Yamba'],['McGrath','McGrath']];
     const out=[];
     for(const pair of names){
       const made=await build(pair[0], pair[0]==='Ray White Yamba'?'99.5':'');
@@ -77,7 +77,7 @@ test('worksheet PDF prints agency codes, strikes obsolete rows through Yes and N
   });
   found.out.forEach(row=>{
     assert.equal(row.has,true,row.in+' should print '+row.code);
-    assert.equal(row.long,false,row.in+' should not be left as the long name');
+    if(row.code.indexOf(row.in)!==0)assert.equal(row.long,false,row.in+' should not be left unchanged');
   });
   assert.match(found.out[0].text,/99\.5/);
   assert.doesNotMatch(found.blank,/\b99\.5\b|\b97\b|\b100\b|\b103\b/);
@@ -143,7 +143,7 @@ test('measured sound level is one field, persists, and a changed reading marks t
   assert.equal(await page.$$eval('[data-path="al.0.db"]',els=>els.length),1);
   assert.match(await page.$eval('label[for="db0"]',el=>el.textContent),/Measured sound level/);
   assert.equal(await page.$eval('#db0',el=>el.value),'');
-  assert.equal(await page.$eval('#agent',el=>el.value),'RWY');
+  assert.equal(await page.$eval('#agent',el=>el.value),'Ray White Maclean/Yamba');
   assert.equal(await page.$eval('body',el=>/insect surface|Responds to synthetic smoke|All Yes/.test(el.innerText)&&!/Insect surface spray/.test(el.innerText)),true);
   await page.click('#db0');
   await page.type('#db0','99.5');
@@ -154,7 +154,7 @@ test('measured sound level is one field, persists, and a changed reading marks t
   await page.reload({waitUntil:'domcontentloaded'});
   await page.waitForSelector('#db0');
   assert.equal(await page.$eval('#db0',el=>el.value),'99.5');
-  assert.equal(await page.$eval('#agent',el=>el.value),'RWY');
+  assert.equal(await page.$eval('#agent',el=>el.value),'Ray White Maclean/Yamba');
   await page.evaluate(()=>{const el=document.getElementById('db0');el.value='97-103';el.dispatchEvent(new Event('input',{bubbles:true}))});
   assert.equal(await page.$eval('#db0',el=>el.value),'99.5');
   await page.evaluate(()=>{const el=document.getElementById('db0');el.value='';el.dispatchEvent(new Event('input',{bubbles:true}))});
@@ -205,7 +205,7 @@ test('an old blank worksheet picks up a comma calendar title without changing ho
   },{jobs:[j],forms:{sample:f},events:[ev]});
   await page.goto(BASE+'#job/sample',{waitUntil:'domcontentloaded'});
   await page.waitForSelector('#agent');
-  assert.equal(await page.$eval('#agent',el=>el.value),'RWY');
+  assert.equal(await page.$eval('#agent',el=>el.value),'Ray White Maclean/Yamba');
   assert.equal(await page.$eval('[data-tenancy] [data-v="Holiday"]',el=>el.classList.contains('on')),true);
   assert.equal(await page.$eval('[data-tenancy] [data-v="Permanent"]',el=>el.classList.contains('on')),false);
   assert.equal(await page.$eval('[data-chips="ptype"] [data-v="House"]',el=>el.classList.contains('on')),true);
@@ -222,7 +222,7 @@ test('an old blank worksheet picks up a comma calendar title without changing ho
     const tc=await pg.getTextContent();
     const items=tc.items.map(it=>({s:it.str,x:+it.transform[4].toFixed(1),y:+it.transform[5].toFixed(1)}));
     const ten=items.find(it=>/Tenancy:/.test(it.s));
-    const agent=items.find(it=>it.s==='RWY Holiday');
+    const agent=items.find(it=>it.s==='Ray White Maclean/Yamba Holiday');
     const vp=pg.getViewport({scale:1.7});
     const full=document.createElement('canvas');full.width=vp.width;full.height=vp.height;
     await pg.render({canvasContext:full.getContext('2d'),viewport:vp}).promise;
@@ -244,7 +244,7 @@ test('an old blank worksheet picks up a comma calendar title without changing ho
   assert.equal(placed.section,'Holiday');
   assert.equal(placed.ten,undefined);
   assert.ok(placed.agent&&placed.agent.y>600&&placed.agent.x>400,'combined agency and tenancy sit in the agent slot');
-  assert.equal(placed.agent.s,'RWY Holiday');
+  assert.equal(placed.agent.s,'Ray White Maclean/Yamba Holiday');
   assert.equal(placed.status,'stale');
   assert.equal(placed.still,placed.kept);
   fs.writeFileSync(path.join(ART,'synthetic_agent_slot_pdf.png'),Buffer.from(placed.png.split(',')[1],'base64'));
@@ -308,22 +308,22 @@ test('a sheet import fills a blank worksheet, keeps the mobile, and prints the a
       agent:job.agent,p1:job.p1,p2:job.p2,section:job.section,ptype:form.ptype,formAgent:form.agent,tenancy:form.tenancy,
       lockedAgent:locked.agent,lockedForm:FORMS[keptId].agent,lockedP1:locked.p1,lockedType:FORMS[keptId].ptype,
       freshAgent:fresh.agent,freshP1:fresh.p1,freshP2:fresh.p2,freshForm:freshForm.agent,
-      slot:(items.find(it=>it.s==='Lifestyle Holiday')||null),
+      slot:(items.find(it=>it.s==='Lifestyle Maclean/Yamba Holiday')||null),
       tenancyLabel:items.some(it=>/Tenancy:/.test(it.s)),
       noteText:noteText,kept:keptPdf.record.bytes.byteLength,still:still.bytes.byteLength,
       head:head.toDataURL('image/png'),notes:noteCanvas.toDataURL('image/png'),id:id
     };
   });
-  assert.equal(found.previewAgent,'Lifestyle');
+  assert.equal(found.previewAgent,'Lifestyle Maclean/Yamba');
   assert.equal(found.previewP1,'0400 111 222');
   assert.equal(found.previewP2,'02 6649 0000');
-  assert.equal(found.previewFresh,'RWM');
+  assert.equal(found.previewFresh,'Ray White Maclean/Yamba');
   assert.equal(found.previewFreshP1,'0400 222 333');
   assert.equal(found.previewFreshP2,'02 6649 1111');
   assert.ok(found.dup>=1,'the existing address was updated, not skipped empty');
   assert.ok(found.add>=1);
-  assert.equal(found.agent,'Lifestyle');
-  assert.equal(found.formAgent,'Lifestyle');
+  assert.equal(found.agent,'Lifestyle Maclean/Yamba');
+  assert.equal(found.formAgent,'Lifestyle Maclean/Yamba');
   assert.equal(found.tenancy,'Holiday');
   assert.equal(found.section,'Holiday');
   assert.equal(found.ptype,'House');
@@ -333,8 +333,8 @@ test('a sheet import fills a blank worksheet, keeps the mobile, and prints the a
   assert.equal(found.lockedForm,'McGrath');
   assert.equal(found.lockedP1,'0411 222 333');
   assert.equal(found.lockedType,'Unit');
-  assert.equal(found.freshAgent,'RWM');
-  assert.equal(found.freshForm,'RWM');
+  assert.equal(found.freshAgent,'Ray White Maclean/Yamba');
+  assert.equal(found.freshForm,'Ray White Maclean/Yamba');
   assert.equal(found.freshP1,'0400 222 333');
   assert.equal(found.freshP2,'02 6649 1111');
   assert.ok(found.slot&&found.slot.y>600&&found.slot.x>380,'Lifestyle Holiday is in the agent slot');
@@ -346,7 +346,7 @@ test('a sheet import fills a blank worksheet, keeps the mobile, and prints the a
   fs.writeFileSync(path.join(ART,'synthetic_phone_notes_pdf.png'),Buffer.from(found.notes.split(',')[1],'base64'));
   await page.goto(BASE+'#job/'+encodeURIComponent(found.id),{waitUntil:'domcontentloaded'});
   await page.waitForSelector('#agent');
-  assert.equal(await page.$eval('#agent',el=>el.value),'Lifestyle');
+  assert.equal(await page.$eval('#agent',el=>el.value),'Lifestyle Maclean/Yamba');
   assert.equal(await page.$eval('[data-tenancy] [data-v="Holiday"]',el=>el.classList.contains('on')),true);
   assert.equal(await page.$eval('[data-chips="ptype"] [data-v="House"]',el=>el.classList.contains('on')),true);
   assert.match(await page.$eval('main',el=>el.innerText),/0400 111 222/);
@@ -377,8 +377,21 @@ test('insect No is circled, battery follows the answer, and the agency stays fir
   await page.evaluate(()=>{location.hash='#job/circle'});
   await page.waitForSelector('#agent');
   assert.equal(await page.$eval('body',el=>/Insect surface spray/.test(el.innerText)),false);
-  await page.$eval('#agent',el=>{el.value='Holiday RWY';el.dispatchEvent(new Event('change',{bubbles:true}))});
-  assert.equal(await page.$eval('#agent',el=>el.value),'RWY');
+  await page.evaluate(()=>{
+    const jobs=JSON.parse(localStorage.getItem('ccsa.jobs.v1'));
+    const forms=JSON.parse(localStorage.getItem('ccsa.forms.v1'));
+    jobs[0].agent='Holiday RWY';
+    forms.circle.agent='Holiday RWY';
+    forms.circle.agentSet=true;
+    localStorage.setItem('ccsa.jobs.v1',JSON.stringify(jobs));
+    localStorage.setItem('ccsa.forms.v1',JSON.stringify(forms));
+  });
+  await page.reload({waitUntil:'domcontentloaded'});
+  await page.evaluate(()=>{location.hash='#job/circle'});
+  await page.waitForSelector('#agent');
+  assert.equal(await page.$eval('#agent',el=>el.value),'Ray White Maclean/Yamba');
+  const choices=await page.$$eval('#agent option',els=>els.map(el=>el.value).filter(Boolean));
+  assert.deepEqual(choices,['Ray White Maclean/Yamba','Lifestyle Maclean/Yamba','Raine & Horne Maclean/Yamba','LJH Iluka','McKimms Grafton','Ray White Grafton','Dougherty Property Grafton','Elders Real Estate Clarence Valley','Yamba Valley Real Estate','Private Owner']);
   assert.equal(await page.$eval('[data-tenancy] [data-v="Holiday"]',el=>el.classList.contains('on')),true);
   const found=await page.evaluate(async()=>{
     function alarm(over){

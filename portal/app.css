@@ -59,6 +59,29 @@ input.t,select.t{width:100%;min-height:48px;border:2px solid var(--line);border-
 .cert th{font-size:12px;color:var(--mut)}
 .statement{background:#f7f6f6;border-radius:10px;padding:12px;margin-top:16px}
 .foot{margin-top:14px;color:var(--mut);font-size:13px}
+.report{--report:#0d6b61;background:#fff;color:#222;max-width:820px;margin:0 auto;padding:22px 22px 28px;box-shadow:0 2px 10px rgba(0,0,0,.12);font-size:13px;line-height:1.35}
+.reporthead{display:flex;gap:12px;align-items:flex-start}
+.reportlogo{width:64px;height:64px;border-radius:8px;object-fit:cover;border:3px solid var(--report);background:#fff}
+.reporttitle{font-size:12px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:#666}
+.reportbrand{margin-top:2px;color:var(--report);font-weight:750;font-size:18px;border-bottom:2px solid var(--report);display:inline-block;padding-bottom:2px}
+.reportphone{color:#777;font-size:12px;margin-top:4px}
+.reporttop{display:flex;justify-content:space-between;gap:16px;margin-top:16px}
+.reportdetail{display:flex;justify-content:space-between;gap:18px;margin-top:14px;align-items:flex-start}
+.reportmain{flex:1;min-width:0}
+.reportline{display:flex;gap:8px;flex-wrap:wrap;align-items:baseline}
+.reportlabel{font-weight:800;text-decoration:underline;letter-spacing:.03em}
+.reportaddr{font-weight:700}
+.reportside{width:180px;flex:none}
+.reportsideitem{margin:0 0 10px}
+.reportsideitem span{display:block;color:#666;font-size:11px}
+.complybox{display:flex;gap:8px;margin:12px 0 0;align-items:flex-start}
+.complybox .tick{flex:none;width:14px;height:14px;border-radius:3px;background:var(--report);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;margin-top:1px}
+.complybox ul{margin:4px 0;padding-left:16px}
+.complybox p{margin:4px 0}
+.reporttable{width:100%;border-collapse:collapse;margin-top:8px}
+.reporttable th{text-align:left;font-size:11px;border-bottom:2px solid var(--report);padding:4px 6px 4px 0}
+.reporttable td{padding:4px 6px 4px 0;vertical-align:top;font-size:12px}
+.legend{color:#666;font-size:11px;margin-top:10px}
 .empty{color:var(--mut);padding:12px 0}
 @media(min-width:720px){
   .stats{grid-template-columns:repeat(5,minmax(0,1fr))}
@@ -69,9 +92,11 @@ input.t,select.t{width:100%;min-height:48px;border:2px solid var(--line);border-
   .tabs button{flex:1 1 45%;font-size:14px}
 }
 @media(max-width:640px){
-  .cert table,.cert thead,.cert tbody,.cert tr,.cert th,.cert td{display:block}
-  .cert thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
-  .cert tr{border-bottom:1px solid var(--line);padding:8px 0}
-  .cert td{border:0;padding:2px 0}
-  .cert td::before{content:attr(data-label);font-weight:800;display:inline-block;min-width:92px;color:var(--mut)}
+  .reporttop,.reportdetail{display:block}
+  .reportside{margin-top:10px}
+  .cert table,.cert thead,.cert tbody,.cert tr,.cert th,.cert td,.reporttable,.reporttable thead,.reporttable tbody,.reporttable tr,.reporttable th,.reporttable td{display:block}
+  .cert thead,.reporttable thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  .cert tr,.reporttable tr{border-bottom:1px solid var(--line);padding:8px 0}
+  .cert td,.reporttable td{border:0;padding:2px 0}
+  .cert td::before,.reporttable td::before{content:attr(data-label);font-weight:800;display:inline-block;min-width:92px;color:var(--mut)}
 }

@@ -242,7 +242,7 @@ test('shared single-job and day PDFs contain worksheet pages only',{timeout:2400
   assert.equal(jobShots.length,2);
   assert.ok(single.shareImages<storedBefore.images,'photo images stayed in the shared PDF: stored '+storedBefore.images+' shared '+single.shareImages);
   assert.match(single.shareText,/9 Synthetic St/);
-  assert.match(single.shareText,/RWY Holiday/);
+  assert.match(single.shareText,/Ray White Maclean\/Yamba Holiday/);
   assert.match(single.shareText,/92/);
   assert.match(single.shareText,/0400 111 222/);
   assert.doesNotMatch(single.shareText,/Photo page/);
@@ -333,7 +333,7 @@ test('shared single-job and day PDFs contain worksheet pages only',{timeout:2400
   assert.deepEqual(day.combined.kinds,['worksheet','worksheet','worksheet','worksheet']);
   assert.match(day.combined.text,/9 Synthetic St/);
   assert.match(day.combined.text,/10 Synthetic St/);
-  assert.match(day.combined.text,/RWY Holiday/);
+  assert.match(day.combined.text,/Ray White Maclean\/Yamba Holiday/);
   assert.doesNotMatch(day.combined.text,/Photo page/);
   assert.doesNotMatch(day.combined.text,/This page is a list only/);
   assert.doesNotMatch(day.combined.text,/Included in this pack/);

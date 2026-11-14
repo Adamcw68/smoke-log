@@ -9,13 +9,16 @@
 })(typeof globalThis!=='undefined'?globalThis:this,function(){
   const DUE_SOON_DAYS=30;
   const AGENCIES=[
-    {id:'rwy',code:'RWY',name:'Ray White Yamba'},
-    {id:'rwm',code:'RWM',name:'Ray White Maclean'},
-    {id:'rh',code:'R&H',name:'Raine & Horne'},
-    {id:'lifestyle',code:'Lifestyle',name:'Lifestyle'},
-    {id:'elders',code:'Elders',name:'Elders'}
+    {id:'rwm',code:'Ray White Maclean/Yamba',name:'Ray White Maclean/Yamba'},
+    {id:'lifestyle',code:'Lifestyle Maclean/Yamba',name:'Lifestyle Maclean/Yamba'},
+    {id:'rh',code:'Raine & Horne Maclean/Yamba',name:'Raine & Horne Maclean/Yamba'},
+    {id:'ljh',code:'LJH Iluka',name:'LJH Iluka'},
+    {id:'mckimms',code:'McKimms Grafton',name:'McKimms Grafton'},
+    {id:'rwg',code:'Ray White Grafton',name:'Ray White Grafton'},
+    {id:'dougherty',code:'Dougherty Property Grafton',name:'Dougherty Property Grafton'},
+    {id:'elders',code:'Elders Real Estate Clarence Valley',name:'Elders Real Estate Clarence Valley'},
+    {id:'yamba-valley',code:'Yamba Valley Real Estate',name:'Yamba Valley Real Estate'}
   ];
-  const AGENCY_IDS={RWY:'rwy',RWM:'rwm','R&H':'rh',Lifestyle:'lifestyle',Elders:'elders'};
   const TYPES=['Ionization','Photo-Electric','Heat'];
   const POWERS=['9v','240v','Ni-Mh','Lithium'];
   const RESULTS=['','pass','replace','fail','incomplete'];
@@ -23,7 +26,7 @@
   const COMPLIANCE=['compliant','due soon','overdue','failed'];
   const PROPERTY_KEYS=['id','agencyId','agencyCode','address','street','town','ident','tenancy','compliance','lastService','due','alarmCount','publishedAt'];
   const JOB_KEYS=['id','propertyId','agencyId','agencyCode','address','street','town','ident','tenancy','status','serviceDate','appointment','appointmentTime','lastService','due','result','alarmCount','priorDate','priorResult','publishedAt'];
-  const CERT_KEYS=['id','propertyId','jobId','agencyId','agencyCode','address','ident','tenancy','date','tech','statement','result','alarms','publishedAt'];
+  const CERT_KEYS=['id','propertyId','jobId','agencyId','agencyCode','address','ident','tenancy','date','lastInspection','tech','statement','result','alarms','publishedAt'];
   const ALARM_KEYS=['n','location','type','power','expiry','result'];
   const FORBIDDEN=['contact','p1','p2','phone','phoneLine','email','tenant','tenantName','tenantPhone','tenantEmail','mobile','directions','notes','comments'];
   const SAMPLE_TENANT={name:'Jane Tenant',phone:'0400 111 222',phone2:'02 6645 1234',email:'jane.tenant@example.com'};
@@ -45,10 +48,12 @@
     const lib=sheets();
     const code=lib?lib.agencyFields(raw).agent:clean(raw);
     if(!code)return null;
-    const known=AGENCIES.filter(function(a){return a.code===code})[0];
-    const id=known?known.id:(AGENCY_IDS[code]||slug(code));
+    if((lib&&lib.isPrivateOwner&&lib.isPrivateOwner(code))||code==='Private Owner')return {id:'',code:'Private Owner',name:'',privateOwner:true};
+    const known=AGENCIES.filter(function(a){return a.code===code||a.id===code})[0];
+    if(known)return {id:known.id,code:known.code,name:known.name};
+    const id=slug(code);
     if(!id)return null;
-    return {id:id,code:code,name:known?known.name:code};
+    return {id:id,code:code,name:code};
   }
   function tenancyOf(job,form){
     const lib=sheets();
@@ -274,7 +279,7 @@
   function mapOne(job,form,publishedAt){
     if(!job)return null;
     const agency=agencyFromCode((form&&form.agentSet&&form.agent)||(form&&form.agent)||job.agent||'');
-    if(!agency)return null;
+    if(!agency||agency.privateOwner||!agency.id)return null;
     const address=addressOf(job,form);
     if(!address)return null;
     const status=portalStatus(job,form);
@@ -324,6 +329,7 @@
         ident:row.ident,
         tenancy:tenancy,
         date:serviceDate,
+        lastInspection:(function(){const last=ymd(job.last);return last&&last!==serviceDate?last:''})(),
         tech:scrubString((form&&form.tech)||job.tech||'')||'Adam Westerman',
         statement:'',
         result:result,

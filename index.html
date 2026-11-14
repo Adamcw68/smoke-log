@@ -380,7 +380,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="pdflib.js"></script><script src="transfer.js"></script><script src="firebase-config.js"></script><script src="livesync.js"></script><script src="portaldata.js"></script><script src="certificate.js"></script><script src="invoice.js"></script><script src="portaladmin.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.28.0 (20261114)';
+const APP_VERSION='2.29.0 (20261114)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -1446,6 +1446,13 @@ function qsFor(a){return QS.filter(([k])=>!naClean(a,k)&&!naBatt(a,k))}
 function ynRow(i,k,q,v,a){if(k==='cleaned')return'';if(naBatt(a,k))return`<div class="q na bat-q" id="bat${i}">🔋 ${q}<small>Lithium – no battery needed</small></div><div class="s na" data-na="${i}.${k}" aria-label="Alarm ${i+1}: ${q}: N/A (lithium)"><span>N/A (lithium)</span></div>`;if(naClean(a,k))return`<div class="q na cln-q" id="cln${i}">🧽 ${q}</div><div class="s na" data-na="${i}.${k}"><span>N/A (new)</span></div>`;
   if(k==='cleaned')return`<div class="q cln-q ${v?'':'need'}" id="cln${i}">🧽 <b>${q}</b>${v?'':' <span class="req">Required – not new</span>'}</div><div class="s cln" data-yn="${i}.${k}"><button type="button" class="y ${v==='Yes'?'on':''} ${v?'':'sugg'}" data-v="Yes">Yes</button><button type="button" class="n ${v==='No'?'on':''}" data-v="No">No</button></div>`;return`<div class="q">${q}</div><div class="s" data-yn="${i}.${k}"><button type="button" class="y ${v==='Yes'?'on':''}" data-v="Yes">Yes</button><button type="button" class="n ${v==='No'?'on':''}" data-v="No">No</button></div>`}
 function inp(path,val,ph,type='text',extra=''){return`<input class="t" data-path="${path}" type="${type}" value="${esc(val??'')}" placeholder="${esc(ph||'')}" ${extra}>`}
+function agentSelect(value){
+  const current=window.SheetFill?SheetFill.agencyFields(value).agent:clean(value||'');
+  const offered=window.SheetFill?SheetFill.agencyChoices():['Ray White Maclean/Yamba','Lifestyle Maclean/Yamba','Raine & Horne Maclean/Yamba','LJH Iluka','McKimms Grafton','Ray White Grafton','Dougherty Property Grafton','Elders Real Estate Clarence Valley','Yamba Valley Real Estate','Private Owner'];
+  const options=[''].concat(offered);
+  if(current&&options.indexOf(current)<0)options.push(current);
+  return `<select class="t" data-path="agent" id="agent" autocomplete="organization">${options.map(o=>`<option value="${esc(o)}"${o===current?' selected':''}>${esc(o||'Select agency')}</option>`).join('')}</select>`;
+}
 const pb=(v,cur,cls)=>`<button type="button" class="${cls} ${cur===v?'on':''}" data-v="${v}" aria-pressed="${cur===v}">${v}</button>`;
 function ncHTML(a,i){const nv=a.newAns||'',c=a.yn.cleaned||'',isN=nv==='Yes';
   return`<div class="q nq ${nv?'':'unans'}" id="nt${i}"><b>🆕 New alarm?</b><small id="nts${i}">${isN?'Replaced – Cleaned is N/A (new)':nv==='No'?'Existing alarm – cleaning required':'Not answered – treated as No'}</small></div><div class="s nw" role="group" aria-label="Alarm ${i+1}: New alarm?" data-newans="${i}">${pb('Yes',nv,'y')}${pb('No',nv,'n')}</div>
@@ -1481,7 +1488,7 @@ function renderJob(id){
    ${j.notes||j.ic?`<div class="note" style="margin-top:6px">Sheet notes: ${esc([j.ic,j.notes].filter(Boolean).join(' · '))}${j.last?' · last service '+fmtDMY(j.last):''}</div>`:''}
    <div class="row">${tel.map(phoneLink).join('')}<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(j.addr)}" target="_blank" rel="noopener">🗺️ Map</a></div>
    <label class="l">Property identifier</label>${inp('ident',f.ident,'e.g. unit/complex name')}
-   <label class="l" for="agent">Agent</label>${inp('agent',f.agent,'','text','id="agent" autocomplete="organization"')}
+   <label class="l" for="agent">Agent</label>${agentSelect(f.agent)}
    <label class="l">Tenancy</label><div class="chips" data-tenancy="1" role="group" aria-label="Tenancy">${['Permanent','Holiday'].map(o=>`<button type="button" data-v="${o}" class="${(f.tenancy||'')===o?'on':''}">${o}</button>`).join('')}</div><p class="note" id="tenancy-note">Holiday or permanent let. This is separate from house, unit, or other building type.</p>
    <label class="l">Property address</label>${inp('addr',f.addr)}
    <label class="l">Technician's name</label>${techCtl(f)}

@@ -57,17 +57,18 @@
   }
   function loadDemo(agencyId){
     const portal=data().demoPortal();
-    const id=portal.agencies[agencyId]?agencyId:'rwm';
-    const bucket=portal.agencies[id];
+    const offered=data().agencies();
+    const pick=offered.filter(function(a){return a.id===agencyId})[0]||offered[0];
+    const bucket=portal.agencies[pick.id]||{id:pick.id,code:pick.code,name:pick.name,jobs:[],certificates:[],properties:[]};
     session={
       mode:'demo',
       today:portal.today,
       agency:{id:bucket.id,code:bucket.code,name:bucket.name},
-      jobs:bucket.jobs,
-      certificates:bucket.certificates,
+      jobs:bucket.jobs||[],
+      certificates:bucket.certificates||[],
       invoices:window.CCSAInvoice?CCSAInvoice.demoInvoices(bucket,portal.today):[],
-      properties:data().rollup(bucket.jobs,portal.today,bucket),
-      choices:Object.keys(portal.agencies).map(function(key){return portal.agencies[key]})
+      properties:data().rollup(bucket.jobs||[],portal.today,bucket),
+      choices:offered
     };
   }
   function header(){
@@ -145,12 +146,17 @@
   }
   function certificateView(){
     const cert=(session.certificates||[]).filter(function(c){return c.id===view.certificateId})[0];
-    if(!cert)return '<button type="button" class="back" data-tab="certificates">Back</button><p class="empty">That certificate is not in this agency.</p>';
-    const model=window.CCSACertificate.viewModel(cert);
+    if(!cert||!window.CCSACertificate)return '<button type="button" class="back" data-tab="certificates">Back</button><p class="empty">That certificate is not in this agency.</p>';
+    const model=CCSACertificate.viewModel(cert);
     const rows=model.alarms.map(function(a){
-      return '<tr><td data-label="#">'+esc(a.n)+'</td><td data-label="Location">'+esc(a.location||'—')+'</td><td data-label="Type">'+esc(a.type||'—')+'</td><td data-label="Power">'+esc(a.power||'—')+'</td><td data-label="Expiry">'+esc(a.expiry||'—')+'</td><td data-label="Result">'+esc(a.result||'—')+'</td></tr>';
+      return '<tr><td data-label="Product">'+esc(a.product)+'</td><td data-label="Location">'+esc(a.location||'')+'</td><td data-label="Expiry">'+esc(a.expiry||'')+'</td><td data-label="Action">'+esc(a.action)+'</td><td data-label="Reason">'+esc(a.reason)+'</td></tr>';
     }).join('');
-    return '<button type="button" class="back" data-tab="certificates">Back</button><article class="cert" id="certificate"><div class="certhead"><div class="kicker">'+esc(model.brand)+'</div><h1>'+esc(model.title)+'</h1></div><div class="certbody"><p class="meta">Property</p><h2>'+esc(model.address)+'</h2>'+(model.ident?'<p class="meta">'+esc(model.ident)+'</p>':'')+'<div class="facts"><div><span>Service date</span><b>'+esc(model.date||'—')+'</b></div><div><span>Agency</span><b>'+esc(model.agency||'—')+'</b></div><div><span>Tenancy</span><b>'+esc(model.tenancy||'—')+'</b></div><div><span>Result</span><b>'+esc(model.result||'—')+'</b></div></div><h3>Alarms tested</h3><table><thead><tr><th>#</th><th>Location</th><th>Type</th><th>Power</th><th>Expiry</th><th>Result</th></tr></thead><tbody>'+(rows||'<tr><td colspan="6">No alarms were recorded.</td></tr>')+'</tbody></table><div class="statement"><b>Technician statement</b><p>'+esc(model.statement)+'</p><p class="meta">'+esc(model.tech)+'</p></div><p class="foot">'+esc(model.footer)+'</p><div class="actions"><button type="button" class="pri" data-download="'+esc(cert.id)+'">Download PDF</button></div></div></article>';
+    const side=[['Job Number',model.jobNumber],['Service Reason',model.serviceReason],['Inspected by',model.inspector],['Last Inspection Date',model.lastInspection]].map(function(pair){
+      return '<div class="reportsideitem"><span>'+esc(pair[0])+'</span><b>'+esc(pair[1]||'')+'</b></div>';
+    }).join('');
+    const laws=model.laws.map(function(law){return '<li>'+esc(law)+'</li>'}).join('');
+    const lead=model.compliant?model.complianceLead:model.failLead;
+    return '<button type="button" class="back" data-tab="certificates">Back</button><article class="report" id="certificate"><header class="reporthead"><img class="reportlogo" src="../icon-192.png" alt=""><div><div class="reporttitle">'+esc(model.title)+'</div><div class="reportbrand">'+esc(model.brand)+'</div><div class="reportphone">'+esc(model.phone)+'</div></div></header><div class="reporttop"><div><div>'+esc(model.attention)+'</div>'+model.postal.map(function(line){return '<div>'+esc(line)+'</div>'}).join('')+'</div><div>Report Date: <b>'+esc(model.reportDate||'')+'</b></div></div><div class="reportdetail"><div class="reportmain"><div class="reportline"><span class="reportlabel">SERVICE DETAILS</span><span class="reportaddr">'+esc(model.serviceAddress)+'</span></div><div class="complybox">'+(model.compliant?'<span class="tick" aria-hidden="true">✓</span>':'')+'<div><p>'+esc(lead)+'</p><ul>'+laws+'</ul><p>'+esc(model.batteryNote)+'</p></div></div></div><div class="reportside">'+side+'</div></div><table class="reporttable"><thead><tr><th>Product Description</th><th>Location</th><th>Expiry Date</th><th>Action</th><th>Reason</th></tr></thead><tbody>'+(rows||'<tr><td colspan="5">No alarms were recorded.</td></tr>')+'</tbody></table><p class="legend">'+esc(model.legend)+'</p><p class="foot">'+esc(model.footer)+'</p><div class="actions"><button type="button" class="pri" data-download="'+esc(cert.id)+'">Download PDF</button></div></article>';
   }
   function invoiceRows(){
     const inv=window.CCSAInvoice;

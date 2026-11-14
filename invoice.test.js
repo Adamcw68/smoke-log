@@ -136,3 +136,27 @@ test('the sample invoice PDF is a tax invoice without a tenant or a hard-coded A
   const line=rules.split('\n').filter(function(row){return row.indexOf('portal-invoice-keys: ')>=0})[0];
   assert.deepEqual(line.split(': ')[1].trim().split(','),inv.KEYS);
 });
+
+test('a private owner is billed directly and is not sent to an agency portal',function(){
+  const settings=inv.defaultSettings();
+  const owned=inv.draftFromJob(job({id:'own',agent:'Private Owner',addr:'7 Owner Street, Yamba NSW 2464',owner:'Pat Owner',contact:'Jane Tenant'}),form({agent:'Private Owner',addr:'7 Owner Street, Yamba NSW 2464',owner:'Pat Owner',comments:'Email jane.tenant@example.com'}),settings);
+  assert.equal(owned.privateOwner,true);
+  assert.equal(owned.agencyId,'');
+  assert.equal(owned.agencyName,'Pat Owner');
+  const view=inv.viewModel(owned);
+  assert.equal(view.billTo,'Pat Owner');
+  assert.equal(view.billTo.includes('c/-'),false);
+  assert.match(view.note,/owner of this property/);
+  const unnamed=inv.draftFromJob(job({id:'own2',agent:'Private',addr:'8 Owner Street, Yamba NSW 2464',contact:'Jane Tenant'}),form({agent:'Private',addr:'8 Owner Street, Yamba NSW 2464'}),settings);
+  assert.equal(unnamed.agencyName,'The owner');
+  assert.equal(JSON.stringify(unnamed).includes('Jane Tenant'),false);
+  const text=certs.pdfText(inv.buildInvoicePdf(owned));
+  assert.match(text,/Pat Owner/);
+  assert.equal(text.includes('c/-'),false);
+  assert.equal(text.includes('Private Owner'),false);
+  assert.equal(text.includes('Jane Tenant'),false);
+  const issued=inv.issue(owned,settings,[],'2026-11-13').invoice;
+  assert.equal(issued.agencyId,'');
+  assert.equal(issued.privateOwner,true);
+  assert.equal(issued.draft,false);
+});

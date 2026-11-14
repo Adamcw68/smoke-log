@@ -8,7 +8,7 @@
 })(typeof globalThis!=='undefined'?globalThis:this,function(){
   const PAGE_W=595.28;
   const PAGE_H=841.89;
-  const RED=[0.937,0.180,0.196];
+  const ACCENT=[0.05,0.42,0.38];
   const INK=[0.224,0.208,0.212];
   const MUTED=[0.373,0.357,0.361];
   const LINE=[0.788,0.776,0.776];
@@ -50,38 +50,103 @@
     if(cur)lines.push(cur);
     return lines.length?lines:[''];
   }
-  function resultColor(label){
-    if(label==='Pass'||label==='Replace')return OK;
-    if(label==='Fail')return BAD;
-    return INK;
+  function looksContact(s){
+    const text=String(s||'');
+    if(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(text))return true;
+    if(/(?:\+?61|0)[ \-]*[2-478](?:[ \-]*\d){8}\b/.test(text))return true;
+    return false;
   }
+  function safeLine(v){
+    const s=ascii(v).replace(/\s+/g,' ').trim();
+    if(!s||looksContact(s))return '';
+    return s;
+  }
+  function dmy(value){
+    const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value||'').slice(0,10));
+    if(!m)return '';
+    return m[3]+'/'+m[2]+'/'+m[1];
+  }
+  function party(code){
+    const data=dataApi();
+    const found=data&&data.agencyFromCode?data.agencyFromCode(code):null;
+    if(found&&found.privateOwner)return {privateOwner:true,agency:''};
+    if(found&&found.name)return {privateOwner:false,agency:found.name};
+    return {privateOwner:false,agency:safeLine(code)};
+  }
+  function reportLocation(location){
+    return safeLine(String(location||'').replace(/^(Ceiling|Wall),\s*/i,''));
+  }
+  function productDescription(alarm){
+    const power=String(alarm&&alarm.power||'').toLowerCase();
+    const type=String(alarm&&alarm.type||'');
+    const sensor=/photo/i.test(type)?'Photoelectric':/ion/i.test(type)?'Ionisation':/heat/i.test(type)?'Heat':(safeLine(type)||'Smoke');
+    const hardwired=/240/.test(power);
+    const nine=/9v/.test(power);
+    const lith=/lithium/.test(power);
+    if(hardwired&&lith)return 'HW Lithium '+sensor+' Alarm';
+    if(lith)return 'Lithium Battery '+sensor+' Alarm';
+    if(hardwired)return 'HW '+sensor+' Alarm';
+    if(nine)return '9V '+sensor+' Alarm';
+    return sensor+' Alarm';
+  }
+  function actionFor(result){
+    const r=String(result||'').toLowerCase();
+    if(r==='replace')return 'Replaced';
+    if(r==='fail')return 'Failed';
+    if(r==='incomplete')return 'Incomplete';
+    return 'Serviced';
+  }
+  const LAWS=[
+    'Building Legislation Amendment (Smoke Alarms) Act 2005 No 57',
+    'Section 146A of the Environmental Planning and Assessment Act 1979',
+    'Australian Standard 3786',
+    'Section 3.7.2.2 (houses) / Part E2, Spec 2.2a 3(c)(i) (units) of the Building Code of Australia'
+  ];
+  const LEGEND='HW: hard-wired, battery can be changed. 9V: battery only, battery can be changed. HW lithium: hard-wired, sealed battery. Lithium: battery only, sealed battery.';
   function viewModel(cert){
     cert=cert||{};
-    const data=dataApi();
-    const pretty=data?data.prettyDate:function(v){return v||''};
-    const label=data?data.resultLabel:function(v){return v||''};
+    const who=party(cert.agencyCode);
+    const owner=safeLine(cert.owner||cert.ownerName||'');
+    let attention='';
+    if(who.privateOwner)attention=owner?'Attention: '+owner:'Attention: The owner';
+    else if(owner&&who.agency)attention='Attention: '+owner+' c/- '+who.agency;
+    else if(who.agency)attention='c/- '+who.agency;
+    else if(owner)attention='Attention: '+owner;
+    const postal=[];
+    String(cert.postal||'').split(/\n/).forEach(function(line){
+      const clean=safeLine(line);
+      if(clean)postal.push(clean);
+    });
+    const alarms=(cert.alarms||[]).map(function(a){
+      return {
+        n:a.n,
+        product:productDescription(a),
+        location:reportLocation(a.location),
+        expiry:a.expiry||'',
+        action:actionFor(a.result),
+        reason:'Annual Maintenance'
+      };
+    });
     return {
+      title:'Service report',
       brand:'Clarence Coast Smoke Alarms',
-      title:'Compliance certificate',
-      address:cert.address||'',
-      ident:cert.ident||'',
-      date:pretty(cert.date),
-      agency:cert.agencyCode||'',
-      tenancy:cert.tenancy||'',
-      result:label(cert.result),
-      tech:cert.tech||'',
-      statement:cert.statement||(data?data.statementFor(cert.tech,cert.date):''),
-      alarms:(cert.alarms||[]).map(function(a){
-        return {
-          n:a.n,
-          location:a.location||'',
-          type:a.type||'',
-          power:a.power||'',
-          expiry:a.expiry||'',
-          result:label(a.result)
-        };
-      }),
-      footer:'Clarence Coast Smoke Alarms  ·  Tenant contact details are not included'
+      phone:'0412 092 233',
+      attention:attention,
+      postal:postal,
+      reportDate:dmy(cert.date),
+      serviceAddress:safeLine(cert.address),
+      jobNumber:safeLine(cert.ident||''),
+      serviceReason:'Subscription Service',
+      inspector:safeLine(cert.tech)||'Adam Westerman',
+      lastInspection:dmy(cert.lastInspection),
+      compliant:!alarms.some(function(a){return a.action==='Failed'}),
+      complianceLead:'Clarence Coast Smoke Alarms fitted or checked every alarm in the table below. This visit was recorded against:',
+      failLead:'Clarence Coast Smoke Alarms inspected the alarms below. A row marked Failed did not pass the checks recorded on this visit.',
+      laws:LAWS.slice(),
+      batteryNote:'Where an alarm uses a battery that can be changed, a new battery was fitted on this visit.',
+      alarms:alarms,
+      legend:LEGEND,
+      footer:'Tenant names, phone numbers and email addresses are not on this report.'
     };
   }
   function fileName(cert){
@@ -114,11 +179,18 @@
     const y=PAGE_H-fromTop-size;
     this.cmd(rgb(color)+' rg\nBT\n/'+font+' '+size+' Tf\n1 0 0 1 '+num(x)+' '+num(y)+' Tm\n('+esc(str)+') Tj\nET\n');
   };
+  Doc.prototype.mark=function(x,fromTop){
+    this.rect(x,fromTop,34,34,ACCENT);
+    this.text('F2',12,x+6,fromTop+10,'CC',WHITE);
+  };
   Doc.prototype.header=function(continued){
-    this.rect(0,0,PAGE_W,76,RED);
-    this.text('F2',15,36,26,'CLARENCE COAST SMOKE ALARMS',WHITE);
-    this.text('F1',12,36,48,continued?'Compliance certificate  ·  continued':'Compliance certificate',WHITE);
-    this.top=92;
+    this.mark(36,16);
+    this.text('F1',9,80,16,'Service report',MUTED);
+    this.text('F2',12,80,30,'Clarence Coast Smoke Alarms',ACCENT);
+    this.cmd(rgb(ACCENT)+' RG\n1.2 w\n80 '+num(PAGE_H-46)+' m 310 '+num(PAGE_H-46)+' l S\n');
+    this.text('F1',8,80,50,'0412 092 233',MUTED);
+    if(continued)this.text('F1',8,400,16,'continued',MUTED);
+    this.top=70;
   };
   Doc.prototype.finish=function(){
     if(this.ops.length)this.pages.push(this.ops.join(''));
@@ -130,88 +202,102 @@
     const view=viewModel(cert);
     const doc=new Doc();
     doc.header(false);
-    doc.text('F1',9,36,doc.top,'Property',MUTED);
-    doc.top+=16;
-    wrap(view.address,16,PAGE_W-72,true).forEach(function(line){
-      doc.need(22);
-      doc.text('F2',16,36,doc.top,line,INK);
-      doc.top+=22;
+    wrap(view.attention,9,300,false).forEach(function(line){
+      doc.text('F1',9,36,doc.top,line,INK);
+      doc.top+=12;
     });
-    if(view.ident){
-      doc.need(16);
-      doc.text('F1',10,36,doc.top,view.ident,MUTED);
-      doc.top+=16;
-    }
-    doc.top+=8;
-    const meta=[
-      ['Service date',view.date||'—'],
-      ['Agency',view.agency||'—'],
-      ['Tenancy',view.tenancy||'—'],
-      ['Result',view.result||'—']
+    view.postal.forEach(function(line){
+      doc.text('F1',9,36,doc.top,line,INK);
+      doc.top+=12;
+    });
+    doc.text('F1',9,380,70,'Report Date: '+(view.reportDate||''),INK);
+    doc.top=Math.max(doc.top,96);
+    const detailY=doc.top;
+    doc.text('F2',9,36,detailY,'SERVICE DETAILS',INK);
+    doc.cmd(rgb(INK)+' RG\n0.6 w\n36 '+num(PAGE_H-detailY-11)+' m 118 '+num(PAGE_H-detailY-11)+' l S\n');
+    const addrX=36+widthOf('SERVICE DETAILS',9,true)+8;
+    const addrLines=wrap(view.serviceAddress,10,300-(addrX-36),true);
+    addrLines.forEach(function(line,i){
+      doc.text('F2',10,addrX,detailY+i*13,line,INK);
+    });
+    const side=[
+      ['Job Number',view.jobNumber],
+      ['Service Reason',view.serviceReason],
+      ['Inspected by',view.inspector],
+      ['Last Inspection Date',view.lastInspection]
     ];
-    const colW=(PAGE_W-72)/4;
-    doc.need(36);
-    meta.forEach(function(pair,i){
-      const x=36+i*colW;
-      doc.text('F1',8,x,doc.top,pair[0],MUTED);
-      doc.text('F2',11,x,doc.top+16,pair[1],pair[0]==='Result'?resultColor(pair[1]):INK);
+    let sy=detailY;
+    side.forEach(function(pair){
+      doc.text('F1',8,380,sy,pair[0],MUTED);
+      if(pair[1])doc.text('F2',9,380,sy+11,pair[1],INK);
+      sy+=24;
     });
-    doc.top+=40;
-    doc.need(28);
-    doc.text('F2',12,36,doc.top,'Alarms tested',INK);
-    doc.top+=18;
+    doc.top=detailY+Math.max(addrLines.length,1)*13+8;
+    if(view.compliant){
+      doc.cmd(rgb(ACCENT)+' rg\n36 '+num(PAGE_H-doc.top-11)+' 9 9 re f\n');
+      doc.text('F2',7,37.2,doc.top+1,'v',WHITE);
+    }
+    const lead=view.compliant?view.complianceLead:view.failLead;
+    wrap(lead,8,340,false).forEach(function(line){
+      doc.text('F1',8,52,doc.top,line,INK);
+      doc.top+=10;
+    });
+    view.laws.forEach(function(law){
+      wrap(law,7.5,330,false).forEach(function(line,i){
+        doc.text('F1',7.5,52,doc.top,(i?'':'- ')+line,INK);
+        doc.top+=9;
+      });
+    });
+    doc.top+=4;
+    wrap(view.batteryNote,8,500,false).forEach(function(line){
+      doc.text('F1',8,36,doc.top,line,INK);
+      doc.top+=10;
+    });
+    doc.top+=8;
     const cols=[
-      {label:'#',x:36,w:28},
-      {label:'Location',x:64,w:180},
-      {label:'Type',x:248,w:110},
-      {label:'Power',x:362,w:70},
-      {label:'Expiry',x:436,w:62},
-      {label:'Result',x:502,w:60}
+      {label:'Product Description',x:36,w:190},
+      {label:'Location',x:210,w:90},
+      {label:'Expiry Date',x:300,w:70},
+      {label:'Action',x:375,w:70},
+      {label:'Reason',x:450,w:110}
     ];
     function tableHead(){
-      doc.need(22);
-      doc.rect(32,doc.top-2,PAGE_W-64,18,PAPER);
-      cols.forEach(function(col){doc.text('F2',8,col.x,doc.top+2,col.label,MUTED)});
-      doc.top+=22;
+      doc.need(16);
+      cols.forEach(function(col){doc.text('F2',7.5,col.x,doc.top,col.label,INK)});
+      doc.cmd(rgb(ACCENT)+' RG\n0.8 w\n36 '+num(PAGE_H-doc.top-11)+' m '+num(PAGE_W-36)+' '+num(PAGE_H-doc.top-11)+' l S\n');
+      doc.top+=16;
     }
     tableHead();
     if(!view.alarms.length){
-      doc.need(18);
-      doc.text('F1',10,36,doc.top,'No alarms were recorded on this certificate.',MUTED);
-      doc.top+=18;
+      doc.text('F1',8,36,doc.top,'No alarms were recorded on this report.',MUTED);
+      doc.top+=12;
     }
     view.alarms.forEach(function(alarm){
-      const loc=wrap(alarm.location||'—',9,170,false);
-      const type=wrap(alarm.type||'—',9,104,false);
-      const lines=Math.max(loc.length,type.length,1);
-      const h=lines*12+8;
-      if(doc.top+h>PAGE_H-52){
+      const product=wrap(alarm.product,8,180,false);
+      const loc=wrap(alarm.location||'',8,84,false);
+      const lines=Math.max(product.length,loc.length,1);
+      const h=lines*10+4;
+      if(doc.top+h>PAGE_H-70){
         doc.breakPage();
         doc.header(true);
         tableHead();
       }
-      doc.rect(32,doc.top-2,PAGE_W-64,h,WHITE);
-      doc.cmd(rgb(LINE)+' RG\n0.4 w\n32 '+num(PAGE_H-(doc.top-2)-h)+' m '+num(PAGE_W-32)+' '+num(PAGE_H-(doc.top-2)-h)+' l S\n');
-      doc.text('F2',9,cols[0].x,doc.top,String(alarm.n||''),INK);
-      loc.forEach(function(line,i){doc.text('F1',9,cols[1].x,doc.top+i*12,line,INK)});
-      type.forEach(function(line,i){doc.text('F1',9,cols[2].x,doc.top+i*12,line,INK)});
-      doc.text('F1',9,cols[3].x,doc.top,alarm.power||'—',INK);
-      doc.text('F1',9,cols[4].x,doc.top,alarm.expiry||'—',INK);
-      doc.text('F2',9,cols[5].x,doc.top,alarm.result||'—',resultColor(alarm.result));
+      product.forEach(function(line,i){doc.text('F1',8,cols[0].x,doc.top+i*10,line,INK)});
+      loc.forEach(function(line,i){doc.text('F1',8,cols[1].x,doc.top+i*10,line,INK)});
+      doc.text('F1',8,cols[2].x,doc.top,alarm.expiry||'',INK);
+      doc.text('F1',8,cols[3].x,doc.top,alarm.action,INK);
+      doc.text('F1',8,cols[4].x,doc.top,alarm.reason,INK);
       doc.top+=h;
     });
-    doc.top+=16;
-    doc.need(28);
-    doc.text('F2',12,36,doc.top,'Technician statement',INK);
-    doc.top+=18;
-    wrap(view.statement,10,PAGE_W-72,false).forEach(function(line){
-      doc.need(14);
-      doc.text('F1',10,36,doc.top,line,INK);
-      doc.top+=14;
+    doc.top+=10;
+    wrap(view.legend,7,PAGE_W-72,false).forEach(function(line){
+      doc.need(10);
+      doc.text('F1',7,36,doc.top,line,MUTED);
+      doc.top+=9;
     });
-    doc.top+=12;
-    doc.need(16);
-    doc.text('F1',9,36,doc.top,view.footer,MUTED);
+    doc.top+=8;
+    doc.need(12);
+    doc.text('F1',7,36,doc.top,view.footer,MUTED);
     return doc.finish();
   }
   function buildPdf(pages){

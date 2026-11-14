@@ -1,6 +1,9 @@
 /* Agency names for the worksheet, measured sound, and Australian phone numbers.
-   Ray White Yamba, Ray White Maclean and Raine & Horne use RWY, RWM and R&H.
-   Lifestyle is written in full. LIFE is the same agency. Anything else is kept.
+   The offered names are Ray White Maclean/Yamba, Lifestyle Maclean/Yamba,
+   Raine & Horne Maclean/Yamba, LJH Iluka, McKimms Grafton, Ray White Grafton
+   Dougherty Property Grafton, Elders Real Estate Clarence Valley, Yamba Valley
+   Real Estate and Private Owner. Older labels for those names map across.
+   Private Owner is not an agency. Any other stored name is kept as written.
    A blank sound level stays blank. No reading is invented.
    A mobile is printed 0### ### ###. A missing digit is not invented. */
 (function(root,factory){
@@ -17,14 +20,38 @@
       .replace(/\s+/g,' ')
       .trim();
   }
+  const RW='Ray White Maclean/Yamba';
+  const LIFE='Lifestyle Maclean/Yamba';
+  const RH='Raine & Horne Maclean/Yamba';
+  const LJH='LJH Iluka';
+  const MCK='McKimms Grafton';
+  const RWG='Ray White Grafton';
+  const DOUG='Dougherty Property Grafton';
+  const ELD='Elders Real Estate Clarence Valley';
+  const YV='Yamba Valley Real Estate';
+  const PRIV='Private Owner';
+  const CHOICES=[RW,LIFE,RH,LJH,MCK,RWG,DOUG,ELD,YV,PRIV];
   const CODES={
-    'rwy':'RWY','ray white yamba':'RWY',
-    'rwm':'RWM','ray white maclean':'RWM',
-    'r and h':'R&H','raine and horne':'R&H','raine horne':'R&H',
-    'life':'Lifestyle','lifestyle':'Lifestyle',
-    'elders':'Elders'
+    'rwy':RW,'rwm':RW,'ray white yamba':RW,'ray white maclean':RW,
+    'ray white maclean yamba':RW,'ray white yamba maclean':RW,
+    'ray white grafton':RWG,'rwg':RWG,
+    'r and h':RH,'raine and horne':RH,'raine horne':RH,
+    'raine and horne maclean':RH,'raine and horne yamba':RH,
+    'raine and horne maclean yamba':RH,'r and h maclean':RH,'r and h yamba':RH,
+    'r and h maclean yamba':RH,
+    'life':LIFE,'lifestyle':LIFE,'lifestyle maclean':LIFE,'lifestyle yamba':LIFE,
+    'lifestyle maclean yamba':LIFE,'life maclean':LIFE,'life yamba':LIFE,
+    'ljh':LJH,'ljh iluka':LJH,'lj hooker iluka':LJH,'l j hooker iluka':LJH,
+    'l j h':LJH,'l j h iluka':LJH,
+    'mckimms':MCK,'mckimms grafton':MCK,'mc kimms':MCK,'mc kimms grafton':MCK,
+    'dougherty':DOUG,'doughertys':DOUG,'dougherty s':DOUG,'dougherty property':DOUG,
+    'dougherty property grafton':DOUG,'dougherty s property':DOUG,'dougherty s property grafton':DOUG,
+    'elders':ELD,'elders real estate':ELD,'elders clarence valley':ELD,
+    'elders real estate clarence valley':ELD,
+    'yamba valley':YV,'yamba valley real estate':YV,
+    'private':PRIV,'private owner':PRIV,'pvt owner':PRIV
   };
-  /* Whole agency cell. "Ray White" alone is not enough to choose Yamba or Maclean. */
+  /* Whole agency cell. "Ray White" with no office, and any other name, stay as stored. */
   function print(v){
     const raw=clean(v);
     if(!raw)return '';
@@ -32,13 +59,18 @@
   }
   const TOWN='yamba|maclean|townsend|grafton|iluka|lawrence|angourie|harwood|ulmarra|gulmarrad|wooloweyah';
   const PHRASES=[
-    [/[, ]+ray\s*white\s*yamba$/i,'RWY'],
-    [/[, ]+ray\s*white\s*maclean$/i,'RWM'],
-    [new RegExp('[, ]+raine\\s*(?:&|and)\\s*horne(?:\\s+(?:'+TOWN+'))?$','i'),'R&H'],
-    [new RegExp('[, ]+r\\s*&\\s*h(?:\\s+(?:'+TOWN+'))?$','i'),'R&H'],
-    [new RegExp('[, ]+r&h(?:\\s+(?:'+TOWN+'))?$','i'),'R&H'],
-    [new RegExp('[, ]+(?:lifestyle|life)(?:\\s+(?:'+TOWN+'))?$','i'),'Lifestyle'],
-    [new RegExp('[, ]+elders(?:\\s+(?:'+TOWN+'))?$','i'),'Elders']
+    [/[, ]+ray\s*white\s*grafton$/i,RWG],
+    [/[, ]+ray\s*white\s*(?:maclean|yamba)(?:\s*[\/&]\s*(?:maclean|yamba))?$/i,RW],
+    [/[, ]+mc?\s*kimms(?:\s+grafton)?$/i,MCK],
+    [/[, ]+doughertys?(?:\s+property)?(?:\s+grafton)?$/i,DOUG],
+    [/,\s*yamba\s+valley(?:\s+real\s+estate)?$/i,YV],
+    [/[, ]+private(?:\s+owner)?$/i,PRIV],
+    [new RegExp('[, ]+raine\\s*(?:&|and)\\s*horne(?:\\s+(?:'+TOWN+'))?(?:\\s*[\\/&]\\s*(?:'+TOWN+'))?$','i'),RH],
+    [new RegExp('[, ]+r\\s*&\\s*h(?:\\s+(?:'+TOWN+'))?$','i'),RH],
+    [new RegExp('[, ]+r&h(?:\\s+(?:'+TOWN+'))?$','i'),RH],
+    [new RegExp('[, ]+(?:lifestyle|life)(?:\\s+(?:'+TOWN+'))?(?:\\s*[\\/&]\\s*(?:'+TOWN+'))?$','i'),LIFE],
+    [/[, ]+(?:l\.?\s*j\.?\s*hooker\s+iluka|ljh(?:\s+iluka)?)$/i,LJH],
+    [new RegExp('[, ]+elders(?:\\s+real\\s+estate)?(?:\\s+clarence\\s+valley)?(?:\\s+(?:'+TOWN+'))?$','i'),ELD]
   ];
   function tokenKind(token){
     const k=key(token);
@@ -118,7 +150,7 @@
     const out=[];
     const localAgent=clean(form.agent);
     const localTen=tenancyName(form.tenancy);
-    if(meta.agent&&(localAgent||form.agentSet)&&localAgent!==meta.agent)out.push({index:null,field:'agent',label:'Agent',local:localAgent,source:meta.agent});
+    if(meta.agent&&(localAgent||form.agentSet)&&print(localAgent)!==print(meta.agent))out.push({index:null,field:'agent',label:'Agent',local:print(localAgent),source:print(meta.agent)});
     if(meta.tenancy&&(localTen||form.tenancySet)&&localTen!==meta.tenancy)out.push({index:null,field:'tenancy',label:'Tenancy',local:localTen,source:meta.tenancy});
     return out;
   }
@@ -250,5 +282,7 @@
     if(!Number.isFinite(n)||n<0||n>200)return {ok:false,blank:false,value:'',message:'That is not a measured sound level. Leave the field blank if it was not measured.'};
     return {ok:true,blank:false,value:String(n),message:''};
   }
-  return {print:print,stripTail:stripTail,readTitle:readTitle,readEvent:readEvent,visitConflicts:visitConflicts,fromEvent:fromEvent,forForm:forForm,agentForForm:agentForForm,tenancyName:tenancyName,tenancyForForm:tenancyForForm,agentSlot:agentSlot,agencyFields:agencyFields,phoneFormat:phoneFormat,soundDraft:soundDraft,soundFinal:soundFinal};
+  function isPrivateOwner(v){return print(v)===PRIV}
+  function agencyChoices(){return CHOICES.slice()}
+  return {print:print,stripTail:stripTail,readTitle:readTitle,readEvent:readEvent,visitConflicts:visitConflicts,fromEvent:fromEvent,forForm:forForm,agentForForm:agentForForm,tenancyName:tenancyName,tenancyForForm:tenancyForForm,agentSlot:agentSlot,agencyFields:agencyFields,agencyChoices:agencyChoices,isPrivateOwner:isPrivateOwner,phoneFormat:phoneFormat,soundDraft:soundDraft,soundFinal:soundFinal};
 });
