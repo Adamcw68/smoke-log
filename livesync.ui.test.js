@@ -37,6 +37,7 @@ test('the sync panel shows each state without contacting Firebase',{timeout:6000
     ['sync_panel_not_configured.png',{configured:false}],
     ['sync_panel_syncing.png',{configured:true,user:{email:'synthetic@example.com',uid:'synthetic'},phase:'syncing'}],
     ['sync_panel_synced.png',{configured:true,user:{email:'synthetic@example.com',uid:'synthetic'},phase:'synced',lastSync:'2026-11-09T08:30:00.000Z'}],
+    ['sync_panel_ios_home_screen.png',{configured:true,user:null,error:'This app cannot open the Google sign-in window. (auth/operation-not-supported-in-this-environment)',help:{label:'Open in Safari',text:'This home screen app cannot finish Google sign-in. Tap Open in Safari, then tap Sign in in that tab. On iPhone the home screen icon does not receive that sign-in. Sync works in the Safari tab. Worksheets already on this phone stay on this phone.',href:'https://adamcw68.github.io/smoke-log/'}}],
     ['sync_panel_offline.png',{configured:true,user:{email:'synthetic@example.com',uid:'synthetic'},phase:'offline',unsyncedPhotos:1}]
   ];
   for(const pair of shots){

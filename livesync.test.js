@@ -24,12 +24,44 @@ test('an unauthorised GitHub Pages domain tells Adam which Firebase setting to a
   assert.match(sync.signInFailure('auth/popup-closed-by-user','adamcw68.github.io'),/cancelled/);
   assert.match(sync.signInFailure('auth/popup-blocked','adamcw68.github.io'),/popups/);
   assert.match(sync.signInFailure('auth/internal-error','adamcw68.github.io'),/did not finish/);
+  assert.match(sync.signInFailure('auth/internal-error','adamcw68.github.io'),/\(auth\/internal-error\)/);
+  assert.match(sync.signInFailure('auth/operation-not-supported-in-this-environment','adamcw68.github.io'),/cannot open the Google sign-in window/);
+  assert.match(sync.signInFailure('auth/web-storage-unsupported','adamcw68.github.io'),/blocking the storage/);
 });
 
-test('iOS home screen uses redirect and a normal browser uses the popup',function(){
-  assert.equal(sync.preferRedirect({userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',standalone:true}),true);
-  assert.equal(sync.preferRedirect({userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',standalone:false,displayMode:'browser'}),false);
-  assert.equal(sync.preferRedirect({userAgent:'Mozilla/5.0 (Windows NT 10.0)',standalone:false}),false);
+test('installed iPhone app does not use a redirect, and a normal browser tries a popup first',function(){
+  const iosHome={userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',standalone:true};
+  const iosSafari={userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',standalone:false,displayMode:'browser'};
+  const androidHome={userAgent:'Mozilla/5.0 (Linux; Android 14; Pixel)',displayMode:'standalone'};
+  const desktop={userAgent:'Mozilla/5.0 (Windows NT 10.0)',standalone:false};
+  const instagram={userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Instagram 300.0.0'};
+  assert.equal(sync.signInPlan(iosHome),'popup-then-browser');
+  assert.equal(sync.signInPlan(iosSafari),'popup-then-redirect');
+  assert.equal(sync.signInPlan(androidHome),'popup-then-redirect');
+  assert.equal(sync.signInPlan(desktop),'popup-then-redirect');
+  assert.equal(sync.signInPlan(instagram),'open-browser');
+  const iphone=sync.browserHelp(iosHome);
+  assert.match(iphone.label,/Safari/);
+  assert.match(iphone.text,/does not receive that sign-in/);
+  assert.match(iphone.text,/Sync works in the Safari tab/);
+  const android=sync.browserHelp(androidHome);
+  assert.match(android.label,/Chrome/);
+  assert.match(android.text,/usually share/);
+  assert.equal(sync.browserHelp(desktop),null);
+  assert.equal(sync.openingHelp(desktop),null);
+  assert.match(sync.openingHelp(iosHome).text,/home screen icon/);
+  assert.match(sync.browserHelp(instagram).text,/in-app browser/);
+  const panel=sync.panelHTML({configured:true,user:null,help:{label:iphone.label,text:iphone.text,href:'https://adamcw68.github.io/smoke-log/'},error:sync.signInFailure('auth/operation-not-supported-in-this-environment','adamcw68.github.io')});
+  assert.match(panel,/id="syncerror"/);
+  assert.match(panel,/auth\/operation-not-supported-in-this-environment/);
+  assert.match(panel,/id="syncopen"/);
+  assert.match(panel,/Open in Safari/);
+  assert.match(panel,/Sign in/);
+  assert.equal(sync.redirectFollowUp({pending:false,hasUser:false,code:'',env:desktop}).error,'');
+  assert.match(sync.redirectFollowUp({pending:true,hasUser:false,code:'',host:'adamcw68.github.io',env:iosHome}).error,/auth\/missing-redirect-result/);
+  assert.equal(sync.redirectFollowUp({pending:true,hasUser:false,code:'',env:iosHome}).help,true);
+  assert.equal(sync.redirectFollowUp({pending:true,hasUser:true,code:'',env:iosHome}).error,'');
+  assert.match(sync.redirectFollowUp({pending:true,hasUser:false,code:'auth/web-storage-unsupported',host:'adamcw68.github.io',env:androidHome}).error,/auth\/web-storage-unsupported/);
 });
 
 test('a photo that cannot fit in one Firestore record stays local',function(){
