@@ -60,32 +60,47 @@
     if(location.hash!==hash)location.hash=hash;
     else paint();
   }
+  function demoAdminOn(){return /[?&]admin=1(?:&|$)/.test(location.search)}
   function loadDemo(agencyId){
     const portal=data().demoPortal();
     const offered=data().agencies();
-    const pick=offered.filter(function(a){return a.id===agencyId})[0]||offered[0];
-    const bucket=portal.agencies[pick.id]||{id:pick.id,code:pick.code,name:pick.name,jobs:[],certificates:[],properties:[]};
+    const admin=demoAdminOn();
+    const today=portal.today;
+    let packed;
+    if(admin&&(!agencyId||agencyId==='all')){
+      const parts=offered.map(function(a){return portal.agencies[a.id]}).filter(Boolean).map(function(bucket){
+        return {jobs:bucket.jobs||[],certificates:bucket.certificates||[],invoices:window.CCSAInvoice?CCSAInvoice.demoInvoices(bucket,today):[],properties:data().rollup(bucket.jobs||[],today,bucket)};
+      });
+      packed=data().stackAgency(parts);
+      packed.requests=window.CCSARequests?CCSARequests.demoPublic('rwm'):[];
+      packed.today=today;
+    }else{
+      const pick=offered.filter(function(a){return a.id===agencyId})[0]||offered[0];
+      const bucket=portal.agencies[pick.id]||{id:pick.id,code:pick.code,name:pick.name,jobs:[],certificates:[],properties:[]};
+      packed={id:bucket.id,code:bucket.code,name:bucket.name,jobs:bucket.jobs||[],certificates:bucket.certificates||[],invoices:window.CCSAInvoice?CCSAInvoice.demoInvoices(bucket,today):[],requests:window.CCSARequests?CCSARequests.demoPublic(pick.id):[],properties:data().rollup(bucket.jobs||[],today,bucket),today:today};
+    }
     session={
       mode:'demo',
-      today:portal.today,
-      agency:{id:bucket.id,code:bucket.code,name:bucket.name},
-      jobs:bucket.jobs||[],
-      certificates:bucket.certificates||[],
-      invoices:window.CCSAInvoice?CCSAInvoice.demoInvoices(bucket,portal.today):[],
-      properties:data().rollup(bucket.jobs||[],portal.today,bucket),
-      requests:window.CCSARequests?CCSARequests.demoPublic(pick.id):[],
+      admin:admin,
+      today:packed.today,
+      agency:{id:packed.id,code:packed.code,name:packed.name},
+      jobs:packed.jobs||[],
+      certificates:packed.certificates||[],
+      invoices:packed.invoices||[],
+      properties:packed.properties||[],
+      requests:packed.requests||[],
       choices:offered,
       notice:''
     };
   }
   function header(){
-    const who=session?esc(session.agency.name):'Sign in';
+    const who=session?(session.admin?'Admin · '+session.agency.name:session.agency.name):'Sign in';
     const action=session?'<button type="button" class="out" id="signout">'+(session.mode==='demo'?'Leave sample':'Sign out')+'</button>':'';
     return '<header><img src="../icon-192.png" alt=""><div class="brand"><b>Clarence Coast Smoke Alarms</b><span>Agency portal · '+who+'</span></div>'+action+'</header>';
   }
   function loginView(){
     const pass=data().passwordField({id:'password',name:'password',autocomplete:'current-password',required:true});
-    return header()+'<main><form class="login" id="loginform"><h1>Agency portal</h1><p>Sign in to see your agency\'s properties, jobs, compliance certificates and invoices. The portal is read-only, and it does not show tenant names or contact details.</p><label class="l" for="email">Email</label><input class="t" id="email" name="email" type="email" autocomplete="username" required><label class="l" for="password">Password</label>'+pass+'<div class="actions"><button class="pri" type="submit">Sign in</button></div>'+(loginError?'<div class="err" role="alert">'+esc(loginError)+'</div>':'')+'<p class="meta"><a href="?demo=1">Preview with sample data</a></p></form></main>';
+    return header()+'<main><form class="login" id="loginform"><h1>Agency portal</h1><p>Sign in to see your agency\'s properties, jobs, compliance certificates and invoices. The portal does not show tenant names or contact details. An admin login sees every agency.</p><label class="l" for="email">Email</label><input class="t" id="email" name="email" type="email" autocomplete="username" required><label class="l" for="password">Password</label>'+pass+'<div class="actions"><button class="pri" type="submit">Sign in</button><button type="button" id="googlesign">Sign in with Google</button></div>'+(loginError?'<div class="err" role="alert">'+esc(loginError)+'</div>':'')+'<p class="meta">Google sign-in uses the same Firebase app on adamcw68.github.io and ccsa-smoke-log.firebaseapp.com.</p><p class="meta"><a href="?demo=1">Preview with sample data</a></p></form></main>';
   }
   function stats(){
     const counts=data().counts(session.properties);
@@ -107,12 +122,18 @@
       return '<button type="button" role="tab" aria-selected="'+(view.tab===tab?'true':'false')+'" class="'+(view.tab===tab?'on':'')+'" data-tab="'+tab+'">'+label+'</button>';
     }).join('')+'</div><input class="search" id="q" type="search" placeholder="Search address" value="'+esc(view.q)+'" aria-label="Search address">';
   }
-  function demoBar(){
-    if(session.mode!=='demo')return '';
-    const options=session.choices.map(function(a){
-      return '<option value="'+esc(a.id)+'"'+(a.id===session.agency.id?' selected':'')+'>'+esc(a.name)+'</option>';
+  function agencyOptions(selected){
+    const all=session.admin?'<option value="all"'+(selected==='all'?' selected':'')+'>All agencies</option>':'';
+    return all+(session.choices||data().agencies()).map(function(a){
+      return '<option value="'+esc(a.id)+'"'+(a.id===selected?' selected':'')+'>'+esc(a.name)+'</option>';
     }).join('');
-    return '<div class="demo" role="status">Sample data as at '+esc(data().prettyDate(session.today))+'. Invoice prices in this preview are examples. Your price list, ABN and bank details stay blank until you enter them. This is not a live login and nothing is saved.<label for="demoagency">Sample agency</label><select id="demoagency">'+options+'</select><div class="actions"><button type="button" id="demoinbox">Adam\'s inbox</button></div></div>';
+  }
+  function demoBar(){
+    if(session.mode==='demo'){
+      return '<div class="demo" id="adminbar" role="status">'+(session.admin?'Admin sample. ':'')+'Sample data as at '+esc(data().prettyDate(session.today))+'. Invoice prices in this preview are examples. This is not a live login and nothing is saved.<label for="demoagency">'+(session.admin?'Agency':'Sample agency')+'</label><select id="demoagency">'+agencyOptions(session.agency.id)+'</select><div class="actions"><button type="button" id="demoinbox">'+(session.admin?'Job requests':'Adam\'s inbox')+'</button></div></div>';
+    }
+    if(!session.admin)return '';
+    return '<div class="demo" id="adminbar" role="status"><b>Admin</b><label for="adminagency">Agency</label><select id="adminagency">'+agencyOptions(session.agency.id)+'</select><div class="actions"><button type="button" id="admininbox">Job requests</button></div></div>';
   }
   function propertyCards(){
     let list=session.properties.filter(function(p){return matches(p.address+' '+p.ident+' '+p.town)&&( !view.filter||p.compliance===view.filter)});
@@ -144,7 +165,8 @@
     const upcoming=session.jobs.filter(function(j){return j.status!=='completed'&&matches(j.address)}).sort(function(a,b){return (a.appointment||'9999')<(b.appointment||'9999')?-1:1});
     const completed=session.jobs.filter(function(j){return j.status==='completed'&&matches(j.address)}).sort(function(a,b){return (a.serviceDate||'')<(b.serviceDate||'')?1:-1});
     const mine=(session.requests||[]).slice().sort(function(a,b){return (a.createdAt||'')<(b.createdAt||'')?1:-1});
-    return '<div class="actions"><button type="button" class="pri" id="newjob">New job</button></div>'+(view.notice?'<p class="note" id="reqnote">'+esc(view.notice)+'</p>':'')+'<h2 class="sectionh">Your requests</h2>'+requestCards(mine)+'<h2 class="sectionh">Upcoming</h2>'+jobCards(upcoming,'No upcoming jobs.')+'<h2 class="sectionh">Completed</h2>'+jobCards(completed,'No completed jobs.');
+    const ask=session.admin?'':'<div class="actions"><button type="button" class="pri" id="newjob">New job</button></div>';
+    return ask+(view.notice?'<p class="note" id="reqnote">'+esc(view.notice)+'</p>':'')+'<h2 class="sectionh">Your requests</h2>'+requestCards(mine)+'<h2 class="sectionh">Upcoming</h2>'+jobCards(upcoming,'No upcoming jobs.')+'<h2 class="sectionh">Completed</h2>'+jobCards(completed,'No completed jobs.');
   }
   function certificatesView(){
     const list=(session.certificates||[]).filter(function(c){return matches(c.address+' '+c.ident)}).sort(function(a,b){return a.date<b.date?1:-1});
@@ -184,11 +206,12 @@
   function inboxView(){
     const api=window.CCSARequests;
     if(!api)return '<p class="empty">Requests did not load.</p>';
-    const access=session.mode==='demo'?api.demoAccess(session.agency.id):{};
+    const access=session.mode==='demo'?api.demoAccess(session.agency.id==='all'?'rwm':session.agency.id):(session.admin&&session.access)||{};
     const rows=(session.requests||[]).slice().sort(function(a,b){return (a.createdAt||'')<(b.createdAt||'')?1:-1});
     const cards=rows.map(function(row){
       const who=row.status==='completed'?null:access[row.id];
-      const buttons=row.status==='new'?'<button type="button" class="pri" data-accept="'+esc(row.id)+'">Accept</button><button type="button" data-status="declined" data-req="'+esc(row.id)+'">Decline</button>':row.status==='accepted'?'<button type="button" data-status="scheduled" data-req="'+esc(row.id)+'">Mark scheduled</button><button type="button" data-calendar="'+esc(row.id)+'">Add to calendar</button>':row.status==='scheduled'?'<button type="button" data-status="completed" data-req="'+esc(row.id)+'">Mark completed</button>':'';
+      const manage=session.admin||session.mode==='demo';
+      const buttons=!manage?'':row.status==='new'?'<button type="button" class="pri" data-accept="'+esc(row.id)+'">Accept</button><button type="button" data-status="declined" data-req="'+esc(row.id)+'">Decline</button>':row.status==='accepted'?'<button type="button" data-status="scheduled" data-req="'+esc(row.id)+'">Mark scheduled</button><button type="button" data-calendar="'+esc(row.id)+'">Add to calendar</button>':row.status==='scheduled'?'<button type="button" data-status="completed" data-req="'+esc(row.id)+'">Mark completed</button>':'';
       return '<article class="card"><div class="pills"><span class="pill book">'+esc(api.statusLabel(row.status))+'</span></div><h2>'+esc(row.address)+'</h2><p class="meta">'+esc(row.tenancy)+(row.timeframe?' · '+esc(row.timeframe):'')+'</p>'+(who?'<p class="meta">Access: '+esc(who.contactName)+' · '+esc(who.contactPhone)+'</p>':'')+'<div class="actions">'+buttons+'</div></article>';
     }).join('');
     return '<button type="button" class="back" data-tab="jobs">Back</button><h1 id="inbox">Job requests</h1><p>Adam sees the access phone here. Agencies do not. Completing a request removes that phone from this list.</p>'+(view.notice?'<p class="note">'+esc(view.notice)+'</p>':'')+(cards||'<p class="empty">No requests.</p>');
@@ -251,12 +274,30 @@
     const foot=view.inbox?'Access phones are on this inbox only. They are removed when a request is completed, and they are not shown to the agency.':'Portal for '+esc(session.agency.name)+'. Tenant names, phone numbers and email addresses are not shown.';
     return header()+'<main>'+demoBar()+(showTools?stats()+tabs():'')+body+'<p class="foot">'+foot+'</p></main>';
   }
+  let accessLoading=false;
+  async function ensureAccess(){
+    if(!session||!session.admin||session.mode!=='live'||session.access||!authBits)return;
+    const ids=session.agency.id==='all'?data().agencies().map(function(a){return a.id}):[session.agency.id];
+    const access={};
+    for(let i=0;i<ids.length;i++){
+      try{
+        const rows=await readKind(ids[i],'access');
+        rows.forEach(function(row){if(row&&row.id)access[row.id]=row});
+      }catch(e){}
+    }
+    session.access=access;
+    if(view.inbox)paint();
+  }
   function paint(){
     if(painting)return;
     painting=true;
     appEl.innerHTML=session?mainView():loginView();
     bind();
     painting=false;
+    if(session&&session.admin&&session.mode==='live'&&view.inbox&&!session.access&&!accessLoading){
+      accessLoading=true;
+      ensureAccess().then(function(){accessLoading=false},function(){accessLoading=false});
+    }
   }
   function downloadInvoice(id){
     const row=(session.invoices||[]).filter(function(item){return item.id===id})[0];
@@ -334,6 +375,8 @@
     if(out)out.onclick=function(){signOut()};
     const form=document.getElementById('loginform');
     if(form)form.onsubmit=function(e){e.preventDefault();signIn(form.email.value,form.password.value)};
+    const google=document.getElementById('googlesign');
+    if(google)google.onclick=function(){signInGoogle()};
     const q=document.getElementById('q');
     if(q)q.oninput=function(){view.q=q.value;const pos=q.selectionStart;paint();const again=document.getElementById('q');if(again){again.focus();again.setSelectionRange(pos,pos)}};
     const invStatus=document.getElementById('invstatus');
@@ -344,6 +387,8 @@
     if(invTo)invTo.onchange=function(){view.invTo=invTo.value;paint()};
     const demo=document.getElementById('demoagency');
     if(demo)demo.onchange=function(){loadDemo(demo.value);view.propertyId='';view.certificateId='';view.invoiceId='';view.requestForm=false;view.inbox=false;view.filter='';view.notice='';paint()};
+    const adminPick=document.getElementById('adminagency');
+    if(adminPick)adminPick.onchange=function(){const id=adminPick.value;view.adminAgency=id;loadAdmin(currentUser,id)};
     const reqForm=document.getElementById('requestform');
     if(reqForm)reqForm.onsubmit=function(e){
       e.preventDefault();
@@ -382,7 +427,7 @@
       const b=e.target.closest?e.target.closest('button'):null;
       if(!b||!appEl.contains(b))return;
       if(b.id==='newjob')go({requestForm:true,inbox:false,propertyId:'',certificateId:'',invoiceId:'',tab:'jobs'});
-      if(b.id==='demoinbox')go({inbox:true,requestForm:false,propertyId:'',certificateId:'',invoiceId:''});
+      if(b.id==='demoinbox'||b.id==='admininbox')go({inbox:true,requestForm:false,propertyId:'',certificateId:'',invoiceId:''});
       if(b.id==='reqtemplate'){
         const blob=new Blob([CCSARequests.csvTemplate()],{type:'text/csv'});
         const a=document.createElement('a');
@@ -395,13 +440,21 @@
         const id=b.dataset.accept||b.dataset.req;
         const status=b.dataset.accept?'accepted':b.dataset.status;
         const row=(session.requests||[]).filter(function(item){return item.id===id})[0];
-        const access=window.CCSARequests.demoAccess(session.agency.id)[id]||null;
+        const accessKey=session.agency.id==='all'?'rwm':session.agency.id;
+        const access=(session.access&&session.access[id])||(session.mode==='demo'?(CCSARequests.demoAccess(accessKey)[id]||null):null);
         const moved=CCSARequests.applyStatus(row,access,status);
         if(!moved.ok){view.notice=moved.error;paint();return}
         const at=session.requests.findIndex(function(item){return item.id===id});
         if(at>=0)session.requests[at]=moved.request;
+        if(status==='completed'&&session.access)delete session.access[id];
         view.notice=status==='completed'?'Completed. The access phone was removed.':CCSARequests.statusLabel(status)+'.';
         paint();
+        if(session.mode==='live'&&session.admin&&authBits&&row.agencyId){
+          const store=authBits.storeMod;
+          store.setDoc(store.doc(authBits.db,'portal',row.agencyId,'requests',row.id),moved.request).then(function(){
+            if(status==='completed')return store.deleteDoc(store.doc(authBits.db,'portal',row.agencyId,'access',row.id));
+          }).catch(function(){view.notice='That status was not saved.';paint()});
+        }
       }
       if(b.dataset.calendar){view.notice='Calendar events are added from Adam\'s app, and only when he taps Add to calendar. Nothing was sent.';paint()}
       if(b.dataset.tab)go({tab:b.dataset.tab,propertyId:'',certificateId:'',invoiceId:'',requestForm:false,inbox:false,filter:view.filter});
@@ -427,37 +480,90 @@
     authBits={auth:auth,db:db,authMod:authMod,storeMod:storeMod};
     return auth;
   }
-  async function loadLive(user){
+  let currentUser=null;
+  async function readKind(agencyId,kind){
     const store=authBits.storeMod;
-    const snap=await store.getDoc(store.doc(authBits.db,'agencyUsers',user.uid));
-    if(!snap.exists()){
-      loginError='This login is not linked to an agency.';
-      await authBits.authMod.signOut(authBits.auth);
-      session=null;paint();return;
+    const got=await store.getDocs(store.collection(authBits.db,'portal',agencyId,kind));
+    const list=[];
+    got.forEach(function(d){list.push(d.data())});
+    return list;
+  }
+  async function loadAdmin(user,agencyId){
+    currentUser=user;
+    const offered=data().agencies();
+    const ids=(!agencyId||agencyId==='all')?offered.map(function(a){return a.id}):[agencyId];
+    const parts=[];
+    for(let i=0;i<ids.length;i++){
+      const id=ids[i];
+      let jobs=[],certificates=[],invoices=[],requests=[];
+      try{jobs=await readKind(id,'jobs')}catch(e){jobs=[]}
+      try{certificates=await readKind(id,'certificates')}catch(e){certificates=[]}
+      try{invoices=await readKind(id,'invoices')}catch(e){invoices=[]}
+      try{requests=await readKind(id,'requests')}catch(e){requests=[]}
+      const agency=offered.filter(function(a){return a.id===id})[0]||{id:id,code:id,name:id};
+      parts.push({jobs:jobs,certificates:certificates,invoices:invoices,requests:requests,properties:data().rollup(jobs,data().sydneyToday(),agency)});
     }
-    const row=snap.data()||{};
-    if(row.disabled||row.role!=='agent'||!row.agencyId){
-      loginError=row.disabled?'This login has been turned off.':'This login is not linked to an agency.';
-      await authBits.authMod.signOut(authBits.auth);
-      session=null;paint();return;
-    }
-    const agency=data().agencyFromCode(row.agencyCode||row.agencyId)||{id:row.agencyId,code:row.agencyCode||'',name:row.agencyCode||row.agencyId};
-    async function read(kind){
-      const got=await store.getDocs(store.collection(authBits.db,'portal',row.agencyId,kind));
-      const list=[];
-      got.forEach(function(d){list.push(d.data())});
-      return list;
-    }
-    const jobs=await read('jobs');
-    const certificates=await read('certificates');
-    let invoices=[];
-    let requests=[];
-    try{invoices=await read('invoices')}catch(e){invoices=[]}
-    try{requests=await read('requests')}catch(e){requests=[]}
+    const packed=ids.length===1?Object.assign({id:ids[0],code:(offered.filter(function(a){return a.id===ids[0]})[0]||{}).code||'',name:(offered.filter(function(a){return a.id===ids[0]})[0]||{}).name||ids[0]},parts[0]):data().stackAgency(parts);
     const today=data().sydneyToday();
-    session={mode:'live',today:today,agency:agency,jobs:jobs,certificates:certificates,invoices:invoices,requests:requests,properties:data().rollup(jobs,today,agency),choices:[],notice:''};
+    session={mode:'live',admin:true,today:today,agency:{id:packed.id,code:packed.code||'',name:packed.name},jobs:packed.jobs||[],certificates:packed.certificates||[],invoices:packed.invoices||[],requests:packed.requests||[],properties:packed.properties||[],choices:offered,notice:'',access:null};
     loginError='';
     paint();
+  }
+  async function loadLive(user){
+    const store=authBits.storeMod;
+    currentUser=user;
+    let adminExists=false;
+    try{
+      const adminSnap=await store.getDoc(store.doc(authBits.db,'admins',user.uid));
+      adminExists=!!(adminSnap&&adminSnap.exists());
+    }catch(e){adminExists=false}
+    let agencyRow=null;
+    try{
+      const snap=await store.getDoc(store.doc(authBits.db,'agencyUsers',user.uid));
+      if(snap&&snap.exists())agencyRow=snap.data()||{};
+    }catch(e){agencyRow=null}
+    const role=data().portalRole(adminExists,agencyRow);
+    if(role==='admin'){await loadAdmin(user,view.adminAgency||'all');return}
+    if(role!=='agent'){
+      loginError=role==='disabled'?'This login has been turned off.':'This login is not linked to an agency.';
+      await authBits.authMod.signOut(authBits.auth);
+      session=null;paint();return;
+    }
+    const row=agencyRow;
+    const agency=data().agencyFromCode(row.agencyCode||row.agencyId)||{id:row.agencyId,code:row.agencyCode||'',name:row.agencyCode||row.agencyId};
+    let jobs=[],certificates=[],invoices=[],requests=[];
+    try{jobs=await readKind(row.agencyId,'jobs')}catch(e){jobs=[]}
+    try{certificates=await readKind(row.agencyId,'certificates')}catch(e){certificates=[]}
+    try{invoices=await readKind(row.agencyId,'invoices')}catch(e){invoices=[]}
+    try{requests=await readKind(row.agencyId,'requests')}catch(e){requests=[]}
+    const today=data().sydneyToday();
+    session={mode:'live',admin:false,today:today,agency:agency,jobs:jobs,certificates:certificates,invoices:invoices,requests:requests,properties:data().rollup(jobs,today,agency),choices:[],notice:''};
+    loginError='';
+    paint();
+  }
+  async function signInGoogle(){
+    loginError='';
+    paint();
+    try{
+      await connect();
+      const provider=new authBits.authMod.GoogleAuthProvider();
+      provider.setCustomParameters({prompt:'select_account'});
+      try{
+        const cred=await authBits.authMod.signInWithPopup(authBits.auth,provider);
+        await loadLive(cred.user);
+      }catch(e){
+        const code=e&&e.code||'';
+        if(code==='auth/popup-blocked'||code==='auth/operation-not-supported-in-this-environment'){
+          await authBits.authMod.signInWithRedirect(authBits.auth,provider);
+          return;
+        }
+        throw e;
+      }
+    }catch(e){
+      loginError=data().authError(e&&e.code,location.hostname);
+      session=null;
+      paint();
+    }
   }
   async function signIn(email,password){
     loginError='';
@@ -486,7 +592,7 @@
     if(CCSAPortalData.bindPasswordEyes)CCSAPortalData.bindPasswordEyes(document);
     const demo=/[?&]demo=1(?:&|$)/.test(location.search);
     if(demo){
-      loadDemo('rwm');
+      loadDemo(demoAdminOn()?'all':'rwm');
       readHash();
       paint();
       window.addEventListener('hashchange',function(){readHash();paint()});
@@ -497,6 +603,10 @@
     paint();
     try{
       const auth=await connect();
+      try{
+        const redirected=await authBits.authMod.getRedirectResult(auth);
+        if(redirected&&redirected.user)await loadLive(redirected.user);
+      }catch(e){loginError=data().authError(e&&e.code,location.hostname);paint()}
       authBits.authMod.onAuthStateChanged(auth,function(user){
         if(user)loadLive(user);
       });

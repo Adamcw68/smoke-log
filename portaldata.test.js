@@ -207,12 +207,12 @@ test('password fields start hidden and the eye button does not submit the form',
 test('the service worker leaves the portal alone and does not clear site data',function(){
   const sw=fs.readFileSync('sw.js','utf8');
   const html=fs.readFileSync('index.html','utf8');
-  assert.match(sw,/ccsa-v2\.35\.0-20261114/);
+  assert.match(sw,/ccsa-v2\.36\.0-20261114/);
   assert.match(sw,/requests\.js/);
   assert.match(sw,/portaldata\.js/);
   assert.ok(sw.includes('if(/\\/portal(?:\\/|$)/.test(u.pathname))return;'));
   assert.doesNotMatch(sw,/indexedDB\.deleteDatabase|localStorage\.clear|caches\.keys\(\)\.then\(k=>Promise\.all\(k\.map/);
-  assert.match(html,/APP_VERSION='2\.35\.0 \(20261114\)'/);
+  assert.match(html,/APP_VERSION='2\.36\.0 \(20261114\)'/);
   assert.match(html,/portaladmin\.js/);
   assert.match(html,/portalNudge/);
 });
@@ -239,4 +239,37 @@ test('setup steps name the console work and the admin panel does not show a tena
   assert.doesNotMatch(fs.readFileSync('portaladmin.js','utf8'),/Other agency/);
   assert.match(fs.readFileSync('index.html','utf8'),/function agentSelect/);
   assert.match(fs.readFileSync('index.html','utf8'),/agencyChoices/);
+});
+
+test('an admin login sees every agency and an agent login stays on one agency',function(){
+  assert.equal(portal.portalRole(true,null),'admin');
+  assert.equal(portal.portalRole(true,{role:'agent',agencyId:'rwm',disabled:false}),'admin');
+  assert.equal(portal.portalRole(false,{role:'agent',agencyId:'lifestyle',disabled:false}),'agent');
+  assert.equal(portal.portalRole(false,{role:'agent',agencyId:'rwm',disabled:true}),'disabled');
+  assert.equal(portal.portalRole(false,null),'unlinked');
+  const ids=portal.agencies().map(function(a){return a.id});
+  assert.deepEqual(ids,['rwm','lifestyle','rh','ljh','mckimms','rwg','dougherty','elders','yamba-valley']);
+  assert.equal(ids.indexOf('private'),-1);
+  const built=portal.demoPortal();
+  const parts=['rwm','lifestyle','rh'].map(function(id){
+    const bucket=built.agencies[id];
+    return {jobs:bucket.jobs,certificates:bucket.certificates,properties:portal.rollup(bucket.jobs,built.today,bucket)};
+  });
+  const all=portal.stackAgency(parts);
+  assert.equal(all.name,'All agencies');
+  assert.ok(all.jobs.length>parts[0].jobs.length);
+  const text=JSON.stringify(all);
+  assert.equal(text.includes('Jane Tenant'),false);
+  assert.equal(text.includes('0400 111 222'),false);
+  assert.equal(text.toLowerCase().includes('xero'),false);
+  const app=fs.readFileSync('portal/app.js','utf8');
+  assert.equal(/xero/i.test(app),false);
+  assert.match(app,/Sign in with Google/);
+  assert.match(app,/admins/);
+  const rules=fs.readFileSync('firestore.rules','utf8');
+  assert.match(rules,/allow read: if portalKind\(kind\) && \(isAdmin\(\) \|\| ownsAgency\(agencyId\)\)/);
+  assert.match(rules,/allow get: if signedIn\(\) && \(request\.auth\.uid == uid \|\| isAdmin\(\)\)/);
+  const cfg=require('./firebase-config.js');
+  assert.equal(cfg.authDomainFor('adamcw68.github.io','ccsa-smoke-log.firebaseapp.com'),'ccsa-smoke-log.firebaseapp.com');
+  assert.equal(cfg.authDomainFor('ccsa-smoke-log.firebaseapp.com','ccsa-smoke-log.firebaseapp.com'),'ccsa-smoke-log.firebaseapp.com');
 });
