@@ -20,12 +20,60 @@
     if(!cfg.apiKey||!cfg.authDomain||!cfg.projectId||!cfg.appId)return false;
     return !/YOUR_/i.test(JSON.stringify(cfg));
   }
-  function preferRedirect(nav){
+  /* Google sign-in opens a popup, then a full-page redirect if the popup is blocked.
+     GitHub Pages cannot proxy Firebase's /__/auth handler, so the handler stays on
+     firebaseapp.com. An installed iPhone app does not get that result back: Safari
+     keeps the sign-in, and the home screen icon stays signed out. */
+  function isIos(nav){
     nav=nav||{};
     const ua=String(nav.userAgent||'');
-    const ios=/iPad|iPhone|iPod/.test(ua)||(nav.platform==='MacIntel'&&nav.maxTouchPoints>1);
-    const standalone=nav.standalone===true||nav.displayMode==='standalone';
-    return !!(ios&&standalone);
+    return /iPad|iPhone|iPod/.test(ua)||(nav.platform==='MacIntel'&&(nav.maxTouchPoints||0)>1);
+  }
+  function isAndroid(nav){return /Android/i.test(String((nav||{}).userAgent||''))}
+  function isStandalone(nav){
+    nav=nav||{};
+    return nav.standalone===true||nav.displayMode==='standalone'||nav.displayMode==='fullscreen';
+  }
+  function inAppBrowser(nav){
+    const ua=String((nav||{}).userAgent||'');
+    return /FBAN|FBAV|Instagram|Line\/|Snapchat|TikTok|musical_ly|BytedanceWebview|MicroMessenger|LinkedInApp|Twitter/i.test(ua);
+  }
+  function signInPlan(nav){
+    nav=nav||{};
+    if(inAppBrowser(nav))return 'open-browser';
+    if(isIos(nav)&&isStandalone(nav))return 'popup-then-browser';
+    return 'popup-then-redirect';
+  }
+  function browserHelp(nav){
+    nav=nav||{};
+    if(inAppBrowser(nav)){
+      if(isIos(nav))return {label:'Open in Safari',text:'This in-app browser blocks Google sign-in. Tap Open in Safari, then tap Sign in. Worksheets on this device were not changed.'};
+      return {label:'Open in Chrome',text:'This in-app browser blocks Google sign-in. Tap Open in Chrome, then tap Sign in. Worksheets on this device were not changed.'};
+    }
+    if(isIos(nav)&&isStandalone(nav))return {label:'Open in Safari',text:'This home screen app cannot finish Google sign-in. Tap Open in Safari, then tap Sign in in that tab. On iPhone the home screen icon does not receive that sign-in. Sync works in the Safari tab. Worksheets already on this phone stay on this phone.'};
+    if(isAndroid(nav)&&isStandalone(nav))return {label:'Open in Chrome',text:'Google sign-in did not finish in the installed app. Tap Open in Chrome, then tap Sign in. Chrome and the home screen icon usually share that sign-in. If this icon still says Not signed in, use the Chrome tab for sync. Worksheets on this phone were not changed.'};
+    return null;
+  }
+  function openingHelp(nav){
+    const plan=signInPlan(nav);
+    if(plan==='popup-then-redirect')return null;
+    return browserHelp(nav);
+  }
+  function safeHref(href){
+    const s=String(href||'');
+    if(/^https:\/\//i.test(s))return s;
+    return 'https://adamcw68.github.io/smoke-log/';
+  }
+  function pageHost(){try{return typeof location!=='undefined'?location.hostname:''}catch(e){return ''}}
+  function pageURL(){
+    try{
+      if(typeof location==='undefined'||!location.origin)return 'https://adamcw68.github.io/smoke-log/';
+      return location.origin+location.pathname;
+    }catch(e){return 'https://adamcw68.github.io/smoke-log/'}
+  }
+  function withHref(help){
+    if(!help)return null;
+    return {label:help.label,text:help.text,href:help.href||pageURL()};
   }
   function docId(id){
     const s=encodeURIComponent(String(id==null?'':id));
@@ -63,19 +111,22 @@
     const when=state.lastSync?'Last sync '+fmtWhen(state.lastSync):'';
     const photos=+state.unsyncedPhotos||0;
     const photoNote=photos?(photos+' photo'+(photos===1?' is':'s are')+' only on this device. A photo that cannot fit in one record is not uploaded.'):'';
+    const help=state.help&&!state.user?state.help:null;
     let buttons='';
     if(state.configured&&state.user)buttons='<button type="button" class="btn" id="syncout">Sign out</button>';
-    else if(state.configured)buttons='<button type="button" class="btn pri" id="syncin">Sign in</button>';
+    else if(state.configured)buttons='<button type="button" class="btn'+(help?'':' pri')+'" id="syncin">Sign in</button>';
+    const open=help?'<a class="btn pri" id="syncopen" href="'+esc(safeHref(help.href))+'" target="_blank" rel="noopener">'+esc(help.label||'Open in the browser')+'</a>':'';
     const setup=state.configured?'':'<p class="note">Sync is off until a Firebase web config is saved in firebase-config.js. Jobs on this device are unchanged.</p>';
     return '<section class="f" id="syncpanel" aria-label="Sync"><h2>Sync</h2>'
       +'<p id="syncstatus"><b>'+esc(label)+'</b></p>'
       +(account?'<p class="note" id="syncaccount">'+esc(account)+'</p>':'')
       +(when?'<p class="note" id="synctime">'+esc(when)+'</p>':'')
       +(photoNote?'<p class="note" id="syncphoto">'+esc(photoNote)+'</p>':'')
-      +(state.error?'<p class="note">'+esc(state.error)+'</p>':'')
+      +(state.error?'<p class="note" id="syncerror">'+esc(state.error)+'</p>':'')
+      +(help?'<p class="note" id="synchelp">'+esc(help.text)+'</p>':'')
       +setup
       +'<p class="note">Saved PDFs stay on this device. On another device, open the worksheet and tap Make PDF.</p>'
-      +buttons+'</section>';
+      +open+buttons+'</section>';
   }
   function transfer(){
     const g=typeof globalThis!=='undefined'?globalThis:root;
@@ -233,7 +284,7 @@
     return writes;
   }
 
-  const state={configured:false,user:null,phase:'signed-out',lastSync:'',unsyncedPhotos:0,error:''};
+  const state={configured:false,user:null,phase:'signed-out',lastSync:'',unsyncedPhotos:0,error:'',help:null};
   let hooks=null,booted=false,applying=false,armed=false,db=null,auth=null,fb=null;
   let unsubs=[],flushTimer=null,applyTimer=null,unsynced=new Set();
   const jobSnap=new Map();
@@ -488,13 +539,13 @@
       acked.clear();
       state.user=null;
       state.phase='signed-out';
-      state.error='';
       paint();
       return;
     }
     state.user={uid:user.uid,email:user.email||''};
     state.phase='syncing';
     state.error='';
+    state.help=null;
     paint();
     try{
       const m=meta();
@@ -539,38 +590,84 @@
   function browserEnv(){
     const nav=typeof navigator!=='undefined'?navigator:{};
     let displayMode='';
-    try{displayMode=window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches?'standalone':''}catch(e){}
+    try{
+      if(window.matchMedia){
+        if(window.matchMedia('(display-mode: standalone)').matches)displayMode='standalone';
+        else if(window.matchMedia('(display-mode: fullscreen)').matches)displayMode='fullscreen';
+      }
+    }catch(e){}
     return {userAgent:nav.userAgent||'',platform:nav.platform||'',maxTouchPoints:nav.maxTouchPoints||0,standalone:nav.standalone===true,displayMode:displayMode};
   }
   function signInFailure(code, host){
     const site=host||'this site';
-    if(code==='auth/popup-closed-by-user'||code==='auth/cancelled-popup-request')return 'Sign-in was cancelled. Worksheets on this device were not changed.';
-    if(code==='auth/unauthorized-domain')return 'Google sign-in is blocked for '+site+'. In the Firebase console open Authentication, then Settings, then Authorized domains, and add '+site+'. Worksheets on this device were not changed.';
-    if(code==='auth/popup-blocked')return 'The browser blocked the Google window. Allow popups for this site, then tap Sign in again. Worksheets on this device were not changed.';
-    return 'Sign-in did not finish. Worksheets on this device were not changed.';
+    let msg;
+    if(code==='auth/popup-closed-by-user'||code==='auth/cancelled-popup-request')msg='Sign-in was cancelled. Worksheets on this device were not changed.';
+    else if(code==='auth/unauthorized-domain')msg='Google sign-in is blocked for '+site+'. In the Firebase console open Authentication, then Settings, then Authorized domains, and add '+site+'. Worksheets on this device were not changed.';
+    else if(code==='auth/popup-blocked')msg='The browser blocked the Google window. Allow popups for this site, then tap Sign in again. Worksheets on this device were not changed.';
+    else if(code==='auth/operation-not-supported-in-this-environment')msg='This app cannot open the Google sign-in window.';
+    else if(code==='auth/web-storage-unsupported')msg='This browser is blocking the storage Google sign-in needs.';
+    else if(code==='auth/network-request-failed')msg='Sign-in could not reach Google. Check the connection and try again. Worksheets on this device were not changed.';
+    else if(code==='auth/missing-redirect-result')msg='Google sent the browser back without a sign-in. This installed app did not receive it.';
+    else msg='Sign-in did not finish. Worksheets on this device were not changed.';
+    return code?msg+' ('+code+')':msg;
+  }
+  function redirectFollowUp(o){
+    o=o||{};
+    if(o.hasUser)return {error:'',help:false};
+    const env=o.env||{};
+    if(o.code)return {error:signInFailure(o.code,o.host,env),help:!!browserHelp(env)};
+    if(o.pending)return {error:signInFailure('auth/missing-redirect-result',o.host,env),help:!!browserHelp(env)};
+    return {error:'',help:false};
+  }
+  const REDIRECT_KEY='ccsa.sync.redirect';
+  function markRedirect(){try{sessionStorage.setItem(REDIRECT_KEY,'1')}catch(e){}}
+  function clearRedirect(){try{sessionStorage.removeItem(REDIRECT_KEY)}catch(e){}}
+  function redirectPending(){try{return sessionStorage.getItem(REDIRECT_KEY)==='1'}catch(e){return false}}
+  function showSignInError(code, env){
+    state.error=signInFailure(code,pageHost(),env);
+    const help=browserHelp(env);
+    if(help)state.help=withHref(help);
+    paint();
   }
   async function signIn(){
     if(!state.configured){state.error="Sync isn't set up yet";paint();return}
-    if(!auth){state.error='Sync is not connected yet. Your worksheets on this device were not changed.';paint();return}
+    const env=browserEnv();
+    const plan=signInPlan(env);
+    if(plan==='open-browser'){
+      state.error='';
+      state.help=withHref(browserHelp(env));
+      paint();
+      return;
+    }
+    if(!auth||!fb){state.error='Sync is not connected yet. Your worksheets on this device were not changed.';paint();return}
     const provider=new fb.GoogleAuthProvider();
     provider.setCustomParameters({prompt:'select_account'});
     state.error='';
     try{
-      if(preferRedirect(browserEnv()))await fb.signInWithRedirect(auth,provider);
-      else await fb.signInWithPopup(auth,provider);
+      await fb.signInWithPopup(auth,provider);
+      state.help=null;
     }catch(e){
       const code=e&&e.code||'';
-      if(!preferRedirect(browserEnv())&&(code==='auth/popup-blocked'||code==='auth/operation-not-supported-in-this-environment')){
-        try{await fb.signInWithRedirect(auth,provider);return}catch(e2){}
+      if(code==='auth/popup-closed-by-user'){showSignInError(code,env);return}
+      const canRedirect=plan==='popup-then-redirect'&&(code==='auth/popup-blocked'||code==='auth/operation-not-supported-in-this-environment'||code==='auth/web-storage-unsupported'||code==='auth/cancelled-popup-request');
+      if(canRedirect){
+        try{
+          markRedirect();
+          await fb.signInWithRedirect(auth,provider);
+          return;
+        }catch(e2){
+          clearRedirect();
+          showSignInError((e2&&e2.code)||code,env);
+          return;
+        }
       }
-      const host=typeof location!=='undefined'?location.hostname:'';
-      state.error=signInFailure(code,host);
-      paint();
+      showSignInError(code,env);
     }
   }
   async function signOut(){
     if(auth&&fb){try{await fb.signOut(auth)}catch(e){}}
     state.user=null;state.phase='signed-out';state.error='';
+    state.help=withHref(openingHelp(browserEnv()));
     paint();
   }
   function afterSave(key){
@@ -629,6 +726,7 @@
     }
     if(!state.configured){state.phase='unconfigured';paint();return}
     state.phase='signed-out';
+    state.help=withHref(openingHelp(browserEnv()));
     paint();
     arm();
     try{await loadSdk()}
@@ -638,7 +736,20 @@
       paint();
       return;
     }
-    try{await fb.getRedirectResult(auth)}catch(e){}
+    const env=browserEnv();
+    const pending=redirectPending();
+    try{
+      const result=await fb.getRedirectResult(auth);
+      clearRedirect();
+      const follow=redirectFollowUp({pending:pending,hasUser:!!(result&&result.user),code:'',host:pageHost(),env:env});
+      if(follow.error){state.error=follow.error;if(follow.help)state.help=withHref(browserHelp(env));paint()}
+    }catch(e){
+      clearRedirect();
+      const follow=redirectFollowUp({pending:true,hasUser:false,code:(e&&e.code)||'',host:pageHost(),env:env});
+      state.error=follow.error;
+      if(follow.help)state.help=withHref(browserHelp(env));
+      paint();
+    }
     fb.onAuthStateChanged(auth,function(user){onUser(user).catch(function(){state.phase='offline';paint()})});
     if(typeof window!=='undefined'){
       window.addEventListener('online',function(){if(state.user)flush().catch(function(){})});
@@ -646,13 +757,13 @@
     }
   }
   function current(){
-    return {configured:state.configured,user:state.user,phase:state.phase,lastSync:state.lastSync,unsyncedPhotos:state.unsyncedPhotos,error:state.error};
+    return {configured:state.configured,user:state.user,phase:state.phase,lastSync:state.lastSync,unsyncedPhotos:state.unsyncedPhotos,error:state.error,help:state.help};
   }
   function client(){
     return {auth:auth,db:db,fb:fb,ready:!!(auth&&db&&fb)};
   }
   return {
-    configReady:configReady,preferRedirect:preferRedirect,signInFailure:signInFailure,docId:docId,photoFits:photoFits,statusLabel:statusLabel,panelHTML:panelHTML,
+    configReady:configReady,signInPlan:signInPlan,browserHelp:browserHelp,openingHelp:openingHelp,signInFailure:signInFailure,redirectFollowUp:redirectFollowUp,docId:docId,photoFits:photoFits,statusLabel:statusLabel,panelHTML:panelHTML,
     reconcile:reconcile,queueOp:queueOp,drainOps:drainOps,plain:plain,
     contentSig:contentSig,needsPush:needsPush,isQuotaError:isQuotaError,quotaMessage:quotaMessage,simulateSyncDay:simulateSyncDay,
     boot:boot,signIn:signIn,signOut:signOut,afterSave:afterSave,afterPhoto:afterPhoto,afterPhotoDelete:afterPhotoDelete,beforeClearAll:beforeClearAll,
