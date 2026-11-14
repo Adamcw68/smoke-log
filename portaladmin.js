@@ -23,7 +23,7 @@
   }
   const state={
     configured:false,signedIn:false,email:'',uid:'',isAdmin:false,adminChecked:false,
-    draftEmail:'',agencyCode:'RWM',otherAgency:'',password:'',logins:[],auto:true,
+    draftEmail:'',agencyCode:'Ray White Maclean/Yamba',password:'',logins:[],auto:true,
     message:'',busy:false,showOnce:null
   };
   let hooks=null,pending=false;
@@ -40,7 +40,7 @@
     const portal=lib();
     if(!portal)return '<section class="f" id="portalpanel"><h2>Agency portal</h2><p class="note">Portal scripts did not load. Jobs on this phone were not changed.</p></section>';
     const agencies=portal.agencies();
-    const options=agencies.map(function(a){return '<option value="'+esc(a.code)+'"'+(state.agencyCode===a.code?' selected':'')+'>'+esc(a.name)+' ('+esc(a.code)+')</option>'}).join('')+'<option value="other"'+(state.agencyCode==='other'?' selected':'')+'>Other agency</option>';
+    const options=agencies.map(function(a){return '<option value="'+esc(a.code)+'"'+(state.agencyCode===a.code?' selected':'')+'>'+esc(a.name)+'</option>'}).join('');
     const logins=state.logins.length?state.logins.map(function(row){
       return '<div class="row" data-login="'+esc(row.uid)+'"><span class="note" style="flex:2">'+esc(row.email)+' · '+esc(row.agencyCode)+(row.disabled?' · off':'')+'</span>'+(row.disabled?'<button type="button" data-portal-enable="'+esc(row.uid)+'">Turn on</button>':'<button type="button" data-portal-disable="'+esc(row.uid)+'">Turn off</button>')+'</div>';
     }).join(''):'<p class="note">No agency logins yet.</p>';
@@ -50,7 +50,6 @@
     const admin=state.signedIn&&state.isAdmin;
     const tools=admin?`<details open><summary>Create an agency login</summary>
       <label class="l" for="portalagency">Agency</label><select class="t" id="portalagency">${options}</select>
-      <div id="portalotherwrap" ${state.agencyCode==='other'?'':'hidden'}><label class="l" for="portalother">Agency name</label><input class="t" id="portalother" value="${esc(state.otherAgency)}" autocomplete="organization"></div>
       <label class="l" for="portalemail">Email</label><input class="t" id="portalemail" type="email" autocomplete="off" value="${esc(state.draftEmail)}">
       <label class="l" for="portalpass">Temporary password</label><input class="t" id="portalpass" type="text" autocomplete="off" value="${esc(state.password)}">
       <p class="note">Shown so you can pass it on. It is not saved in the portal.</p>
@@ -201,7 +200,7 @@
     const portal=lib();
     const c=client();
     if(!c.ready||!state.isAdmin){say('Sign in as the portal admin before creating a login.');return}
-    const code=state.agencyCode==='other'?state.otherAgency:state.agencyCode;
+    const code=state.agencyCode;
     const agency=portal.agencyFromCode(code);
     const email=String(state.draftEmail||'').trim();
     if(!agency){say('Choose an agency.');return}
@@ -261,7 +260,6 @@
     if(!box)return;
     box.oninput=function(e){
       if(e.target.id==='portalemail')state.draftEmail=e.target.value;
-      if(e.target.id==='portalother')state.otherAgency=e.target.value;
       if(e.target.id==='portalpass')state.password=e.target.value;
     };
     box.onchange=function(e){

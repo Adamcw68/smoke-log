@@ -9,14 +9,28 @@ const TENANT=portal.SAMPLE_TENANT;
 function textOf(value){return JSON.stringify(value)}
 function rwm(){return portal.demoView('rwm')}
 
-test('known agencies keep their codes and LIFE is Lifestyle',function(){
-  assert.equal(portal.agencyFromCode('RWY').id,'rwy');
-  assert.equal(portal.agencyFromCode('Ray White Maclean').code,'RWM');
+test('known agencies map onto the four portal logins and a legacy name is kept',function(){
+  assert.equal(portal.agencyFromCode('RWY').id,'rwm');
+  assert.equal(portal.agencyFromCode('Ray White Yamba').id,'rwm');
+  assert.equal(portal.agencyFromCode('Ray White Maclean').code,'Ray White Maclean/Yamba');
   assert.equal(portal.agencyFromCode('Raine & Horne').id,'rh');
-  assert.equal(portal.agencyFromCode('R&H').name,'Raine & Horne');
-  assert.equal(portal.agencyFromCode('LIFE').code,'Lifestyle');
+  assert.equal(portal.agencyFromCode('R&H').name,'Raine & Horne Maclean/Yamba');
+  assert.equal(portal.agencyFromCode('LIFE').code,'Lifestyle Maclean/Yamba');
   assert.equal(portal.agencyFromCode('LIFE').id,'lifestyle');
+  assert.equal(portal.agencyFromCode('LJ Hooker Iluka').id,'ljh');
+  assert.equal(portal.agencyFromCode('LJH').name,'LJH Iluka');
+  assert.equal(portal.agencyFromCode('McKimms').id,'mckimms');
+  assert.equal(portal.agencyFromCode('Ray White Grafton').id,'rwg');
+  assert.equal(portal.agencyFromCode('Ray White Grafton').code,'Ray White Grafton');
+  assert.notEqual(portal.agencyFromCode('Ray White Grafton').id,portal.agencyFromCode('Ray White Maclean').id);
+  assert.equal(portal.agencyFromCode('Private Owner').privateOwner,true);
+  assert.equal(portal.agencyFromCode('Private').id,'');
   assert.equal(portal.agencyFromCode('Elders').id,'elders');
+  assert.equal(portal.agencyFromCode('Elders').code,'Elders Real Estate Clarence Valley');
+  assert.equal(portal.agencyFromCode('Dougherty Property').id,'dougherty');
+  assert.equal(portal.agencyFromCode('Yamba Valley').id,'yamba-valley');
+  assert.equal(portal.agencies().some(function(a){return a.name==='Private Owner'||a.name==='Elders'}),false);
+  assert.deepEqual(portal.agencies().map(function(a){return a.name}),['Ray White Maclean/Yamba','Lifestyle Maclean/Yamba','Raine & Horne Maclean/Yamba','LJH Iluka','McKimms Grafton','Ray White Grafton','Dougherty Property Grafton','Elders Real Estate Clarence Valley','Yamba Valley Real Estate']);
   assert.equal(portal.agencyFromCode('Coast Homes').id,'coast-homes');
   assert.equal(portal.agencyFromCode(''),null);
 });
@@ -49,8 +63,8 @@ test('each agency sees only its own properties',function(){
   assert.doesNotMatch(mineText,/4 Clarence Street/);
   assert.match(theirText,/21 Yamba Street, Yamba NSW 2464/);
   assert.doesNotMatch(theirText,/River Street, Maclean/);
-  assert.equal(theirs.code,'Lifestyle');
-  assert.equal(rh.code,'R&H');
+  assert.equal(theirs.code,'Lifestyle Maclean/Yamba');
+  assert.equal(rh.code,'Raine & Horne Maclean/Yamba');
   assert.match(textOf(rh),/4 Clarence Street/);
   assert.equal(portal.visibleAgency(built,'elders').jobs.length,0);
   const addresses=new Set();
@@ -145,6 +159,10 @@ test('expiry is MM/YYYY and a blank agency is not published',function(){
   assert.equal(portal.expiryOf('0400 111 222'),'');
   const built=portal.buildPortal([{id:'x',agent:'',addr:'1 Test Street, Yamba NSW 2464',contact:'Jane Tenant',p1:'0400 111 222'}],{},'2026-11-13','2026-11-13T00:00:00.000Z');
   assert.deepEqual(built.agencies,{});
+  const owned=portal.buildPortal([{id:'own',agent:'Private Owner',addr:'7 Owner Street, Yamba NSW 2464',contact:'Jane Tenant',p1:'0400 111 222',owner:'Pat Owner'}],{own:{agent:'Private Owner',addr:'7 Owner Street, Yamba NSW 2464',date:'2026-08-12',done:true,alarms:1,al:[]}},'2026-11-13','2026-11-13T00:00:00.000Z');
+  assert.deepEqual(owned.agencies,{});
+  assert.equal(JSON.stringify(owned).includes('Jane Tenant'),false);
+  assert.equal(JSON.stringify(owned).includes('Pat Owner'),false);
 });
 
 test('rules lists match the published keys',function(){
@@ -171,11 +189,11 @@ test('rules lists match the published keys',function(){
 test('the service worker leaves the portal alone and does not clear site data',function(){
   const sw=fs.readFileSync('sw.js','utf8');
   const html=fs.readFileSync('index.html','utf8');
-  assert.match(sw,/ccsa-v2\.28\.0-20261114/);
+  assert.match(sw,/ccsa-v2\.29\.0-20261114/);
   assert.match(sw,/portaldata\.js/);
   assert.ok(sw.includes('if(/\\/portal(?:\\/|$)/.test(u.pathname))return;'));
   assert.doesNotMatch(sw,/indexedDB\.deleteDatabase|localStorage\.clear|caches\.keys\(\)\.then\(k=>Promise\.all\(k\.map/);
-  assert.match(html,/APP_VERSION='2\.28\.0 \(20261114\)'/);
+  assert.match(html,/APP_VERSION='2\.29\.0 \(20261114\)'/);
   assert.match(html,/portaladmin\.js/);
   assert.match(html,/portalNudge/);
 });
@@ -199,4 +217,7 @@ test('setup steps name the console work and the admin panel does not show a tena
   assert.match(html,/Email\/Password/);
   assert.match(html,/adamcw68\.github\.io/);
   assert.doesNotMatch(html,/Jane Tenant|0400 111 222|jane\.tenant@example\.com/);
+  assert.doesNotMatch(fs.readFileSync('portaladmin.js','utf8'),/Other agency/);
+  assert.match(fs.readFileSync('index.html','utf8'),/function agentSelect/);
+  assert.match(fs.readFileSync('index.html','utf8'),/agencyChoices/);
 });

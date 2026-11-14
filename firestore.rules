@@ -4,7 +4,7 @@ rules_version = '2';
 // Deploy: npx firebase deploy --only firestore:rules --project ccsa-smoke-log
 // portal-property-keys: id,agencyId,agencyCode,address,street,town,ident,tenancy,compliance,lastService,due,alarmCount,publishedAt
 // portal-job-keys: id,propertyId,agencyId,agencyCode,address,street,town,ident,tenancy,status,serviceDate,appointment,appointmentTime,lastService,due,result,alarmCount,priorDate,priorResult,publishedAt
-// portal-certificate-keys: id,propertyId,jobId,agencyId,agencyCode,address,ident,tenancy,date,tech,statement,result,alarms,publishedAt
+// portal-certificate-keys: id,propertyId,jobId,agencyId,agencyCode,address,ident,tenancy,date,lastInspection,tech,statement,result,alarms,publishedAt
 // portal-invoice-keys: id,number,propertyId,jobId,agencyId,agencyCode,address,ident,tenancy,issueDate,dueDate,status,paidAt,gstRegistered,businessName,abn,businessAddress,businessPhone,businessEmail,bankName,bsb,accountName,accountNumber,terms,lines,exCents,gstCents,totalCents,publishedAt
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -107,7 +107,7 @@ service cloud.firestore {
     }
     function validCertificate(agencyId, docId) {
       let data = request.resource.data;
-      return data.keys().hasOnly(['id','propertyId','jobId','agencyId','agencyCode','address','ident','tenancy','date','tech','statement','result','alarms','publishedAt'])
+      return data.keys().hasOnly(['id','propertyId','jobId','agencyId','agencyCode','address','ident','tenancy','date','lastInspection','tech','statement','result','alarms','publishedAt'])
         && data.id == docId
         && docIdOk(docId)
         && data.agencyId == agencyId
@@ -120,6 +120,7 @@ service cloud.firestore {
         && plainText(data.ident, 160)
         && tenancyOk(data.tenancy)
         && data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && dayOrEmpty(data.lastInspection)
         && plainText(data.tech, 80)
         && plainText(data.statement, 900)
         && (data.result == 'pass' || data.result == 'replace' || data.result == 'fail' || data.result == 'incomplete')

@@ -167,15 +167,19 @@
     if(!agency||!job)return null;
     const address=clean((form&&form.addr)||job.addr||'');
     if(!address||!completed(job,form))return null;
+    const ownerBits=[form&&form.owner,form&&form.ownerName,job.owner,job.ownerName];
+    let owner='';
+    ownerBits.forEach(function(bit){if(!owner){const s=clean(bit);if(s&&!/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(s)&&!/(?:\+?61|0)[ \-]*[2-478](?:[ \-]*\d){8}\b/.test(s))owner=s}});
     const serviceDate=(form&&ymd(form.date))||ymd(String(job.svc||'').slice(0,10))||ymd(job.last);
     const summed=totals(suggestLines(form,settings.prices),settings.gstRegistered);
     return {
       draft:true,
       jobId:String(job.id),
       propertyId:slug(address)||'property',
-      agencyId:agency.id,
-      agencyCode:agency.code,
-      agencyName:agency.name,
+      agencyId:agency.privateOwner?'':agency.id,
+      agencyCode:agency.privateOwner?'Private Owner':agency.code,
+      agencyName:agency.privateOwner?(owner||'The owner'):agency.name,
+      privateOwner:!!agency.privateOwner,
       address:address,
       ident:clean((form&&form.ident)||job.ident||''),
       tenancy:(form&&form.tenancy)||job.section||'',
@@ -336,7 +340,13 @@
       issue:pretty(invoice.issueDate),
       due:pretty(invoice.dueDate),
       status:statusLabel(displayStatus(invoice,invoice.today||'')),
-      billTo:(function(){const lib=portal();const found=lib&&lib.agencyFromCode(invoice.agencyCode||invoice.agencyName||'');return found?found.name:(invoice.agencyName||invoice.agencyCode||'')})(),
+      billTo:(function(){
+        if(invoice.privateOwner||invoice.agencyCode==='Private Owner')return invoice.agencyName||'The owner';
+        const lib=portal();
+        const found=lib&&lib.agencyFromCode(invoice.agencyCode||invoice.agencyName||'');
+        if(found&&found.privateOwner)return invoice.agencyName||'The owner';
+        return found&&found.name?found.name:(invoice.agencyName||invoice.agencyCode||'');
+      })(),
       address:invoice.address||'',
       ident:invoice.ident||'',
       tenancy:invoice.tenancy||'',
@@ -352,7 +362,7 @@
       accountName:invoice.accountName||'',
       accountNumber:invoice.accountNumber||'',
       terms:invoice.terms||'',
-      note:'Billed to the agency for this property. Tenant names and contact details are not on this invoice.'
+      note:(invoice.privateOwner||invoice.agencyCode==='Private Owner')?'Billed to the owner of this property. Tenant names and contact details are not on this invoice.':'Billed to the agency for this property. Tenant names and contact details are not on this invoice.'
     };
   }
   function fileName(invoice){
@@ -536,7 +546,7 @@
   function portalCopies(agencyId,today,now){
     load();
     return Object.keys(mem.invoices).map(function(id){return mem.invoices[id]}).filter(function(inv){
-      return inv&&!inv.draft&&inv.agencyId===agencyId&&numberValue(inv.number);
+      return inv&&!inv.draft&&!inv.privateOwner&&inv.agencyId&&inv.agencyId===agencyId&&numberValue(inv.number);
     }).map(function(inv){
       const doc=toPortal(inv,mem.settings,today,now);
       if(doc)mem.invoices[inv.jobId].publishedAt=doc.publishedAt;
@@ -575,7 +585,8 @@
       <p class="note">A completed job gets a draft. Change the lines, then issue it. Publish sends only issued invoices, and only to that agency.</p>
       ${rows.length?rows.map(function(inv){
         const st=displayStatus(inv,today);
-        return '<article class="card" data-invoice-job="'+esc(inv.jobId)+'"><div class="chiprow"><span class="badge">'+(inv.draft?'Draft':esc(inv.number))+'</span><span class="badge">'+esc(statusLabel(st))+'</span></div><div class="addr">'+esc(inv.address)+'</div><div class="meta">'+esc(inv.agencyCode)+' · '+esc(money(inv.totalCents))+'</div><div class="row"><button type="button" data-open-invoice="'+esc(inv.jobId)+'">Review</button></div></article>';
+        const who=inv.privateOwner?(inv.agencyName||'The owner'):(inv.agencyName||inv.agencyCode);
+        return '<article class="card" data-invoice-job="'+esc(inv.jobId)+'"><div class="chiprow"><span class="badge">'+(inv.draft?'Draft':esc(inv.number))+'</span><span class="badge">'+esc(statusLabel(st))+'</span></div><div class="addr">'+esc(inv.address)+'</div><div class="meta">'+esc(who)+' · '+esc(money(inv.totalCents))+'</div><div class="row"><button type="button" data-open-invoice="'+esc(inv.jobId)+'">Review</button></div></article>';
       }).join(''):'<p class="note">No invoices yet. Archive or mark a job done and come back.</p>'}
       </section>
       ${selected?`<section class="f" id="inv-editor"><h2>${selected.draft?'Draft':'Invoice '+esc(selected.number)}</h2>
