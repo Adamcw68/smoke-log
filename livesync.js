@@ -56,6 +56,32 @@
     const path=loc.pathname&&String(loc.pathname).charAt(0)==='/'?String(loc.pathname):'/';
     return SIGN_IN_ORIGIN+path+String(loc.search||'')+String(loc.hash||'');
   }
+  const TECH_ACCOUNTS={
+    'bearus69@gmail.com':'Adam',
+    'craig@clarencecoastsmokealarms.com.au':'Craig'
+  };
+  function techWord(s){
+    const w=String(s||'').trim().split(/\s+/)[0]||'';
+    if(!w)return '';
+    return w.charAt(0).toUpperCase()+w.slice(1).toLowerCase();
+  }
+  /* Signed-in Google account → the short name printed on new worksheets. */
+  function technicianFromAccount(user){
+    if(!user)return '';
+    const email=String(user.email||'').trim().toLowerCase();
+    if(TECH_ACCOUNTS[email])return TECH_ACCOUNTS[email];
+    const display=String(user.displayName||'').trim();
+    if(display)return techWord(display);
+    const local=(email.split('@')[0]||'').split(/[._+-]/)[0];
+    return techWord(local);
+  }
+  /* A saved technician stays. A blank worksheet takes the current name. */
+  function worksheetTech(saved, current){
+    const have=String(saved==null?'':saved).replace(/\s+/g,' ').trim();
+    if(have)return {tech:have,fill:false};
+    const next=String(current==null?'':current).replace(/\s+/g,' ').trim()||'Adam';
+    return {tech:next,fill:true};
+  }
   function hostingNotice(host, loc){
     const h=String(host||'').toLowerCase();
     if(/\.github\.io$/i.test(h))return {text:'Home-screen sign-in works at https://ccsa-smoke-log.firebaseapp.com. Worksheets saved on this address stay here. Sign in there with the same Google account and they download. Or tap Export worksheets here and Import worksheets there.',href:SIGN_IN_ORIGIN+'/'};
@@ -561,7 +587,7 @@
       paint();
       return;
     }
-    state.user={uid:user.uid,email:user.email||''};
+    state.user={uid:user.uid,email:user.email||'',displayName:user.displayName||''};
     state.phase='syncing';
     state.error='';
     state.help=null;
@@ -785,7 +811,7 @@
     return {auth:auth,db:db,fb:fb,ready:!!(auth&&db&&fb)};
   }
   return {
-    configReady:configReady,signInPlan:signInPlan,browserHelp:browserHelp,openingHelp:openingHelp,hostingNotice:hostingNotice,sameOriginAuth:sameOriginAuth,signInFailure:signInFailure,redirectFollowUp:redirectFollowUp,docId:docId,photoFits:photoFits,statusLabel:statusLabel,panelHTML:panelHTML,
+    configReady:configReady,signInPlan:signInPlan,browserHelp:browserHelp,openingHelp:openingHelp,hostingNotice:hostingNotice,technicianFromAccount:technicianFromAccount,worksheetTech:worksheetTech,sameOriginAuth:sameOriginAuth,signInFailure:signInFailure,redirectFollowUp:redirectFollowUp,docId:docId,photoFits:photoFits,statusLabel:statusLabel,panelHTML:panelHTML,
     reconcile:reconcile,queueOp:queueOp,drainOps:drainOps,plain:plain,
     contentSig:contentSig,needsPush:needsPush,isQuotaError:isQuotaError,quotaMessage:quotaMessage,simulateSyncDay:simulateSyncDay,
     boot:boot,signIn:signIn,signOut:signOut,afterSave:afterSave,afterPhoto:afterPhoto,afterPhotoDelete:afterPhotoDelete,beforeClearAll:beforeClearAll,

@@ -381,7 +381,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="pdflib.js"></script><script src="transfer.js"></script><script src="firebase-config.js"></script><script src="livesync.js"></script><script src="portaldata.js"></script><script src="certificate.js"></script><script src="invoice.js"></script><script src="requests.js"></script><script src="portaladmin.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.36.0 (20261114)';
+const APP_VERSION='2.37.0 (20261114)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -398,23 +398,27 @@ const load=(k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}
 const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){toast('Storage full – could not save')}if(window.CCSASync&&CCSASync.afterSave)CCSASync.afterSave(k)};
 let JOBS=load(LS.jobs,[]), FORMS=load(LS.forms,{}), UI=load(LS.ui,{sort:'route',filter:'all',q:''}), SET=load(LS.set,{tech:DEFAULT_TECH});
 /* ---------- technician (v2.4) ---------- */
-// SET.tech = app-wide default technician for NEW jobs; SET.techRecent = recently used "Other" names (quick-pick chips).
-// Per job: f.techMode 'def' (Adam Westerman) | 'other', f.techOther = typed name, f.tech = effective name printed on the worksheet.
+// SET.tech is the name used for new worksheets when nobody is signed in.
+// A saved worksheet name is kept. A blank one is filled from the signed-in account, or from SET.tech.
 function techClean(v){return clean(v).slice(0,40)}
-function addRecent(n){n=techClean(n);if(!n||n.toLowerCase()===DEFAULT_TECH.toLowerCase())return;SET.techRecent=[n,...(SET.techRecent||[]).filter(x=>x.toLowerCase()!==n.toLowerCase())].slice(0,6);save(LS.set,SET)}
-function techMig(f){if(!f||f.techMode)return f;const t=techClean(f.tech);if(!t||t.toLowerCase()===DEFAULT_TECH.toLowerCase()){f.techMode='def';f.techOther='';f.tech=DEFAULT_TECH}else{f.techMode='other';f.techOther=t;f.tech=t;addRecent(t)}return f}
-function techSet(f,mode,name){f.techMode=mode;if(mode==='other'){f.techOther=techClean(name??f.techOther);f.tech=f.techOther||DEFAULT_TECH}else f.tech=DEFAULT_TECH}
-function techNew(){const d=techClean(SET.tech)||DEFAULT_TECH;return d.toLowerCase()===DEFAULT_TECH.toLowerCase()?{techMode:'def',techOther:'',tech:DEFAULT_TECH}:{techMode:'other',techOther:d,tech:d}}
-function techMigrateAll(){if(SET.techV===2)return;// v2.4 migration: old free-text field (SET.tech was the last name typed on any job)
-  if(!SET.techRecent)SET.techRecent=[];const old=techClean(SET.tech);if(old&&old.toLowerCase()!==DEFAULT_TECH.toLowerCase())addRecent(old);
-  SET.tech=DEFAULT_TECH;Object.values(FORMS).forEach(techMig);SET.techV=2;save(LS.set,SET);save(LS.forms,FORMS)}
-function techCtl(f){const oth=f.techMode==='other',rec=(SET.techRecent||[]);
+function signedTech(){if(!window.CCSASync||!CCSASync.technicianFromAccount||!CCSASync.state)return '';return CCSASync.technicianFromAccount(CCSASync.state().user)||''}
+function deviceTech(){const t=techClean(SET.tech);if(!t||/^adam westerman$/i.test(t))return 'Adam';return t}
+function currentTech(){return signedTech()||deviceTech()||'Adam'}
+function addRecent(n){n=techClean(n);if(!n||n==='Adam'||n==='Craig')return;SET.techRecent=[n,...(SET.techRecent||[]).filter(x=>x.toLowerCase()!==n.toLowerCase())].slice(0,6);save(LS.set,SET)}
+function applyTechName(f,name){const n=techClean(name)||'Adam';f.tech=n;if(n==='Adam'||n==='Craig'){f.techMode=n;f.techOther=''}else{f.techMode='other';f.techOther=n}}
+function techMig(f){if(!f)return f;const picked=window.CCSASync&&CCSASync.worksheetTech?CCSASync.worksheetTech(f.tech,currentTech()):{tech:techClean(f.tech)||currentTech(),fill:!techClean(f.tech)};if(!picked.fill){if(!f.techMode)applyTechName(f,picked.tech);f.tech=picked.tech;return f}applyTechName(f,picked.tech);return f}
+function techSet(f,mode,name){if(mode==='Adam'||mode==='Craig')applyTechName(f,mode);else{f.techOther=techClean(name??f.techOther);f.tech=f.techOther||currentTech();f.techMode='other'}}
+function techNew(){const d=currentTech();return d==='Adam'||d==='Craig'?{techMode:d,techOther:'',tech:d}:{techMode:'other',techOther:d,tech:d}}
+function techMigrateAll(){if(SET.techV===2)return;
+  if(!SET.techRecent)SET.techRecent=[];const old=techClean(SET.tech);if(old&&old.toLowerCase()!=='adam'&&!/^adam westerman$/i.test(old))addRecent(old);
+  if(!techClean(SET.tech))SET.tech='Adam';SET.techV=2;save(LS.set,SET)}
+function techCtl(f){const name=f.tech||currentTech(),known=name==='Adam'||name==='Craig',oth=!known,rec=(SET.techRecent||[]);
+  const btn=(id,label)=>{const on=id==='other'?oth:name===id;return `<button type="button" role="radio" aria-checked="${on}" data-tmode="${id}" class="${on?'on':''}">${on?'✓ ':''}${esc(label)}</button>`};
   return`<div class="tech" id="techctl"><div class="tseg" role="radiogroup" aria-label="Technician">
-   <button type="button" role="radio" aria-checked="${!oth}" data-tmode="def" class="${oth?'':'on'}">${oth?'':'✓ '}${esc(DEFAULT_TECH)}<small>Default</small></button>
-   <button type="button" role="radio" aria-checked="${oth}" data-tmode="other" class="${oth?'on':''}">${oth?'✓ ':''}Other<small>Type a name</small></button></div>
-   <div id="tothr" ${oth?'':'hidden'}><label class="l" for="tother">Other technician's name</label><input class="t" id="tother" data-tother="1" type="text" autocomplete="name" autocapitalize="words" maxlength="40" value="${esc(f.techOther||'')}" placeholder="Type the technician's name">
-   ${rec.length?`<div class="tchips" aria-label="Recent names"><span class="note">Recent:</span>${rec.map(n=>`<button type="button" data-tpick="${esc(n)}" class="${oth&&f.techOther===n?'on':''}">${esc(n)}</button>`).join('')}</div>`:''}</div>
-   <p class="note tprint" id="tprint">On the worksheet: <b>${esc(f.tech||DEFAULT_TECH)}</b></p></div>`}
+   ${btn('Adam','Adam')}${btn('Craig','Craig')}${btn('other','Other')}</div>
+   <div id="tothr" ${oth?'':'hidden'}><label class="l" for="tother">Other technician's name</label><input class="t" id="tother" data-tother="1" type="text" autocomplete="name" autocapitalize="words" maxlength="40" value="${esc(oth?name:(f.techOther||''))}" placeholder="Type the technician's name">
+   ${rec.length?`<div class="tchips" aria-label="Recent names"><span class="note">Recent:</span>${rec.map(n=>`<button type="button" data-tpick="${esc(n)}" class="${oth&&name===n?'on':''}">${esc(n)}</button>`).join('')}</div>`:''}</div>
+   <p class="note tprint" id="tprint">On the worksheet: <b>${esc(name)}</b></p></div>`}
 function paintTech(f){const c=$('#techctl');if(c){const fo=document.activeElement&&document.activeElement.id==='tother';const pos=fo?document.activeElement.selectionStart:0;c.outerHTML=techCtl(f);if(fo){const i=$('#tother');i.focus();i.setSelectionRange(pos,pos)}}}
 const $=(s,r=document)=>r.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -1409,15 +1413,18 @@ function paintHead(j){if(!j)return;const st=statusOf(j),h=$('header');h.classNam
 function clearHead(){$('header').className=''}
 
 /* ---------- job form ---------- */
-function setTechHTML(){const d=techClean(SET.tech)||DEFAULT_TECH,oth=d.toLowerCase()!==DEFAULT_TECH.toLowerCase();
-  return`<section class="f settech" id="settech"><h2>⚙️ Default technician</h2><p class="note">New jobs start with this name. You can still change it on each job.</p>
-  <div class="tseg" role="radiogroup" aria-label="Default technician"><button type="button" role="radio" aria-checked="${!oth}" data-sdef="def" class="${oth?'':'on'}">${oth?'':'✓ '}${esc(DEFAULT_TECH)}</button><button type="button" role="radio" aria-checked="${oth}" data-sdef="other" class="${oth?'on':''}">${oth?'✓ ':''}Other</button></div>
-  <div id="sdoth" ${oth?'':'hidden'}><label class="l" for="sdname">Default name</label><input class="t" id="sdname" type="text" maxlength="40" autocapitalize="words" value="${esc(oth?d:'')}" placeholder="Type the default technician's name">
+function setTechHTML(){const signed=signedTech();
+  if(signed)return `<section class="f settech" id="settech"><h2>Technician</h2><p class="note" id="techsigned">Signed in as <b>${esc(signed)}</b>. New worksheets use this name. You can still change it on a worksheet.</p></section>`;
+  const d=deviceTech(),known=d==='Adam'||d==='Craig',oth=!known;
+  const btn=(id,label)=>{const on=id==='other'?oth:d===id;return `<button type="button" role="radio" aria-checked="${on}" data-sdef="${id}" class="${on?'on':''}">${on?'✓ ':''}${esc(label)}</button>`};
+  return`<section class="f settech" id="settech"><h2>Technician</h2><p class="note">Nobody is signed in. New worksheets use this name. It stays on this phone.</p>
+  <div class="tseg" role="radiogroup" aria-label="Technician">${btn('Adam','Adam')}${btn('Craig','Craig')}${btn('other','Other')}</div>
+  <div id="sdoth" ${oth?'':'hidden'}><label class="l" for="sdname">Other name</label><input class="t" id="sdname" type="text" maxlength="40" autocapitalize="words" value="${esc(oth?d:'')}" placeholder="Type a name">
   ${(SET.techRecent||[]).length?`<div class="tchips"><span class="note">Recent:</span>${SET.techRecent.map(n=>`<button type="button" data-sdpick="${esc(n)}" class="${oth&&d===n?'on':''}">${esc(n)}</button>`).join('')}</div>`:''}</div></section>`}
 function bindSetTech(){const s=$('#settech');if(!s)return;const re=()=>{s.outerHTML=setTechHTML();bindSetTech()};
-  s.querySelectorAll('[data-sdef]').forEach(b=>b.onclick=()=>{if(b.dataset.sdef==='def'){SET.tech=DEFAULT_TECH;save(LS.set,SET);toast('New jobs: '+DEFAULT_TECH);re()}else{$('#sdoth').hidden=false;s.querySelectorAll('[data-sdef]').forEach(x=>{const on=x===b;x.classList.toggle('on',on);x.setAttribute('aria-checked',on);x.textContent=(on?'✓ ':'')+(x.dataset.sdef==='def'?DEFAULT_TECH:'Other')});$('#sdname').focus()}});
-  s.querySelectorAll('[data-sdpick]').forEach(b=>b.onclick=()=>{SET.tech=b.dataset.sdpick;save(LS.set,SET);toast('New jobs: '+SET.tech);re()});
-  const i=$('#sdname');i.oninput=()=>{const v=techClean(i.value);SET.tech=v||DEFAULT_TECH;save(LS.set,SET)};i.onchange=()=>{addRecent(i.value);if(techClean(i.value)){toast('New jobs: '+SET.tech);re()}}}
+  s.querySelectorAll('[data-sdef]').forEach(b=>b.onclick=()=>{if(b.dataset.sdef==='Adam'||b.dataset.sdef==='Craig'){SET.tech=b.dataset.sdef;save(LS.set,SET);toast('New worksheets: '+SET.tech);re()}else{$('#sdoth').hidden=false;const i=$('#sdname');if(i)i.focus()}});
+  s.querySelectorAll('[data-sdpick]').forEach(b=>b.onclick=()=>{SET.tech=b.dataset.sdpick;save(LS.set,SET);toast('New worksheets: '+SET.tech);re()});
+  const i=$('#sdname');if(!i)return;i.oninput=()=>{const v=techClean(i.value);SET.tech=v||'Adam';save(LS.set,SET)};i.onchange=()=>{addRecent(i.value);if(techClean(i.value)){toast('New worksheets: '+SET.tech);re()}}}
 function chips(name,opts,val,multi){return`<div class="chips" data-chips="${name}" ${multi?'data-multi="1"':''}>${opts.map(o=>`<button type="button" data-v="${esc(o)}" class="${(multi?(val||[]).includes(o):String(val)===String(o))?'on':''}">${esc(o)}</button>`).join('')}</div>`}
 function migNew(a){if(!a.yn)a.yn={};if(a.newAns!=='Yes'&&a.newAns!=='No'&&a.newAns!=='')a.newAns=a.isNew?'Yes':'';if(a.newAns==='Yes'&&!a.isNew)a.isNew=true;if(a.newAns!=='Yes'&&a.isNew)a.isNew=false}
 function unansNew(f){if(!f)return[];return f.al.slice(0,f.alarms||0).map((a,i)=>a.newAns!=='Yes'&&a.newAns!=='No'?i:-1).filter(i=>i>=0)}
@@ -1600,7 +1607,7 @@ async function buildPDF(j,f){
   cfit(0,f.ident,170.8,360.8,211,235,{label:'Property identifier'});
   {const meta=calendarMeta(j);const agent=window.SheetFill?SheetFill.agentForForm(f,j,meta):(clean(f.agent)||clean(j.agent)||'');const ten=window.SheetFill?SheetFill.tenancyForForm(f,j,meta):clean(f.tenancy||'');cfit(0,window.SheetFill?SheetFill.agentSlot(agent,ten):agent,413,552.8,211,235,{label:'Agent'})}
   cfit(0,f.addr,168,549.9,242.5,266.5,{label:'Property address'});
-  {const tn=clean(f.tech)||DEFAULT_TECH;white(0,172,279,318,297);cfit(0,tn,170.8,319.6,273.4,297.4,{size:12,label:'Technician'})} // template prints 'Adam Westerman' in regular type: always cover it, then write the chosen name once (bold 12pt, centred)
+  {const tn=clean(f.tech)||currentTech();white(0,172,279,318,297);cfit(0,tn,170.8,319.6,273.4,297.4,{size:12,label:'Technician'})} // template prints 'Adam Westerman' in regular type: always cover it, then write the chosen name once (bold 12pt, centred)
   if(f.date){const[y,m,d]=f.date.split('-');cfit(0,d,425.6,462.1,273.4,297.4,{pad:1,label:'Day'});cfit(0,m,466.1,500.6,273.4,297.4,{pad:1,label:'Month'});
     if(y!==TEMPLATE_YEAR){white(0,509,277,556,296);cfit(0,y,506,558,273.4,297.4,{pad:1,size:14,label:'Year'})}}
   const PT={House:[177,212],Unit:[229,252],Townhouse:[270,333],Duplex:[351,390],Villa:[407,432],Other:[449,481]};
@@ -1943,7 +1950,7 @@ async function calendarForPortalJob(job){
 function portalHTML(){return window.CCSAPortal?CCSAPortal.panelHTML():''}
 function bindPortal(root){if(window.CCSAPortal)CCSAPortal.bind(root)}
 function portalNudge(){if(window.CCSAInvoice&&CCSAInvoice.syncDrafts)CCSAInvoice.syncDrafts();if(window.CCSAPortal&&CCSAPortal.onArchived)CCSAPortal.onArchived()}
-function paintSync(){const el=document.getElementById('syncpanel');if(el&&window.CCSASync){el.outerHTML=CCSASync.panelHTML(CCSASync.state());bindSync(document.getElementById('syncpanel'))}if(window.CCSAPortal&&CCSAPortal.onSync)CCSAPortal.onSync()}
+function paintSync(){const el=document.getElementById('syncpanel');if(el&&window.CCSASync){el.outerHTML=CCSASync.panelHTML(CCSASync.state());bindSync(document.getElementById('syncpanel'))}const tech=document.getElementById('settech');if(tech&&!(tech.contains(document.activeElement))){tech.outerHTML=setTechHTML();bindSetTech()}if(window.CCSAPortal&&CCSAPortal.onSync)CCSAPortal.onSync()}
 async function backupForSync(){const pack=await worksheetPack();const db=await new Promise((res,rej)=>{const r=indexedDB.open('ccsa-sync',1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('backups'))r.result.createObjectStore('backups',{keyPath:'id'})};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});await new Promise((res,rej)=>{const t=db.transaction('backups','readwrite');t.objectStore('backups').put({id:'before-first-sync',at:new Date().toISOString(),json:JSON.stringify(pack)});t.oncomplete=()=>res();t.onerror=()=>rej(t.error)})}
 async function applySyncResult(result){const drop=new Set(result.dropJobs||[]);JOBS=(result.jobs||[]).filter(j=>j&&!drop.has(j.id));FORMS=result.forms||{};(result.dropJobs||[]).forEach(id=>{delete FORMS[id]});try{localStorage.setItem(LS.jobs,JSON.stringify(JOBS));localStorage.setItem(LS.forms,JSON.stringify(FORMS))}catch(e){toast('Storage full – could not save')}
   for(const id of result.dropPhotos||[]){try{await photoDel(id)}catch(e){}}
