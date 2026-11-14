@@ -75,6 +75,18 @@ test('a service report matches the agency layout and leaves the tenant off',func
   assert.match(ownedPdf,/Attention: The owner/);
   assert.equal(ownedPdf.includes('c/-'),false);
   assert.equal(ownedPdf.includes('Private Owner'),false);
+  const dueCert=certs.complianceModel(cert,{due:'2027-08-12'});
+  assert.equal(dueCert.title,'Compliance certificate');
+  assert.equal(dueCert.validUntil,'12/08/2027');
+  const dueText=certs.pdfText(certs.buildCompliancePdf(cert,{due:'2027-08-12'}));
+  assert.match(dueText,/Compliance certificate/);
+  assert.match(dueText,/12\/08\/2027/);
+  assert.match(dueText,/meeting the smoke alarm checks/);
+  assert.equal(dueText.includes('Jane Tenant'),false);
+  assert.equal(dueText.includes('Smoke Alarms Australia'),false);
+  const failed=certs.complianceModel(find('9 Church'),{due:'2027-10-02'});
+  assert.equal(failed.validUntil,'');
+  assert.match(failed.statement,/does not record this property as compliant/);
   assert.equal(certs.fileName(cert),'CCSA-2026-08-12-18-River-Street.pdf');
   const start=text.match(/startxref\n(\d+)/);
   assert.equal(text.slice(+start[1],+start[1]+4),'xref');

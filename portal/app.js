@@ -4,7 +4,7 @@
   const CDN='https://www.gstatic.com/firebasejs/11.9.1/';
   const appEl=document.getElementById('app');
   let session=null;
-  let view={tab:'properties',q:'',filter:'',propertyId:'',certificateId:'',invoiceId:'',invoiceStatus:'',invFrom:'',invTo:''};
+  let view={tab:'properties',q:'',filter:'',propertyId:'',certificateId:'',invoiceId:'',invoiceStatus:'',invFrom:'',invTo:'',requestForm:false,inbox:false,notice:''};
   let authBits=null;
   let loginError='';
   let painting=false;
@@ -36,6 +36,8 @@
     return (session.certificates||[]).filter(function(c){return c.jobId===job.id||c.id===job.id})[0]||null;
   }
   function hashFor(){
+    if(view.inbox)return 'inbox';
+    if(view.requestForm)return 'request';
     if(view.invoiceId)return 'invoice/'+encodeURIComponent(view.invoiceId);
     if(view.certificateId)return 'certificate/'+encodeURIComponent(view.certificateId);
     if(view.propertyId)return 'property/'+encodeURIComponent(view.propertyId);
@@ -43,6 +45,9 @@
   }
   function readHash(){
     const raw=decodeURIComponent((location.hash||'').replace(/^#/,''));
+    view.inbox=false;view.requestForm=false;
+    if(raw==='inbox'){view.inbox=true;view.propertyId='';view.certificateId='';view.invoiceId='';return}
+    if(raw==='request'){view.requestForm=true;view.tab='jobs';view.propertyId='';view.certificateId='';view.invoiceId='';return}
     if(raw.indexOf('invoice/')===0){view.invoiceId=raw.slice(8);view.certificateId='';view.propertyId='';view.tab='invoices';return}
     if(raw.indexOf('certificate/')===0){view.certificateId=raw.slice(12);view.propertyId='';view.invoiceId='';return}
     if(raw.indexOf('property/')===0){view.propertyId=raw.slice(9);view.certificateId='';view.invoiceId='';view.tab='properties';return}
@@ -68,7 +73,9 @@
       certificates:bucket.certificates||[],
       invoices:window.CCSAInvoice?CCSAInvoice.demoInvoices(bucket,portal.today):[],
       properties:data().rollup(bucket.jobs||[],portal.today,bucket),
-      choices:offered
+      requests:window.CCSARequests?CCSARequests.demoPublic(pick.id):[],
+      choices:offered,
+      notice:''
     };
   }
   function header(){
@@ -104,7 +111,7 @@
     const options=session.choices.map(function(a){
       return '<option value="'+esc(a.id)+'"'+(a.id===session.agency.id?' selected':'')+'>'+esc(a.name)+'</option>';
     }).join('');
-    return '<div class="demo" role="status">Sample data as at '+esc(data().prettyDate(session.today))+'. Invoice prices in this preview are examples. Your price list, ABN and bank details stay blank until you enter them. This is not a live login and nothing is saved.<label for="demoagency">Sample agency</label><select id="demoagency">'+options+'</select></div>';
+    return '<div class="demo" role="status">Sample data as at '+esc(data().prettyDate(session.today))+'. Invoice prices in this preview are examples. Your price list, ABN and bank details stay blank until you enter them. This is not a live login and nothing is saved.<label for="demoagency">Sample agency</label><select id="demoagency">'+options+'</select><div class="actions"><button type="button" id="demoinbox">Adam\'s inbox</button></div></div>';
   }
   function propertyCards(){
     let list=session.properties.filter(function(p){return matches(p.address+' '+p.ident+' '+p.town)&&( !view.filter||p.compliance===view.filter)});
@@ -125,10 +132,18 @@
       return '<article class="card"><div class="pills"><span class="pill '+statusCls+'">'+esc(data().statusLabel(job.status))+'</span>'+(job.status==='completed'&&job.result?'<span class="pill '+(job.result==='fail'?'fail':'ok')+'">'+esc(data().resultLabel(job.result))+'</span>':'')+'</div><h2>'+esc(job.address)+'</h2>'+pills(prop,job.tenancy)+'<p class="meta">'+esc(whenJob(job))+(prop&&prop.lastService&&job.status!=='completed'?' · Last service '+esc(data().prettyDate(prop.lastService)):'')+'</p><div class="actions">'+(cert?'<button type="button" data-certificate="'+esc(cert.id)+'">Certificate</button>':'')+'<button type="button" data-property="'+esc(job.propertyId)+'">Property</button></div></article>';
     }).join('');
   }
+  function requestCards(list){
+    const api=window.CCSARequests;
+    if(!list.length)return '<p class="empty">No requests yet.</p>';
+    return list.map(function(row){
+      return '<article class="card"><div class="pills"><span class="pill book">'+esc(api?api.statusLabel(row.status):row.status)+'</span></div><h2>'+esc(row.address)+'</h2><p class="meta">'+esc(row.tenancy)+(row.timeframe?' · '+esc(row.timeframe):'')+'</p></article>';
+    }).join('');
+  }
   function jobsView(){
     const upcoming=session.jobs.filter(function(j){return j.status!=='completed'&&matches(j.address)}).sort(function(a,b){return (a.appointment||'9999')<(b.appointment||'9999')?-1:1});
     const completed=session.jobs.filter(function(j){return j.status==='completed'&&matches(j.address)}).sort(function(a,b){return (a.serviceDate||'')<(b.serviceDate||'')?1:-1});
-    return '<h2 class="sectionh">Upcoming</h2>'+jobCards(upcoming,'No upcoming jobs.')+'<h2 class="sectionh">Completed</h2>'+jobCards(completed,'No completed jobs.');
+    const mine=(session.requests||[]).slice().sort(function(a,b){return (a.createdAt||'')<(b.createdAt||'')?1:-1});
+    return '<div class="actions"><button type="button" class="pri" id="newjob">New job</button></div>'+(view.notice?'<p class="note" id="reqnote">'+esc(view.notice)+'</p>':'')+'<h2 class="sectionh">Your requests</h2>'+requestCards(mine)+'<h2 class="sectionh">Upcoming</h2>'+jobCards(upcoming,'No upcoming jobs.')+'<h2 class="sectionh">Completed</h2>'+jobCards(completed,'No completed jobs.');
   }
   function certificatesView(){
     const list=(session.certificates||[]).filter(function(c){return matches(c.address+' '+c.ident)}).sort(function(a,b){return a.date<b.date?1:-1});
@@ -137,12 +152,45 @@
       return '<article class="card"><div class="pills"><span class="pill '+(c.result==='fail'?'fail':'ok')+'">'+esc(data().resultLabel(c.result))+'</span></div><h2>'+esc(c.address)+'</h2><p class="meta">'+esc(data().prettyDate(c.date))+' · '+esc(c.agencyCode)+'</p><div class="actions"><button type="button" data-certificate="'+esc(c.id)+'">View</button><button type="button" data-download="'+esc(c.id)+'">Download PDF</button></div></article>';
     }).join('');
   }
+  function byNewest(list,field){
+    return list.slice().sort(function(a,b){return (a[field]||'')<(b[field]||'')?1:-1});
+  }
   function propertyView(){
     const prop=(session.properties||[]).filter(function(p){return p.id===view.propertyId})[0];
     if(!prop)return '<button type="button" class="back" data-tab="properties">Back</button><p class="empty">That property is not in this agency.</p>';
-    const jobs=session.jobs.filter(function(j){return j.propertyId===prop.id}).sort(function(a,b){return (a.serviceDate||a.appointment||'')<(b.serviceDate||b.appointment||'')?1:-1});
-    const certs=(session.certificates||[]).filter(function(c){return c.propertyId===prop.id});
-    return '<button type="button" class="back" data-tab="properties">Back to properties</button><article class="card"><h2>'+esc(prop.address)+'</h2>'+pills(prop,prop.tenancy)+'<p class="meta">Last service '+(prop.lastService?esc(data().prettyDate(prop.lastService)):'not on file')+' · Due '+(prop.due?esc(data().prettyDate(prop.due)):'not on file')+'</p></article><h2 class="sectionh">History</h2>'+jobCards(jobs,'No visits on file.')+(certs.length?'<h2 class="sectionh">Certificates</h2>'+certs.map(function(c){return '<article class="card"><h3>'+esc(data().prettyDate(c.date))+' · '+esc(data().resultLabel(c.result))+'</h3><div class="actions"><button type="button" data-certificate="'+esc(c.id)+'">View</button><button type="button" data-download="'+esc(c.id)+'">Download PDF</button></div></article>'}).join(''):'');
+    const jobs=byNewest(session.jobs.filter(function(j){return j.propertyId===prop.id}),'serviceDate');
+    const certs=byNewest((session.certificates||[]).filter(function(c){return c.propertyId===prop.id}),'date');
+    const requests=byNewest((session.requests||[]).filter(function(r){return r.propertyId===prop.id}),'createdAt');
+    const invoices=byNewest((session.invoices||[]).filter(function(row){return row.propertyId===prop.id}),'issueDate');
+    const inv=window.CCSAInvoice;
+    const reportCards=certs.map(function(c){
+      return '<article class="card"><h3>Service report · '+esc(data().prettyDate(c.date))+'</h3><p class="meta">'+esc(data().resultLabel(c.result))+'</p><div class="actions"><button type="button" data-certificate="'+esc(c.id)+'">View</button><button type="button" data-download="'+esc(c.id)+'">Download PDF</button></div></article>';
+    }).join('')||'<p class="empty">No service reports yet.</p>';
+    const complyCards=certs.map(function(c){
+      const model=window.CCSACertificate?CCSACertificate.complianceModel(c,{due:prop.due}):null;
+      const until=model&&model.validUntil?'Valid until '+model.validUntil:'Not recorded as compliant';
+      return '<article class="card"><h3>Compliance certificate · '+esc(data().prettyDate(c.date))+'</h3><p class="meta">'+esc(until)+'</p><div class="actions"><button type="button" data-compliance="'+esc(c.id)+'">Download PDF</button></div></article>';
+    }).join('')||'<p class="empty">No compliance certificate yet.</p>';
+    const invoiceCards=invoices.map(function(row){
+      const status=inv?inv.displayStatus(row,session.today):row.status;
+      return '<article class="card"><h3>'+esc(row.number)+'</h3><p class="meta">'+esc(inv?inv.statusLabel(status):status)+' · '+esc(data().prettyDate(row.issueDate))+'</p><div class="actions"><button type="button" data-invoice="'+esc(row.id)+'">View</button><button type="button" data-invoice-download="'+esc(row.id)+'">Download PDF</button></div></article>';
+    }).join('')||'<p class="empty">No invoices yet.</p>';
+    return '<button type="button" class="back" data-tab="properties">Back to properties</button><article class="card" id="property"><h2>'+esc(prop.address)+'</h2>'+pills(prop,prop.tenancy)+'<p class="meta">Last service '+(prop.lastService?esc(data().prettyDate(prop.lastService)):'not on file')+' · Due '+(prop.due?esc(data().prettyDate(prop.due)):'not on file')+'</p></article><h2 class="sectionh">Requests</h2>'+requestCards(requests)+'<h2 class="sectionh">Jobs</h2>'+jobCards(jobs,'No visits on file.')+'<h2 class="sectionh">Service reports</h2>'+reportCards+'<h2 class="sectionh">Compliance certificates</h2>'+complyCards+'<h2 class="sectionh">Invoices</h2>'+invoiceCards;
+  }
+  function requestForm(){
+    return '<button type="button" class="back" data-tab="jobs">Back</button><form class="login" id="requestform"><h1>New job</h1><p>Send a service request for one of your properties. The access name and phone go to Adam only. They are not shown here after you send, and they are not printed on certificates, service reports or invoices.</p>'+(view.notice?'<p class="note" id="reqnote">'+esc(view.notice)+'</p>':'')+'<label class="l" for="reqaddr">Property address</label><input class="t" id="reqaddr" required placeholder="18 River Street, Maclean NSW 2463"><label class="l" for="reqten">Tenancy</label><select class="t" id="reqten"><option value="Permanent">Permanent</option><option value="Holiday">Holiday</option></select><label class="l" for="reqname">Access contact name</label><input class="t" id="reqname" required autocomplete="name"><label class="l" for="reqphone">Access phone</label><input class="t" id="reqphone" required inputmode="tel" autocomplete="tel"><label class="l" for="reqtime">Preferred timeframe</label><input class="t" id="reqtime" placeholder="Next fortnight"><label class="l" for="reqnotes">Notes</label><textarea class="t" id="reqnotes" rows="3"></textarea><label class="l" for="reqfile">PDF or photo, optional, under 450 KB</label><input id="reqfile" type="file" accept="application/pdf,image/jpeg,image/png"><div class="actions"><button class="pri" type="submit">Send request</button></div></form><h2 class="sectionh">Or upload a CSV</h2><p class="meta">Up to 40 rows. Download the template, fill it in, and upload it. Access phones in the file are stored for Adam only.</p><div class="actions"><button type="button" id="reqtemplate">Download CSV template</button></div><label class="l" for="reqcsv">CSV file</label><input id="reqcsv" type="file" accept=".csv,text/csv">';
+  }
+  function inboxView(){
+    const api=window.CCSARequests;
+    if(!api)return '<p class="empty">Requests did not load.</p>';
+    const access=session.mode==='demo'?api.demoAccess(session.agency.id):{};
+    const rows=(session.requests||[]).slice().sort(function(a,b){return (a.createdAt||'')<(b.createdAt||'')?1:-1});
+    const cards=rows.map(function(row){
+      const who=row.status==='completed'?null:access[row.id];
+      const buttons=row.status==='new'?'<button type="button" class="pri" data-accept="'+esc(row.id)+'">Accept</button><button type="button" data-status="declined" data-req="'+esc(row.id)+'">Decline</button>':row.status==='accepted'?'<button type="button" data-status="scheduled" data-req="'+esc(row.id)+'">Mark scheduled</button><button type="button" data-calendar="'+esc(row.id)+'">Add to calendar</button>':row.status==='scheduled'?'<button type="button" data-status="completed" data-req="'+esc(row.id)+'">Mark completed</button>':'';
+      return '<article class="card"><div class="pills"><span class="pill book">'+esc(api.statusLabel(row.status))+'</span></div><h2>'+esc(row.address)+'</h2><p class="meta">'+esc(row.tenancy)+(row.timeframe?' · '+esc(row.timeframe):'')+'</p>'+(who?'<p class="meta">Access: '+esc(who.contactName)+' · '+esc(who.contactPhone)+'</p>':'')+'<div class="actions">'+buttons+'</div></article>';
+    }).join('');
+    return '<button type="button" class="back" data-tab="jobs">Back</button><h1 id="inbox">Job requests</h1><p>Adam sees the access phone here. Agencies do not. Completing a request removes that phone from this list.</p>'+(view.notice?'<p class="note">'+esc(view.notice)+'</p>':'')+(cards||'<p class="empty">No requests.</p>');
   }
   function certificateView(){
     const cert=(session.certificates||[]).filter(function(c){return c.id===view.certificateId})[0];
@@ -156,7 +204,7 @@
     }).join('');
     const laws=model.laws.map(function(law){return '<li>'+esc(law)+'</li>'}).join('');
     const lead=model.compliant?model.complianceLead:model.failLead;
-    return '<button type="button" class="back" data-tab="certificates">Back</button><article class="report" id="certificate"><header class="reporthead"><img class="reportlogo" src="../icon-192.png" alt=""><div><div class="reporttitle">'+esc(model.title)+'</div><div class="reportbrand">'+esc(model.brand)+'</div><div class="reportphone">'+esc(model.phone)+'</div></div></header><div class="reporttop"><div><div>'+esc(model.attention)+'</div>'+model.postal.map(function(line){return '<div>'+esc(line)+'</div>'}).join('')+'</div><div>Report Date: <b>'+esc(model.reportDate||'')+'</b></div></div><div class="reportdetail"><div class="reportmain"><div class="reportline"><span class="reportlabel">SERVICE DETAILS</span><span class="reportaddr">'+esc(model.serviceAddress)+'</span></div><div class="complybox">'+(model.compliant?'<span class="tick" aria-hidden="true">✓</span>':'')+'<div><p>'+esc(lead)+'</p><ul>'+laws+'</ul><p>'+esc(model.batteryNote)+'</p></div></div></div><div class="reportside">'+side+'</div></div><table class="reporttable"><thead><tr><th>Product Description</th><th>Location</th><th>Expiry Date</th><th>Action</th><th>Reason</th></tr></thead><tbody>'+(rows||'<tr><td colspan="5">No alarms were recorded.</td></tr>')+'</tbody></table><p class="legend">'+esc(model.legend)+'</p><p class="foot">'+esc(model.footer)+'</p><div class="actions"><button type="button" class="pri" data-download="'+esc(cert.id)+'">Download PDF</button></div></article>';
+    return '<button type="button" class="back" data-tab="certificates">Back</button><article class="report" id="certificate"><header class="reporthead"><img class="reportlogo" src="../icon-192.png" alt=""><div><div class="reporttitle">'+esc(model.title)+'</div><div class="reportbrand">'+esc(model.brand)+'</div><div class="reportphone">'+esc(model.phone)+'</div></div></header><div class="reporttop"><div><div>'+esc(model.attention)+'</div>'+model.postal.map(function(line){return '<div>'+esc(line)+'</div>'}).join('')+'</div><div>Report Date: <b>'+esc(model.reportDate||'')+'</b></div></div><div class="reportdetail"><div class="reportmain"><div class="reportline"><span class="reportlabel">SERVICE DETAILS</span><span class="reportaddr">'+esc(model.serviceAddress)+'</span></div><div class="complybox">'+(model.compliant?'<span class="tick" aria-hidden="true">✓</span>':'')+'<div><p>'+esc(lead)+'</p><ul>'+laws+'</ul><p>'+esc(model.batteryNote)+'</p></div></div></div><div class="reportside">'+side+'</div></div><table class="reporttable"><thead><tr><th>Product Description</th><th>Location</th><th>Expiry Date</th><th>Action</th><th>Reason</th></tr></thead><tbody>'+(rows||'<tr><td colspan="5">No alarms were recorded.</td></tr>')+'</tbody></table><p class="legend">'+esc(model.legend)+'</p><p class="foot">'+esc(model.footer)+'</p><div class="actions"><button type="button" class="pri" data-download="'+esc(cert.id)+'">Download service report</button><button type="button" data-compliance="'+esc(cert.id)+'">Download compliance certificate</button></div></article>';
   }
   function invoiceRows(){
     const inv=window.CCSAInvoice;
@@ -189,15 +237,18 @@
   }
   function mainView(){
     let body='';
-    if(view.invoiceId)body=invoiceView();
+    if(view.inbox)body=inboxView();
+    else if(view.requestForm)body=requestForm();
+    else if(view.invoiceId)body=invoiceView();
     else if(view.certificateId)body=certificateView();
     else if(view.propertyId)body=propertyView();
     else if(view.tab==='jobs')body=jobsView();
     else if(view.tab==='certificates')body=certificatesView();
     else if(view.tab==='invoices')body=invoicesView();
     else body=propertyCards();
-    const showTools=!view.propertyId&&!view.certificateId&&!view.invoiceId;
-    return header()+'<main>'+demoBar()+(showTools?stats()+tabs():'')+body+'<p class="foot">Read-only portal for '+esc(session.agency.name)+'. Tenant names, phone numbers and email addresses are not shown.</p></main>';
+    const showTools=!view.propertyId&&!view.certificateId&&!view.invoiceId&&!view.requestForm&&!view.inbox;
+    const foot=view.inbox?'Access phones are on this inbox only. They are removed when a request is completed, and they are not shown to the agency.':'Portal for '+esc(session.agency.name)+'. Tenant names, phone numbers and email addresses are not shown.';
+    return header()+'<main>'+demoBar()+(showTools?stats()+tabs():'')+body+'<p class="foot">'+foot+'</p></main>';
   }
   function paint(){
     if(painting)return;
@@ -216,6 +267,55 @@
     a.href=url;a.download=CCSAInvoice.fileName(row);
     document.body.appendChild(a);a.click();a.remove();
     setTimeout(function(){URL.revokeObjectURL(url)},4000);
+  }
+  function dueFor(cert){
+    const prop=(session.properties||[]).filter(function(p){return p.id===cert.propertyId})[0];
+    return prop&&prop.due||'';
+  }
+  function downloadCompliance(id){
+    const cert=(session.certificates||[]).filter(function(c){return c.id===id})[0];
+    if(!cert||!window.CCSACertificate)return;
+    const bytes=CCSACertificate.buildCompliancePdf(cert,{due:dueFor(cert)});
+    const blob=new Blob([bytes],{type:'application/pdf'});
+    const a=document.createElement('a');
+    const url=URL.createObjectURL(blob);
+    a.href=url;a.download=CCSACertificate.complianceFileName(cert);
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(function(){URL.revokeObjectURL(url)},4000);
+  }
+  function readFile(file){
+    return new Promise(function(resolve,reject){
+      if(!file){resolve(null);return}
+      if(file.size>450000){reject(new Error('That file is over 450 KB. Choose a smaller PDF or photo. Nothing was sent.'));return}
+      const reader=new FileReader();
+      reader.onload=function(){
+        const raw=String(reader.result||'');
+        const comma=raw.indexOf(',');
+        resolve({fileName:file.name,fileType:file.type,fileData:comma>=0?raw.slice(comma+1):raw});
+      };
+      reader.onerror=function(){reject(new Error('That file could not be read. Nothing was sent.'))};
+      reader.readAsDataURL(file);
+    });
+  }
+  async function sendBuilt(items){
+    if(session.mode==='demo'){
+      items.forEach(function(item){session.requests.unshift(item.request)});
+      view.notice='Sent '+items.length+' request'+(items.length===1?'':'s')+'. The access phone stays with Adam and is not shown here.';
+      view.requestForm=false;
+      view.tab='jobs';
+      go({requestForm:false,tab:'jobs',notice:view.notice});
+      return;
+    }
+    if(!authBits){view.notice='Sign in again before sending.';paint();return}
+    const store=authBits.storeMod;
+    for(let i=0;i<items.length;i++){
+      const item=items[i];
+      await store.setDoc(store.doc(authBits.db,'portal',item.request.agencyId,'requests',item.request.id),item.request);
+      await store.setDoc(store.doc(authBits.db,'portal',item.access.agencyId,'access',item.access.id),item.access);
+      session.requests.unshift(item.request);
+    }
+    view.notice='Sent '+items.length+' request'+(items.length===1?'':'s')+'. The access phone stays with Adam and is not shown here.';
+    go({requestForm:false,tab:'jobs',notice:view.notice});
   }
   function download(id){
     const cert=(session.certificates||[]).filter(function(c){return c.id===id})[0];
@@ -242,16 +342,74 @@
     const invTo=document.getElementById('invto');
     if(invTo)invTo.onchange=function(){view.invTo=invTo.value;paint()};
     const demo=document.getElementById('demoagency');
-    if(demo)demo.onchange=function(){loadDemo(demo.value);view.propertyId='';view.certificateId='';view.invoiceId='';view.filter='';paint()};
+    if(demo)demo.onchange=function(){loadDemo(demo.value);view.propertyId='';view.certificateId='';view.invoiceId='';view.requestForm=false;view.inbox=false;view.filter='';view.notice='';paint()};
+    const reqForm=document.getElementById('requestform');
+    if(reqForm)reqForm.onsubmit=function(e){
+      e.preventDefault();
+      const file=document.getElementById('reqfile').files[0];
+      readFile(file).then(function(attached){
+        const built=window.CCSARequests.buildOne(session.agency,{
+          address:document.getElementById('reqaddr').value,
+          tenancy:document.getElementById('reqten').value,
+          contactName:document.getElementById('reqname').value,
+          contactPhone:document.getElementById('reqphone').value,
+          timeframe:document.getElementById('reqtime').value,
+          notes:document.getElementById('reqnotes').value,
+          fileName:attached&&attached.fileName,
+          fileType:attached&&attached.fileType,
+          fileData:attached&&attached.fileData
+        },new Date().toISOString());
+        if(!built.ok){view.notice=built.error;paint();return}
+        return sendBuilt([built]);
+      }).catch(function(err){view.notice=err.message;paint()});
+    };
+    const csv=document.getElementById('reqcsv');
+    if(csv)csv.onchange=function(){
+      const file=csv.files[0];
+      if(!file)return;
+      const reader=new FileReader();
+      reader.onload=function(){
+        const parsed=CCSARequests.parseCsv(String(reader.result||''));
+        if(!parsed.ok){view.notice=parsed.error;paint();return}
+        const many=CCSARequests.buildMany(session.agency,parsed.rows,new Date().toISOString());
+        if(!many.ok){view.notice=many.error;paint();return}
+        sendBuilt(many.items).catch(function(err){view.notice=err.message||'That upload did not finish.';paint()});
+      };
+      reader.readAsText(file);
+    };
     appEl.onclick=function(e){
       const b=e.target.closest?e.target.closest('button'):null;
       if(!b||!appEl.contains(b))return;
-      if(b.dataset.tab)go({tab:b.dataset.tab,propertyId:'',certificateId:'',invoiceId:'',filter:view.filter});
+      if(b.id==='newjob')go({requestForm:true,inbox:false,propertyId:'',certificateId:'',invoiceId:'',tab:'jobs'});
+      if(b.id==='demoinbox')go({inbox:true,requestForm:false,propertyId:'',certificateId:'',invoiceId:''});
+      if(b.id==='reqtemplate'){
+        const blob=new Blob([CCSARequests.csvTemplate()],{type:'text/csv'});
+        const a=document.createElement('a');
+        const url=URL.createObjectURL(blob);
+        a.href=url;a.download='ccsa-job-requests.csv';
+        document.body.appendChild(a);a.click();a.remove();
+        setTimeout(function(){URL.revokeObjectURL(url)},4000);
+      }
+      if(b.dataset.accept||b.dataset.req){
+        const id=b.dataset.accept||b.dataset.req;
+        const status=b.dataset.accept?'accepted':b.dataset.status;
+        const row=(session.requests||[]).filter(function(item){return item.id===id})[0];
+        const access=window.CCSARequests.demoAccess(session.agency.id)[id]||null;
+        const moved=CCSARequests.applyStatus(row,access,status);
+        if(!moved.ok){view.notice=moved.error;paint();return}
+        const at=session.requests.findIndex(function(item){return item.id===id});
+        if(at>=0)session.requests[at]=moved.request;
+        view.notice=status==='completed'?'Completed. The access phone was removed.':CCSARequests.statusLabel(status)+'.';
+        paint();
+      }
+      if(b.dataset.calendar){view.notice='Calendar events are added from Adam\'s app, and only when he taps Add to calendar. Nothing was sent.';paint()}
+      if(b.dataset.tab)go({tab:b.dataset.tab,propertyId:'',certificateId:'',invoiceId:'',requestForm:false,inbox:false,filter:view.filter});
       if(b.dataset.filter!=null&&b.classList.contains('stat'))go({filter:view.filter===b.dataset.filter?'':b.dataset.filter,tab:'properties',propertyId:'',certificateId:'',invoiceId:''});
       if(b.dataset.property)go({propertyId:b.dataset.property,certificateId:'',invoiceId:'',tab:'properties'});
       if(b.dataset.certificate)go({certificateId:b.dataset.certificate,propertyId:'',invoiceId:''});
       if(b.dataset.invoice)go({invoiceId:b.dataset.invoice,certificateId:'',propertyId:'',tab:'invoices'});
       if(b.dataset.download)download(b.dataset.download);
+      if(b.dataset.compliance)downloadCompliance(b.dataset.compliance);
       if(b.dataset.invoiceDownload)downloadInvoice(b.dataset.invoiceDownload);
     };
   }
@@ -292,9 +450,11 @@
     const jobs=await read('jobs');
     const certificates=await read('certificates');
     let invoices=[];
+    let requests=[];
     try{invoices=await read('invoices')}catch(e){invoices=[]}
+    try{requests=await read('requests')}catch(e){requests=[]}
     const today=data().sydneyToday();
-    session={mode:'live',today:today,agency:agency,jobs:jobs,certificates:certificates,invoices:invoices,properties:data().rollup(jobs,today,agency),choices:[]};
+    session={mode:'live',today:today,agency:agency,jobs:jobs,certificates:certificates,invoices:invoices,requests:requests,properties:data().rollup(jobs,today,agency),choices:[],notice:''};
     loginError='';
     paint();
   }
@@ -312,7 +472,7 @@
     }
   }
   async function signOut(){
-    session=null;view={tab:'properties',q:'',filter:'',propertyId:'',certificateId:'',invoiceId:'',invoiceStatus:'',invFrom:'',invTo:''};
+    session=null;view={tab:'properties',q:'',filter:'',propertyId:'',certificateId:'',invoiceId:'',invoiceStatus:'',invFrom:'',invTo:'',requestForm:false,inbox:false,notice:''};
     if(authBits){try{await authBits.authMod.signOut(authBits.auth)}catch(e){}}
     if(/[?&]demo=1/.test(location.search))location.href=location.pathname;
     else paint();

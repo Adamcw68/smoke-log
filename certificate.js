@@ -183,9 +183,9 @@
     this.rect(x,fromTop,34,34,ACCENT);
     this.text('F2',12,x+6,fromTop+10,'CC',WHITE);
   };
-  Doc.prototype.header=function(continued){
+  Doc.prototype.header=function(continued,kicker){
     this.mark(36,16);
-    this.text('F1',9,80,16,'Service report',MUTED);
+    this.text('F1',9,80,16,kicker||'Service report',MUTED);
     this.text('F2',12,80,30,'Clarence Coast Smoke Alarms',ACCENT);
     this.cmd(rgb(ACCENT)+' RG\n1.2 w\n80 '+num(PAGE_H-46)+' m 310 '+num(PAGE_H-46)+' l S\n');
     this.text('F1',8,80,50,'0412 092 233',MUTED);
@@ -339,6 +339,65 @@
   function buildCertificatePdf(cert){
     return buildPdf(drawCertificate(cert||{}));
   }
+  function complianceModel(cert,extra){
+    extra=extra||{};
+    const report=viewModel(cert||{});
+    const due=dmy(extra.due||(cert&&cert.due)||'');
+    const ok=!!(report.compliant&&due);
+    return {
+      title:'Compliance certificate',
+      brand:'Clarence Coast Smoke Alarms',
+      phone:report.phone,
+      attention:report.attention,
+      address:report.serviceAddress,
+      statement:ok?'Clarence Coast Smoke Alarms records this property as meeting the smoke alarm checks from the latest visit.':'Clarence Coast Smoke Alarms does not record this property as compliant from the latest visit.',
+      validUntil:ok?due:'',
+      validLabel:ok?'Valid until':'',
+      date:report.reportDate,
+      inspector:report.inspector,
+      footer:report.footer
+    };
+  }
+  function drawCompliance(cert,extra){
+    const view=complianceModel(cert,extra);
+    const doc=new Doc();
+    doc.header(false,'Compliance certificate');
+    if(view.attention){
+      wrap(view.attention,9,500,false).forEach(function(line){
+        doc.text('F1',9,36,doc.top,line,INK);
+        doc.top+=12;
+      });
+    }
+    doc.top+=6;
+    wrap(view.address,12,500,true).forEach(function(line){
+      doc.text('F2',12,36,doc.top,line,INK);
+      doc.top+=16;
+    });
+    doc.top+=8;
+    wrap(view.statement,10,500,false).forEach(function(line){
+      doc.text('F1',10,36,doc.top,line,INK);
+      doc.top+=14;
+    });
+    doc.top+=8;
+    if(view.validUntil){
+      doc.text('F1',9,36,doc.top,'Valid until',MUTED);
+      doc.top+=12;
+      doc.text('F2',12,36,doc.top,view.validUntil,ACCENT);
+      doc.top+=20;
+    }
+    doc.text('F1',9,36,doc.top,'Latest visit '+(view.date||''),INK);
+    doc.top+=14;
+    doc.text('F1',9,36,doc.top,'Inspected by '+(view.inspector||''),INK);
+    doc.top+=20;
+    doc.text('F1',8,36,doc.top,view.footer,MUTED);
+    return doc.finish();
+  }
+  function buildCompliancePdf(cert,extra){
+    return buildPdf(drawCompliance(cert||{},extra||{}));
+  }
+  function complianceFileName(cert){
+    return 'CCSA-compliance-'+fileName(cert||{});
+  }
   function pdfText(bytes){
     const list=bytes instanceof Uint8Array?bytes:new Uint8Array(bytes||[]);
     let s='';
@@ -346,5 +405,5 @@
     return s;
   }
 
-  return {viewModel:viewModel,fileName:fileName,buildCertificatePdf:buildCertificatePdf,buildPdf:buildPdf,pdfText:pdfText};
+  return {viewModel:viewModel,complianceModel:complianceModel,fileName:fileName,complianceFileName:complianceFileName,buildCertificatePdf:buildCertificatePdf,buildCompliancePdf:buildCompliancePdf,buildPdf:buildPdf,pdfText:pdfText};
 });
