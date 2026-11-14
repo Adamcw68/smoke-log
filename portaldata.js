@@ -567,6 +567,25 @@
       b.innerHTML=eyeIcon(show);
     });
   }
+  /* Admin is decided by admins/{uid} existing. An agency login is unchanged. */
+  function portalRole(adminExists, agencyRow){
+    if(adminExists)return 'admin';
+    const row=agencyRow||null;
+    if(row&&row.disabled)return 'disabled';
+    if(row&&row.role==='agent'&&row.agencyId)return 'agent';
+    return 'unlinked';
+  }
+  function stackAgency(parts){
+    const jobs=[],certificates=[],invoices=[],requests=[],properties=[];
+    (parts||[]).forEach(function(part){
+      (part.jobs||[]).forEach(function(row){jobs.push(row)});
+      (part.certificates||[]).forEach(function(row){certificates.push(row)});
+      (part.invoices||[]).forEach(function(row){invoices.push(row)});
+      (part.requests||[]).forEach(function(row){requests.push(row)});
+      (part.properties||[]).forEach(function(row){properties.push(row)});
+    });
+    return {id:'all',code:'',name:'All agencies',jobs:jobs,certificates:certificates,invoices:invoices,requests:requests,properties:properties};
+  }
   function visibleAgency(portal,agencyId){
     const bucket=portal&&portal.agencies&&portal.agencies[agencyId];
     if(!bucket)return {id:agencyId||'',jobs:[],certificates:[],properties:[]};
@@ -606,6 +625,8 @@
     demoPortal:demoPortal,
     demoView:demoView,
     visibleAgency:visibleAgency,
+    portalRole:portalRole,
+    stackAgency:stackAgency,
     authError:authError,
     setupSteps:setupSteps,
     statementFor:statementFor,
