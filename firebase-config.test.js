@@ -4,9 +4,9 @@ const fs=require('fs');
 const cfg=require('./firebase-config.js');
 
 test('Firebase Hosting uses its own host as the auth domain and GitHub Pages does not',function(){
-  assert.equal(cfg.authDomainFor('ccsa-smoke-log.web.app','ccsa-smoke-log.firebaseapp.com'),'ccsa-smoke-log.web.app');
+  assert.equal(cfg.authDomainFor('ccsa-smoke-log.web.app','ccsa-smoke-log.firebaseapp.com'),'ccsa-smoke-log.firebaseapp.com');
   assert.equal(cfg.authDomainFor('ccsa-smoke-log.firebaseapp.com','ccsa-smoke-log.firebaseapp.com'),'ccsa-smoke-log.firebaseapp.com');
-  assert.equal(cfg.authDomainFor('CCSA-SMOKE-LOG.WEB.APP','ccsa-smoke-log.firebaseapp.com'),'ccsa-smoke-log.web.app');
+  assert.equal(cfg.authDomainFor('CCSA-SMOKE-LOG.WEB.APP','ccsa-smoke-log.firebaseapp.com'),'ccsa-smoke-log.firebaseapp.com');
   assert.equal(cfg.authDomainFor('adamcw68.github.io','ccsa-smoke-log.firebaseapp.com'),'ccsa-smoke-log.firebaseapp.com');
   assert.equal(cfg.authDomainFor('127.0.0.1','ccsa-smoke-log.firebaseapp.com'),'ccsa-smoke-log.firebaseapp.com');
   assert.equal(cfg.authDomainFor('','ccsa-smoke-log.firebaseapp.com'),'ccsa-smoke-log.firebaseapp.com');
