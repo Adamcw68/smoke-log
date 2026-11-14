@@ -10,6 +10,19 @@ function form(updated,db,agent){
   return {updated:updated,agent:agent,tenancy:'Holiday',tech:'Adam Westerman',date:'2026-11-09',alarms:1,comments:'',al:[{db:db,yn:{cleaned:'Yes',battery:'Yes'},power:['240v'],room:'Hallway',photos:[]}],photos:[]};
 }
 
+test('the signed-in account supplies a short technician name and a saved name stays',function(){
+  assert.equal(sync.technicianFromAccount(null),'');
+  assert.equal(sync.technicianFromAccount({email:'bearus69@gmail.com',displayName:'Adam Westerman'}),'Adam');
+  assert.equal(sync.technicianFromAccount({email:'Craig@ClarenceCoastSmokeAlarms.com.au',displayName:'Craig Jones'}),'Craig');
+  assert.equal(sync.technicianFromAccount({email:'sam.lee@example.com',displayName:'Sam Lee'}),'Sam');
+  assert.equal(sync.technicianFromAccount({email:'pat.nguyen@example.com',displayName:''}),'Pat');
+  assert.equal(sync.worksheetTech('Adam Westerman','Craig').tech,'Adam Westerman');
+  assert.equal(sync.worksheetTech('Adam Westerman','Craig').fill,false);
+  assert.equal(sync.worksheetTech('','Craig').tech,'Craig');
+  assert.equal(sync.worksheetTech('   ','Adam').tech,'Adam');
+  assert.equal(sync.worksheetTech('','') .tech,'Adam');
+});
+
 test('placeholders turn sync off and a real config leaves it on',function(){
   assert.equal(sync.configReady(null),false);
   assert.equal(sync.configReady({apiKey:'YOUR_API_KEY',authDomain:'YOUR_PROJECT_ID.firebaseapp.com',projectId:'YOUR_PROJECT_ID',appId:'YOUR_APP_ID'}),false);
