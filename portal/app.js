@@ -84,7 +84,8 @@
     return '<header><img src="../icon-192.png" alt=""><div class="brand"><b>Clarence Coast Smoke Alarms</b><span>Agency portal · '+who+'</span></div>'+action+'</header>';
   }
   function loginView(){
-    return header()+'<main><form class="login" id="loginform"><h1>Agency portal</h1><p>Sign in to see your agency\'s properties, jobs, compliance certificates and invoices. The portal is read-only, and it does not show tenant names or contact details.</p><label class="l" for="email">Email</label><input class="t" id="email" name="email" type="email" autocomplete="username" required><label class="l" for="password">Password</label><input class="t" id="password" name="password" type="password" autocomplete="current-password" required><div class="actions"><button class="pri" type="submit">Sign in</button></div>'+(loginError?'<div class="err" role="alert">'+esc(loginError)+'</div>':'')+'<p class="meta"><a href="?demo=1">Preview with sample data</a></p></form></main>';
+    const pass=data().passwordField({id:'password',name:'password',autocomplete:'current-password',required:true});
+    return header()+'<main><form class="login" id="loginform"><h1>Agency portal</h1><p>Sign in to see your agency\'s properties, jobs, compliance certificates and invoices. The portal is read-only, and it does not show tenant names or contact details.</p><label class="l" for="email">Email</label><input class="t" id="email" name="email" type="email" autocomplete="username" required><label class="l" for="password">Password</label>'+pass+'<div class="actions"><button class="pri" type="submit">Sign in</button></div>'+(loginError?'<div class="err" role="alert">'+esc(loginError)+'</div>':'')+'<p class="meta"><a href="?demo=1">Preview with sample data</a></p></form></main>';
   }
   function stats(){
     const counts=data().counts(session.properties);
@@ -482,6 +483,7 @@
       appEl.textContent='The portal files did not load.';
       return;
     }
+    if(CCSAPortalData.bindPasswordEyes)CCSAPortalData.bindPasswordEyes(document);
     const demo=/[?&]demo=1(?:&|$)/.test(location.search);
     if(demo){
       loadDemo('rwm');

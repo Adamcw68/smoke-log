@@ -186,15 +186,33 @@ test('rules lists match the published keys',function(){
   });
 });
 
+test('password fields start hidden and the eye button does not submit the form',function(){
+  const html=portal.passwordField({id:'password',name:'password',autocomplete:'current-password',required:true});
+  assert.match(html,/type="password"/);
+  assert.match(html,/id="password"/);
+  assert.match(html,/name="password"/);
+  assert.match(html,/autocomplete="current-password"/);
+  assert.match(html,/aria-label="Show password"/);
+  assert.match(html,/type="button"/);
+  assert.doesNotMatch(html,/type="submit"/);
+  const admin=portal.passwordField({id:'portalpass',autocomplete:'new-password',value:'Secret&<>"'});
+  assert.match(admin,/id="portalpass"/);
+  assert.match(admin,/autocomplete="new-password"/);
+  assert.match(admin,/value="Secret&amp;&lt;&gt;&quot;"/);
+  assert.match(fs.readFileSync('portal/app.js','utf8'),/passwordField\(\{id:'password'/);
+  assert.match(fs.readFileSync('portaladmin.js','utf8'),/passwordField\(\{id:'portalpass'/);
+  assert.match(fs.readFileSync('portal/app.css','utf8'),/\.pweye\{[^}]*width:44px/);
+});
+
 test('the service worker leaves the portal alone and does not clear site data',function(){
   const sw=fs.readFileSync('sw.js','utf8');
   const html=fs.readFileSync('index.html','utf8');
-  assert.match(sw,/ccsa-v2\.34\.0-20261114/);
+  assert.match(sw,/ccsa-v2\.35\.0-20261114/);
   assert.match(sw,/requests\.js/);
   assert.match(sw,/portaldata\.js/);
   assert.ok(sw.includes('if(/\\/portal(?:\\/|$)/.test(u.pathname))return;'));
   assert.doesNotMatch(sw,/indexedDB\.deleteDatabase|localStorage\.clear|caches\.keys\(\)\.then\(k=>Promise\.all\(k\.map/);
-  assert.match(html,/APP_VERSION='2\.34\.0 \(20261114\)'/);
+  assert.match(html,/APP_VERSION='2\.35\.0 \(20261114\)'/);
   assert.match(html,/portaladmin\.js/);
   assert.match(html,/portalNudge/);
 });
