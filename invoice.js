@@ -60,7 +60,9 @@
       termsText:'Payment is due within 14 days.',
       gstRegistered:false,
       prices:{service:0,replace:0,battery:0},
-      nextNumber:1
+      nextNumber:1,
+      accountCode:'200',
+      brandingTheme:''
     };
   }
   function cents(value){
@@ -105,7 +107,74 @@
       battery:cents(prices.battery)
     };
     base.nextNumber=Math.max(1,Math.round(+src.nextNumber||1));
+    base.accountCode=clean(src.accountCode).replace(/[^A-Za-z0-9]/g,'').slice(0,10)||'200';
+    base.brandingTheme=clean(src.brandingTheme).slice(0,80);
     return base;
+  }
+  const XERO_HEADERS=['*ContactName','EmailAddress','POAddressLine1','POAddressLine2','POAddressLine3','POAddressLine4','POCity','PORegion','POPostalCode','POCountry','*InvoiceNumber','Reference','*InvoiceDate','*DueDate','InventoryItemCode','*Description','*Quantity','*UnitAmount','Discount','*AccountCode','*TaxType','TrackingName1','TrackingOption1','TrackingName2','TrackingOption2','Currency','BrandingTheme'];
+  function dmy(value){
+    const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd(value));
+    if(!m)return '';
+    return m[3]+'/'+m[2]+'/'+m[1];
+  }
+  function csvCell(value){
+    const s=String(value==null?'':value);
+    if(/[",\n\r]/.test(s))return '"'+s.replace(/"/g,'""')+'"';
+    return s;
+  }
+  function xeroContact(invoice){
+    if(invoice.privateOwner||invoice.agencyCode==='Private Owner')return clean(invoice.agencyName)||'The owner';
+    const lib=portal();
+    const found=lib&&lib.agencyFromCode?lib.agencyFromCode(invoice.agencyCode||invoice.agencyName||''):null;
+    if(found&&found.privateOwner)return clean(invoice.agencyName)||'The owner';
+    if(found&&found.name)return found.name;
+    return clean(invoice.agencyName||invoice.agencyCode);
+  }
+  function xeroTax(invoice){return invoice&&invoice.gstRegistered?'GST on Income':'BAS Excluded'}
+  function xeroCandidates(list,includeExported){
+    return (list||[]).filter(function(inv){
+      if(!inv||inv.draft||!numberValue(inv.number))return false;
+      if(!includeExported&&inv.exportedToXeroAt)return false;
+      return true;
+    });
+  }
+  function xeroRows(invoices,settings){
+    settings=normaliseSettings(settings);
+    const rows=[];
+    (invoices||[]).forEach(function(inv){
+      if(!inv||inv.draft||!numberValue(inv.number))return;
+      const lines=(inv.lines||[]).filter(function(line){return clean(line.description)&&(+line.qty>0)});
+      const usable=lines.length?lines:[{description:'Smoke alarm service',qty:1,unitCents:inv.exCents||0}];
+      usable.forEach(function(line){
+        rows.push([
+          xeroContact(inv),'','','','','','','','','',
+          inv.number,
+          inv.address||'',
+          dmy(inv.issueDate),
+          dmy(inv.dueDate),
+          '',
+          clean(line.description),
+          String(Math.round(+line.qty)||0),
+          dollars(line.unitCents),
+          '',
+          settings.accountCode,
+          xeroTax(inv),
+          '','','','',
+          'AUD',
+          settings.brandingTheme
+        ]);
+      });
+    });
+    return rows;
+  }
+  function xeroCsv(invoices,settings){
+    const lines=[XERO_HEADERS.map(csvCell).join(',')];
+    xeroRows(invoices,settings).forEach(function(row){lines.push(row.map(csvCell).join(','))});
+    return lines.join('\r\n')+'\r\n';
+  }
+  function markExported(invoices,now){
+    const stamp=now||new Date().toISOString();
+    return (invoices||[]).map(function(inv){return Object.assign({},inv,{exportedToXeroAt:stamp})});
   }
   function formatNumber(n){return 'INV-'+String(n).padStart(4,'0')}
   function numberValue(value){
@@ -573,6 +642,10 @@
       <label class="l" for="inv-days">Payment terms (days)</label><input class="t" id="inv-days" type="number" min="0" max="365" value="${esc(s.termsDays)}">
       <label class="l" for="inv-terms">Terms line</label><input class="t" id="inv-terms" value="${esc(s.termsText)}">
       <label class="tog"><span>Registered for GST. A tax invoice adds 10% GST.</span><input type="checkbox" id="inv-gst" ${s.gstRegistered?'checked':''}></label>
+      <h2>Xero</h2>
+      <p class="note">These stay on this phone. They are not published to an agency. This site cannot sign in to Xero, so export a CSV and import it there.</p>
+      <label class="l" for="inv-xero-account">Xero account code</label><input class="t" id="inv-xero-account" value="${esc(s.accountCode)}" placeholder="200">
+      <label class="l" for="inv-xero-theme">Xero branding theme</label><input class="t" id="inv-xero-theme" value="${esc(s.brandingTheme)}" placeholder="Leave blank">
       <h2>Price list</h2>
       <p class="note">These start at 0.00. Enter the amount you charge, excluding GST.</p>
       <label class="l" for="inv-price-service">${esc(SERVICE)}</label><input class="t" id="inv-price-service" inputmode="decimal" value="${esc(dollars(s.prices.service))}">
@@ -582,11 +655,13 @@
       <p class="note" id="inv-msg">${esc(mem.message||'')}</p>
       </section>
       <section class="f"><h2>Invoices</h2>
-      <p class="note">A completed job gets a draft. Change the lines, then issue it. Publish sends only issued invoices, and only to that agency.</p>
+      <p class="note">A completed job gets a draft. Change the lines, then issue it. Publish sends only issued invoices, and only to that agency. Export to Xero stays on this phone.</p>
+      <div class="row"><button type="button" id="xero-open">Export to Xero</button></div>
+      <dialog id="xero-dialog"><h2>Export to Xero</h2><p class="note">Issued invoices that have not been exported are ticked. Amounts exclude GST. Dates are DD/MM/YYYY. Import this file in Xero and choose Tax Exclusive.</p><label class="tog"><span>Include invoices already exported</span><input type="checkbox" id="xero-again"></label><div id="xero-choices"></div><div class="row"><button type="button" class="btn pri" id="xero-download">Download CSV</button><button type="button" id="xero-close">Close</button></div></dialog>
       ${rows.length?rows.map(function(inv){
         const st=displayStatus(inv,today);
         const who=inv.privateOwner?(inv.agencyName||'The owner'):(inv.agencyName||inv.agencyCode);
-        return '<article class="card" data-invoice-job="'+esc(inv.jobId)+'"><div class="chiprow"><span class="badge">'+(inv.draft?'Draft':esc(inv.number))+'</span><span class="badge">'+esc(statusLabel(st))+'</span></div><div class="addr">'+esc(inv.address)+'</div><div class="meta">'+esc(who)+' · '+esc(money(inv.totalCents))+'</div><div class="row"><button type="button" data-open-invoice="'+esc(inv.jobId)+'">Review</button></div></article>';
+        return '<article class="card" data-invoice-job="'+esc(inv.jobId)+'"><div class="chiprow"><span class="badge">'+(inv.draft?'Draft':esc(inv.number))+'</span><span class="badge">'+esc(statusLabel(st))+'</span>'+(inv.exportedToXeroAt?'<span class="badge">Exported</span>':'')+'</div><div class="addr">'+esc(inv.address)+'</div><div class="meta">'+esc(who)+' · '+esc(money(inv.totalCents))+'</div><div class="row"><button type="button" data-open-invoice="'+esc(inv.jobId)+'">Review</button></div></article>';
       }).join(''):'<p class="note">No invoices yet. Archive or mark a job done and come back.</p>'}
       </section>
       ${selected?`<section class="f" id="inv-editor"><h2>${selected.draft?'Draft':'Invoice '+esc(selected.number)}</h2>
@@ -620,7 +695,9 @@
       termsText:el.querySelector('#inv-terms').value,
       gstRegistered:el.querySelector('#inv-gst').checked,
       prices:{service:service,replace:replace,battery:battery},
-      nextNumber:mem.settings.nextNumber
+      nextNumber:mem.settings.nextNumber,
+      accountCode:el.querySelector('#inv-xero-account').value,
+      brandingTheme:el.querySelector('#inv-xero-theme').value
     });
   }
   function readLines(el){
@@ -682,6 +759,47 @@
       mem.message=mem.invoices[inv.jobId].status==='paid'?'Marked paid. Publish again so the agency sees it.':'Marked unpaid.';
       paint(el);
     };
+    function fillXero(includeExported){
+      const box=el.querySelector('#xero-choices');
+      if(!box)return;
+      const list=Object.keys(mem.invoices).map(function(id){return mem.invoices[id]});
+      const rows=xeroCandidates(list,true).filter(function(inv){return includeExported||!inv.exportedToXeroAt});
+      if(!rows.length){box.innerHTML='<p class="note">No issued invoices to export.</p>';return}
+      box.innerHTML=rows.map(function(inv){
+        const checked=!inv.exportedToXeroAt?' checked':'';
+        return '<label class="tog"><span>'+esc(inv.number)+' · '+esc(xeroContact(inv))+' · '+esc(inv.address)+(inv.exportedToXeroAt?' · already exported':'')+'</span><input type="checkbox" data-xero="'+esc(inv.jobId)+'"'+checked+'></label>';
+      }).join('');
+    }
+    const openXero=el.querySelector('#xero-open');
+    const dialog=el.querySelector('#xero-dialog');
+    if(openXero&&dialog)openXero.onclick=function(){
+      const again=el.querySelector('#xero-again');
+      if(again)again.checked=false;
+      fillXero(false);
+      if(dialog.showModal)dialog.showModal();
+      else dialog.setAttribute('open','');
+    };
+    const again=el.querySelector('#xero-again');
+    if(again)again.onchange=function(){fillXero(again.checked)};
+    const closeXero=el.querySelector('#xero-close');
+    if(closeXero&&dialog)closeXero.onclick=function(){if(dialog.close)dialog.close();else dialog.removeAttribute('open')};
+    const downloadXero=el.querySelector('#xero-download');
+    if(downloadXero)downloadXero.onclick=function(){
+      const picked=[].map.call(el.querySelectorAll('[data-xero]:checked'),function(box){return mem.invoices[box.dataset.xero]}).filter(Boolean);
+      if(!picked.length){mem.message='Tick at least one invoice.';paint(el);return}
+      const csv=xeroCsv(picked,mem.settings);
+      const stamp=new Date().toISOString();
+      markExported(picked,stamp).forEach(function(inv){mem.invoices[inv.jobId]=inv});
+      save();
+      const blob=new Blob([csv],{type:'text/csv'});
+      const a=document.createElement('a');
+      const url=URL.createObjectURL(blob);
+      a.href=url;a.download='xero-sales-invoices.csv';
+      document.body.appendChild(a);a.click();a.remove();
+      setTimeout(function(){URL.revokeObjectURL(url)},4000);
+      mem.message='CSV downloaded. These invoices are marked exported on this phone. Import the file in Xero.';
+      paint(el);
+    };
     const pdf=el.querySelector('#inv-pdf');
     if(pdf)pdf.onclick=function(){
       const inv=mem.invoices[mem.selected];if(!inv)return;
@@ -708,6 +826,7 @@
     totals:totals,suggestLines:suggestLines,formatNumber:formatNumber,nextFree:nextFree,
     draftFromJob:draftFromJob,applyLines:applyLines,issue:issue,markPaid:markPaid,displayStatus:displayStatus,statusLabel:statusLabel,
     toPortal:toPortal,tenantHits:tenantHits,sameKeys:sameKeys,filterInvoices:filterInvoices,
+    XERO_HEADERS:XERO_HEADERS,xeroCsv:xeroCsv,xeroRows:xeroRows,xeroCandidates:xeroCandidates,xeroContact:xeroContact,xeroTax:xeroTax,markExported:markExported,
     viewModel:viewModel,fileName:fileName,buildInvoicePdf:buildInvoicePdf,demoInvoices:demoInvoices,sampleSettings:sampleSettings,
     portalCopies:portalCopies,syncDrafts:syncDrafts,mount:mount
   };
