@@ -3,13 +3,13 @@
    They are not a secret. Firestore rules allow each person to read and write only users/{their uid}.
    Storage is not used. Photos are stored as Firestore documents.
    If a value is replaced with a YOUR_ placeholder, sync turns off and the app stays on this device.
-   On Firebase Hosting the auth domain is this site, so /__/auth stays on the same origin.
-   GitHub Pages cannot host that handler, so it keeps ccsa-smoke-log.firebaseapp.com. */
+   The registered sign-in handler is https://ccsa-smoke-log.firebaseapp.com/__/auth/handler.
+   On that host the auth domain is the site itself. web.app is not registered, so it uses the firebaseapp.com handler and the page asks you to open firebaseapp.com. */
 (function(root){
   function authDomainFor(host, fallback){
     const h=String(host||'').toLowerCase();
     const fb=fallback||'ccsa-smoke-log.firebaseapp.com';
-    if(/\.web\.app$/i.test(h)||/\.firebaseapp\.com$/i.test(h))return h;
+    if(/\.firebaseapp\.com$/i.test(h))return h;
     return fb;
   }
   let host='';

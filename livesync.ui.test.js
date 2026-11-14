@@ -51,16 +51,24 @@ test('the sync panel shows each state without contacting Firebase',{timeout:6000
   assert.match(await page.$eval('#syncpanel',el=>el.innerText),/Make PDF/);
   assert.match(await page.$eval('#syncpanel',el=>el.innerText),/only on this device/);
   const note=await page.evaluate(()=>CCSASync.hostingNotice('adamcw68.github.io'));
-  assert.match(note,/ccsa-smoke-log\.web\.app/);
-  assert.match(note,/Export worksheets/);
-  assert.equal(await page.evaluate(()=>CCSASync.hostingNotice('ccsa-smoke-log.web.app')),'');
-  await page.evaluate(text=>{
+  assert.match(note.text,/ccsa-smoke-log\.firebaseapp\.com/);
+  assert.doesNotMatch(note.text,/web\.app/);
+  assert.match(note.text,/Export worksheets/);
+  assert.equal(note.href,'https://ccsa-smoke-log.firebaseapp.com/');
+  const moved=await page.evaluate(()=>CCSASync.hostingNotice('ccsa-smoke-log.web.app',{pathname:'/portal/',search:'',hash:''}));
+  assert.equal(moved.href,'https://ccsa-smoke-log.firebaseapp.com/portal/');
+  await page.evaluate(info=>{
     const p=document.createElement('p');
     p.id='hostnote';
     p.className='note';
-    p.textContent=text;
+    p.textContent=info.text+' ';
+    const a=document.createElement('a');
+    a.id='hostlink';
+    a.href=info.href;
+    a.textContent='Open ccsa-smoke-log.firebaseapp.com';
+    p.appendChild(a);
     document.querySelector('main').prepend(p);
     p.scrollIntoView({block:'center'});
   },note);
-  await (await page.$('#hostnote')).screenshot({path:path.join(ART,'hosting_notice_pages.png')});
+  await (await page.$('#hostnote')).screenshot({path:path.join(ART,'hosting_notice_firebaseapp.png')});
 });

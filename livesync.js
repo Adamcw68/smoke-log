@@ -50,9 +50,17 @@
     if(isIos(nav)&&isStandalone(nav)&&!sameOriginAuth(nav))return 'popup-then-browser';
     return 'popup-then-redirect';
   }
-  function hostingNotice(host){
-    if(!/\.github\.io$/i.test(String(host||'')))return '';
-    return 'Home-screen sign-in works at https://ccsa-smoke-log.web.app. Worksheets saved on this address stay here. Sign in there with the same Google account and they download. Or tap Export worksheets here and Import worksheets there.';
+  const SIGN_IN_ORIGIN='https://ccsa-smoke-log.firebaseapp.com';
+  function hostingMoveURL(loc){
+    loc=loc||{};
+    const path=loc.pathname&&String(loc.pathname).charAt(0)==='/'?String(loc.pathname):'/';
+    return SIGN_IN_ORIGIN+path+String(loc.search||'')+String(loc.hash||'');
+  }
+  function hostingNotice(host, loc){
+    const h=String(host||'').toLowerCase();
+    if(/\.github\.io$/i.test(h))return {text:'Home-screen sign-in works at https://ccsa-smoke-log.firebaseapp.com. Worksheets saved on this address stay here. Sign in there with the same Google account and they download. Or tap Export worksheets here and Import worksheets there.',href:SIGN_IN_ORIGIN+'/'};
+    if(h==='ccsa-smoke-log.web.app')return {text:'Google sign-in is not registered for this address. Open the same page on https://ccsa-smoke-log.firebaseapp.com. Worksheets saved here stay on this address until you sign in there, or use Export worksheets and Import worksheets.',href:hostingMoveURL(loc)};
+    return null;
   }
   function browserHelp(nav){
     nav=nav||{};

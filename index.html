@@ -380,7 +380,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="pdflib.js"></script><script src="transfer.js"></script><script src="firebase-config.js"></script><script src="livesync.js"></script><script src="portaldata.js"></script><script src="certificate.js"></script><script src="invoice.js"></script><script src="requests.js"></script><script src="portaladmin.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.33.0 (20261114)';
+const APP_VERSION='2.34.0 (20261114)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -1910,7 +1910,7 @@ async function renderKept(id){
 /* ---------- export / router ---------- */
 function xferHTML(){return `<div class="stack" id="xferbox" style="margin-top:18px"><button type="button" class="btn pri" id="exp">Export worksheets</button><button type="button" class="btn" id="expxls">Export spreadsheet</button><button type="button" class="btn" id="impws">Import worksheets</button></div><p class="note">Export worksheets opens the share sheet. You choose email, AirDrop, Drive or another app and tap Send. This app does not send it. If this browser cannot share a file, the button downloads it instead. On the other device, open this app and tap Import worksheets. The newer worksheet is kept. Jobs, photos and saved PDFs already there are not deleted.</p>`}
 function bindXfer(root){const exp=root.querySelector('#exp'),xls=root.querySelector('#expxls'),imp=root.querySelector('#impws');if(exp)exp.onclick=exportWorksheets;if(xls)xls.onclick=exportSpreadsheet;if(imp)imp.onclick=()=>{$('#xfer').click()}}
-function hostingBannerHTML(){const note=window.CCSASync&&CCSASync.hostingNotice?CCSASync.hostingNotice(location.hostname):'';if(!note)return '';return `<p class="note" id="hostnote">${esc(note)}</p>`}
+function hostingBannerHTML(){if(!window.CCSASync||!CCSASync.hostingNotice)return '';const note=CCSASync.hostingNotice(location.hostname,{pathname:location.pathname,search:location.search,hash:location.hash});if(!note||!note.text)return '';const link=note.href?` <a id="hostlink" href="${esc(note.href)}">Open ccsa-smoke-log.firebaseapp.com</a>`:'';return `<p class="note" id="hostnote">${esc(note.text)}${link}</p>`}
 function syncHTML(){return window.CCSASync?CCSASync.panelHTML(CCSASync.state()):''}
 function bindSync(root){if(!root||!window.CCSASync)return;const inn=root.querySelector('#syncin'),out=root.querySelector('#syncout');if(inn)inn.onclick=()=>CCSASync.signIn();if(out)out.onclick=()=>CCSASync.signOut()}
 function addPortalJob(job){
