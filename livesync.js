@@ -38,11 +38,21 @@
     const ua=String((nav||{}).userAgent||'');
     return /FBAN|FBAV|Instagram|Line\/|Snapchat|TikTok|musical_ly|BytedanceWebview|MicroMessenger|LinkedInApp|Twitter/i.test(ua);
   }
+  function sameOriginAuth(nav){
+    nav=nav||{};
+    const host=String(nav.host||'').toLowerCase();
+    const domain=String(nav.authDomain||'').toLowerCase();
+    return !!(host&&domain&&host===domain);
+  }
   function signInPlan(nav){
     nav=nav||{};
     if(inAppBrowser(nav))return 'open-browser';
-    if(isIos(nav)&&isStandalone(nav))return 'popup-then-browser';
+    if(isIos(nav)&&isStandalone(nav)&&!sameOriginAuth(nav))return 'popup-then-browser';
     return 'popup-then-redirect';
+  }
+  function hostingNotice(host){
+    if(!/\.github\.io$/i.test(String(host||'')))return '';
+    return 'Home-screen sign-in works at https://ccsa-smoke-log.web.app. Worksheets saved on this address stay here. Sign in there with the same Google account and they download. Or tap Export worksheets here and Import worksheets there.';
   }
   function browserHelp(nav){
     nav=nav||{};
@@ -50,6 +60,7 @@
       if(isIos(nav))return {label:'Open in Safari',text:'This in-app browser blocks Google sign-in. Tap Open in Safari, then tap Sign in. Worksheets on this device were not changed.'};
       return {label:'Open in Chrome',text:'This in-app browser blocks Google sign-in. Tap Open in Chrome, then tap Sign in. Worksheets on this device were not changed.'};
     }
+    if(sameOriginAuth(nav))return null;
     if(isIos(nav)&&isStandalone(nav))return {label:'Open in Safari',text:'This home screen app cannot finish Google sign-in. Tap Open in Safari, then tap Sign in in that tab. On iPhone the home screen icon does not receive that sign-in. Sync works in the Safari tab. Worksheets already on this phone stay on this phone.'};
     if(isAndroid(nav)&&isStandalone(nav))return {label:'Open in Chrome',text:'Google sign-in did not finish in the installed app. Tap Open in Chrome, then tap Sign in. Chrome and the home screen icon usually share that sign-in. If this icon still says Not signed in, use the Chrome tab for sync. Worksheets on this phone were not changed.'};
     return null;
@@ -596,7 +607,10 @@
         else if(window.matchMedia('(display-mode: fullscreen)').matches)displayMode='fullscreen';
       }
     }catch(e){}
-    return {userAgent:nav.userAgent||'',platform:nav.platform||'',maxTouchPoints:nav.maxTouchPoints||0,standalone:nav.standalone===true,displayMode:displayMode};
+    let host='';
+    try{host=typeof location!=='undefined'?location.hostname||'':''}catch(e){}
+    const cfg=typeof globalThis!=='undefined'&&globalThis.CCSA_FIREBASE?globalThis.CCSA_FIREBASE:{};
+    return {userAgent:nav.userAgent||'',platform:nav.platform||'',maxTouchPoints:nav.maxTouchPoints||0,standalone:nav.standalone===true,displayMode:displayMode,host:host,authDomain:cfg.authDomain||''};
   }
   function signInFailure(code, host){
     const site=host||'this site';
@@ -763,7 +777,7 @@
     return {auth:auth,db:db,fb:fb,ready:!!(auth&&db&&fb)};
   }
   return {
-    configReady:configReady,signInPlan:signInPlan,browserHelp:browserHelp,openingHelp:openingHelp,signInFailure:signInFailure,redirectFollowUp:redirectFollowUp,docId:docId,photoFits:photoFits,statusLabel:statusLabel,panelHTML:panelHTML,
+    configReady:configReady,signInPlan:signInPlan,browserHelp:browserHelp,openingHelp:openingHelp,hostingNotice:hostingNotice,sameOriginAuth:sameOriginAuth,signInFailure:signInFailure,redirectFollowUp:redirectFollowUp,docId:docId,photoFits:photoFits,statusLabel:statusLabel,panelHTML:panelHTML,
     reconcile:reconcile,queueOp:queueOp,drainOps:drainOps,plain:plain,
     contentSig:contentSig,needsPush:needsPush,isQuotaError:isQuotaError,quotaMessage:quotaMessage,simulateSyncDay:simulateSyncDay,
     boot:boot,signIn:signIn,signOut:signOut,afterSave:afterSave,afterPhoto:afterPhoto,afterPhotoDelete:afterPhotoDelete,beforeClearAll:beforeClearAll,

@@ -380,7 +380,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="pdflib.js"></script><script src="transfer.js"></script><script src="firebase-config.js"></script><script src="livesync.js"></script><script src="portaldata.js"></script><script src="certificate.js"></script><script src="invoice.js"></script><script src="requests.js"></script><script src="portaladmin.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.32.0 (20261114)';
+const APP_VERSION='2.33.0 (20261114)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -1347,7 +1347,7 @@ function listEmptyCopy(){
 function renderList(){
   clearHead();$('#ttl').textContent='Jobs';$('#hbtn').textContent='Load sheet';$('#hbtn').className='';$('#hbtn').onclick=()=>{IMPMODE='add';$('#file').click()};
   const m=$('main');m.onclick=m.oninput=m.onchange=null; // drop job-form delegates
-  if(!JOBS.length){m.innerHTML=`${syncHTML()}${portalHTML()}${libEntry()}<div class="empty"><img src="icon-192.png" alt=""><h2>No jobs loaded</h2><p>Load one or more job sheets (.xlsx, .csv or exported .json) – you can pick several at once. The data stays on this phone only.</p><button class="btn pri" onclick="IMPMODE='add';$('#file').click()">Load job sheet(s)</button></div>${xferHTML()}${calBarHTML()}${calEntriesHTML()}<p class="note" id="ver">App version ${APP_VERSION}</p>`;bindCalEntries(m);bindCalendarControls();bindLibEntry();bindXfer(m);bindSync(m);bindPortal(m);$('#bar').innerHTML='';return}
+  if(!JOBS.length){m.innerHTML=`${hostingBannerHTML()}${syncHTML()}${portalHTML()}${libEntry()}<div class="empty"><img src="icon-192.png" alt=""><h2>No jobs loaded</h2><p>Load one or more job sheets (.xlsx, .csv or exported .json) – you can pick several at once. The data stays on this phone only.</p><button class="btn pri" onclick="IMPMODE='add';$('#file').click()">Load job sheet(s)</button></div>${xferHTML()}${calBarHTML()}${calEntriesHTML()}<p class="note" id="ver">App version ${APP_VERSION}</p>`;bindCalEntries(m);bindCalendarControls();bindLibEntry();bindXfer(m);bindSync(m);bindPortal(m);$('#bar').innerHTML='';return}
   // A synced or imported calendar is the route. Opening the list shows that order; no extra sort step.
   if(CAL_EVENTS.length&&UI.sort!=='route'){UI.sort='route';save(LS.ui,UI);}
   const calSort=CAL_EVENTS.length>0;
@@ -1358,7 +1358,7 @@ function renderList(){
   if(!['all','todo','done','arch'].includes(UI.filter)){UI.filter='all';save(LS.ui,UI)}
   list=list.filter(passesJobFilter);
   list=sortJobs(list);const nd=act.filter(done).length,hasRoute=JOBS.some(j=>j.order!=null||(j.svc&&!isNaN(Date.parse(j.svc)))),pg=dayProgress();
-  m.innerHTML=`${syncHTML()}${portalHTML()}${libEntry()}<div class="prog" id="prog"><div class="pt"><b>${pg.label}: ${pg.n} of ${pg.of}</b> archived/done</div><div class="pbar" role="progressbar" aria-valuemin="0" aria-valuemax="${pg.of}" aria-valuenow="${pg.n}"><i style="width:${pg.of?Math.round(100*pg.n/pg.of):0}%"></i></div></div>
+  m.innerHTML=`${hostingBannerHTML()}${syncHTML()}${portalHTML()}${libEntry()}<div class="prog" id="prog"><div class="pt"><b>${pg.label}: ${pg.n} of ${pg.of}</b> archived/done</div><div class="pbar" role="progressbar" aria-valuemin="0" aria-valuemax="${pg.of}" aria-valuenow="${pg.n}"><i style="width:${pg.of?Math.round(100*pg.n/pg.of):0}%"></i></div></div>
   <div class="tools"><input id="q" type="search" placeholder="Search address, agent, contact…" value="${esc(UI.q)}"><select id="sort" aria-label="Sort"><option value="route">${calSort?'Calendar order':hasRoute?'Route order':'Sheet order'}</option>${calSort?'':`<option value="date">Date</option><option value="town">Town</option><option value="source">Source sheet</option>`}</select></div>
   <div class="jobfilt"><div class="seg" role="tablist" aria-label="Show to-do or completed jobs">${[['all','All '+act.length],['todo','To do '+(act.length-nd)],['done','Done '+nd],['arch','Archived ('+na+')']].map(([k,t])=>`<button type="button" data-f="${k}" role="tab" aria-selected="${UI.filter===k}" class="t-${k} ${UI.filter===k?'on':''}">${t}</button>`).join('')}</div></div>
   ${calBarHTML()}
@@ -1910,6 +1910,7 @@ async function renderKept(id){
 /* ---------- export / router ---------- */
 function xferHTML(){return `<div class="stack" id="xferbox" style="margin-top:18px"><button type="button" class="btn pri" id="exp">Export worksheets</button><button type="button" class="btn" id="expxls">Export spreadsheet</button><button type="button" class="btn" id="impws">Import worksheets</button></div><p class="note">Export worksheets opens the share sheet. You choose email, AirDrop, Drive or another app and tap Send. This app does not send it. If this browser cannot share a file, the button downloads it instead. On the other device, open this app and tap Import worksheets. The newer worksheet is kept. Jobs, photos and saved PDFs already there are not deleted.</p>`}
 function bindXfer(root){const exp=root.querySelector('#exp'),xls=root.querySelector('#expxls'),imp=root.querySelector('#impws');if(exp)exp.onclick=exportWorksheets;if(xls)xls.onclick=exportSpreadsheet;if(imp)imp.onclick=()=>{$('#xfer').click()}}
+function hostingBannerHTML(){const note=window.CCSASync&&CCSASync.hostingNotice?CCSASync.hostingNotice(location.hostname):'';if(!note)return '';return `<p class="note" id="hostnote">${esc(note)}</p>`}
 function syncHTML(){return window.CCSASync?CCSASync.panelHTML(CCSASync.state()):''}
 function bindSync(root){if(!root||!window.CCSASync)return;const inn=root.querySelector('#syncin'),out=root.querySelector('#syncout');if(inn)inn.onclick=()=>CCSASync.signIn();if(out)out.onclick=()=>CCSASync.signOut()}
 function addPortalJob(job){

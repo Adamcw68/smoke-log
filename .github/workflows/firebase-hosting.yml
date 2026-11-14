@@ -1,0 +1,27 @@
+name: Deploy to Firebase Hosting
+on:
+  push:
+    branches:
+      - main
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: account
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CCSA_SMOKE_LOG }}
+        run: |
+          if [ -n "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Skipped. Add the repo secret FIREBASE_SERVICE_ACCOUNT_CCSA_SMOKE_LOG (Firebase Hosting Admin JSON for ccsa-smoke-log), or deploy with: firebase deploy --only hosting --project ccsa-smoke-log"
+          fi
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        if: steps.account.outputs.ready == 'true'
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CCSA_SMOKE_LOG }}
+          projectId: ccsa-smoke-log
+          channelId: live

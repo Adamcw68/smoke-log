@@ -50,4 +50,17 @@ test('the sync panel shows each state without contacting Firebase',{timeout:6000
   assert.match(offline,/Offline - changes saved on this device/);
   assert.match(await page.$eval('#syncpanel',el=>el.innerText),/Make PDF/);
   assert.match(await page.$eval('#syncpanel',el=>el.innerText),/only on this device/);
+  const note=await page.evaluate(()=>CCSASync.hostingNotice('adamcw68.github.io'));
+  assert.match(note,/ccsa-smoke-log\.web\.app/);
+  assert.match(note,/Export worksheets/);
+  assert.equal(await page.evaluate(()=>CCSASync.hostingNotice('ccsa-smoke-log.web.app')),'');
+  await page.evaluate(text=>{
+    const p=document.createElement('p');
+    p.id='hostnote';
+    p.className='note';
+    p.textContent=text;
+    document.querySelector('main').prepend(p);
+    p.scrollIntoView({block:'center'});
+  },note);
+  await (await page.$('#hostnote')).screenshot({path:path.join(ART,'hosting_notice_pages.png')});
 });
