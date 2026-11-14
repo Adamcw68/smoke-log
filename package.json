@@ -3,7 +3,7 @@
   "private": true,
   "description": "Test tools for CCSA Log. The phone app itself is the static files and does not need this install.",
   "scripts": {
-    "test": "node --test sheetfill.test.js labelread.test.js jobrefresh.test.js transfer.test.js pdflib.test.js calpush.test.js gsignin.test.js livesync.test.js portaldata.test.js certificate.test.js invoice.test.js",
+    "test": "node --test sheetfill.test.js labelread.test.js jobrefresh.test.js transfer.test.js pdflib.test.js calpush.test.js gsignin.test.js livesync.test.js livesync.write.test.js portaldata.test.js certificate.test.js invoice.test.js",
     "test:sync": "firebase emulators:exec --only auth,firestore --project ccsa-log-test \"node --test --test-concurrency=1 livesync.test.js livesync.emu.test.js\""
   },
   "devDependencies": {
