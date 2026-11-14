@@ -171,11 +171,11 @@ test('rules lists match the published keys',function(){
 test('the service worker leaves the portal alone and does not clear site data',function(){
   const sw=fs.readFileSync('sw.js','utf8');
   const html=fs.readFileSync('index.html','utf8');
-  assert.match(sw,/ccsa-v2\.27\.0-20261113/);
+  assert.match(sw,/ccsa-v2\.28\.0-20261114/);
   assert.match(sw,/portaldata\.js/);
   assert.ok(sw.includes('if(/\\/portal(?:\\/|$)/.test(u.pathname))return;'));
   assert.doesNotMatch(sw,/indexedDB\.deleteDatabase|localStorage\.clear|caches\.keys\(\)\.then\(k=>Promise\.all\(k\.map/);
-  assert.match(html,/APP_VERSION='2\.27\.0 \(20261113\)'/);
+  assert.match(html,/APP_VERSION='2\.28\.0 \(20261114\)'/);
   assert.match(html,/portaladmin\.js/);
   assert.match(html,/portalNudge/);
 });

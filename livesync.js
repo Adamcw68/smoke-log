@@ -41,6 +41,7 @@
     state=state||{};
     if(!state.configured)return "Sync isn't set up yet";
     if(!state.user)return 'Not signed in';
+    if(state.phase==='paused')return 'Sync paused';
     if(state.phase==='syncing')return 'Syncing';
     if(state.phase==='offline')return 'Offline - changes saved on this device';
     return 'Synced';
@@ -99,8 +100,31 @@
     const t=tombs.get(kind+':'+id);
     return !!(t&&timeOf(t.at)>=itemTime);
   }
+  /* Ignore the clock and private scratch fields. A newer timestamp with the same
+     worksheet is not a change, so opening a job or hiding the app does not upload it. */
+  function stable(value){
+    if(Array.isArray(value))return value.map(stable);
+    if(value&&typeof value==='object'){
+      const out={};
+      Object.keys(value).sort().forEach(function(key){
+        if(key==='updated'||key==='_calGen'||value[key]===undefined)return;
+        out[key]=stable(value[key]);
+      });
+      return out;
+    }
+    return value;
+  }
+  function contentSig(job,form){
+    return JSON.stringify(stable({job:job||null,form:form||null}));
+  }
+  function needsPush(localJob,localForm,remoteJob,remoteForm){
+    if(!localJob||!localJob.id)return false;
+    if(!remoteJob)return true;
+    return contentSig(localJob,localForm||null)!==contentSig(remoteJob,remoteForm||null);
+  }
   /* Newest worksheet wins. A record that exists on only one side is kept.
-     A tombstone removes a record only when the delete is newer than that record. */
+     A tombstone removes a record only when the delete is newer than that record.
+     A document is queued for upload only when its saved content differs. */
   function reconcile(local,remote){
     local=local||{};remote=remote||{};
     const tombs=latestTombs([].concat(local.tombstones||[],remote.tombstones||[]));
@@ -126,10 +150,9 @@
     });
     const pushJobs=[];
     merged.jobs.forEach(function(j){
-      const other=remoteJob.get(String(j.id));
-      const lt=jobTime(j,merged.forms);
-      const rt=other?jobTime(other,remoteForms):0;
-      if(!other||lt>rt)pushJobs.push(j.id);
+      const other=remoteJob.get(String(j.id))||null;
+      const remoteForm=other?remoteForms[String(other.id)]||null:null;
+      if(needsPush(j,merged.forms[j.id]||null,other,remoteForm))pushJobs.push(j.id);
     });
     const dropJobs=(local.jobs||[]).filter(function(j){return j&&j.id&&killed(tombs,'job',j.id,jobTime(j,local.forms))}).map(function(j){return j.id});
     const dropPhotos=(local.photos||[]).filter(function(p){return p&&p.id&&killed(tombs,'photo',p.id,timeOf(p.ts))}).map(function(p){return p.id});
@@ -148,12 +171,89 @@
   function plain(obj){
     try{return JSON.parse(JSON.stringify(obj))}catch(e){return null}
   }
+  function isQuotaError(err){
+    const code=String(err&&(err.code||err.status)||'');
+    const msg=String(err&&err.message||err||'');
+    return code==='resource-exhausted'||code==='429'||/resource-exhausted|\b429\b|quota exceeded/i.test(code+' '+msg);
+  }
+  function quotaMessage(){
+    return 'Firebase has hit its daily write limit. Changes stay on this phone and will sync after the limit resets. Nothing on this phone was cleared.';
+  }
+  /* A normal day: real edits and a real reorder upload those documents only.
+     Opening a job, hiding the app, and reloading do not upload unchanged worksheets. */
+  function simulateSyncDay(count,steps){
+    const jobs=[];
+    const forms={};
+    for(let i=0;i<count;i++){
+      const id='job-'+i;
+      jobs.push({id:id,addr:i+' Street, Yamba NSW 2464',order:i+1,agent:'RWM',section:'Permanent'});
+      forms[id]={date:'2026-11-14',alarms:1,comments:'',al:[{yn:{cleaned:'Yes'}}]};
+    }
+    const acked=new Map();
+    jobs.forEach(function(j){acked.set(j.id,contentSig(j,forms[j.id]))});
+    let writes=0;
+    let box=[];
+    function queueChanged(){
+      jobs.forEach(function(j){
+        if(acked.get(j.id)!==contentSig(j,forms[j.id]||null))box=queueOp(box,{op:'job',id:j.id});
+      });
+    }
+    function flushNow(){
+      const drained=drainOps(box,true);
+      box=drained.keep.slice();
+      drained.send.forEach(function(op){
+        const job=jobs.find(function(j){return j.id===op.id});
+        const sig=contentSig(job,forms[op.id]||null);
+        if(acked.get(op.id)!==sig){writes++;acked.set(op.id,sig)}
+      });
+    }
+    (steps||[]).forEach(function(step){
+      if(step.type==='edit'){
+        forms[step.id].comments=step.comments;
+        forms[step.id].updated=step.at||'2026-11-14T01:00:00.000Z';
+        queueChanged();
+        flushNow();
+      }else if(step.type==='open'||step.type==='reload'){
+        if(step.id&&forms[step.id])forms[step.id].updated=step.at||'2026-11-14T02:00:00.000Z';
+        queueChanged();
+        flushNow();
+      }else if(step.type==='calendar'){
+        jobs.forEach(function(j,i){j.order=i+1});
+        queueChanged();
+        flushNow();
+      }else if(step.type==='reorder'){
+        (step.ids||[]).forEach(function(id,i){
+          const job=jobs.find(function(j){return j.id===id});
+          if(job)job.order=i+1;
+        });
+        queueChanged();
+        flushNow();
+      }
+    });
+    return writes;
+  }
 
   const state={configured:false,user:null,phase:'signed-out',lastSync:'',unsyncedPhotos:0,error:''};
   let hooks=null,booted=false,applying=false,armed=false,db=null,auth=null,fb=null;
   let unsubs=[],flushTimer=null,applyTimer=null,unsynced=new Set();
   const jobSnap=new Map();
+  const acked=new Map();
+  let quotaUntil=0;
   const remote={jobs:[],forms:{},photos:[],tombstones:[]};
+  function quotaHeld(){return !!(quotaUntil&&Date.now()<quotaUntil)}
+  function holdQuota(){quotaUntil=Date.now()+6*60*60*1000;state.phase='paused';state.error=quotaMessage()}
+  function localSig(id){
+    const jobs=hooks&&hooks.getJobs?hooks.getJobs()||[]:[];
+    const job=jobs.find(function(j){return j&&String(j.id)===String(id)});
+    if(!job)return '';
+    const form=hooks&&hooks.getForms?(hooks.getForms()||{})[id]||null:null;
+    return contentSig(job,form);
+  }
+  function enqueueIfChanged(id){
+    const sig=localSig(id);
+    if(!sig||acked.get(String(id))===sig)return;
+    enqueue({op:'job',id:id});
+  }
 
   function paint(){
     if(!hooks||!hooks.paint)return;
@@ -209,7 +309,7 @@
       if(jobSnap.get(j.id)!==sig){
         j.updated=now;
         jobSnap.set(j.id,sig);
-        enqueue({op:'job',id:j.id});
+        enqueueIfChanged(j.id);
       }
     });
   }
@@ -251,16 +351,23 @@
       const local=await collect();
       const result=reconcile(local,remote);
       await hooks.applyResult(result);
-      (result.pushJobs||[]).forEach(function(id){enqueue({op:'job',id:id})});
+      (result.jobs||[]).forEach(function(j){
+        if(!j||!j.id)return;
+        if((result.pushJobs||[]).some(function(id){return String(id)===String(j.id)}))return;
+        acked.set(String(j.id),contentSig(j,result.forms[j.id]||null));
+      });
+      (result.pushJobs||[]).forEach(function(id){enqueueIfChanged(id)});
       (result.pushPhotos||[]).forEach(function(id){enqueue({op:'photo',id:id})});
       arm();
       if(navigator.onLine)await flush();
-      else{state.phase='offline';state.error=''}
-      if(state.phase!=='offline'){state.phase='synced';state.lastSync=new Date().toISOString();state.error='';const m=meta();m.lastSync=state.lastSync;m.mergedUid=state.user.uid;writeStore(META_KEY,m)}
+      else if(state.phase!=='paused'){state.phase='offline';state.error=''}
+      if(state.phase!=='offline'&&state.phase!=='paused'){state.phase='synced';state.lastSync=new Date().toISOString();state.error='';const m=meta();m.lastSync=state.lastSync;m.mergedUid=state.user.uid;writeStore(META_KEY,m)}
       state.unsyncedPhotos=unsynced.size;
     }catch(e){
-      state.phase=navigator.onLine?'synced':'offline';
-      state.error='Sync paused. Worksheets on this device were kept.';
+      if(state.phase!=='paused'){
+        state.phase=navigator.onLine?'synced':'offline';
+        state.error='Sync paused. Worksheets on this device were kept.';
+      }
     }finally{
       applying=false;
       paint();
@@ -281,41 +388,81 @@
     if(b64.length+1024>=MAX_DOC){unsynced.add(id);return}
     await fb.setDoc(photoRef(id),plain({id:rec.id,job:rec.job||'',slot:rec.slot||'',type:rec.type||'image/jpeg',w:rec.w||0,h:rec.h||0,ts:rec.ts||new Date().toISOString(),b64:b64}));
   }
-  async function uploadJob(id){
+  function jobPayload(id){
     const jobs=hooks.getJobs()||[];
-    const job=jobs.find(function(j){return j&&j.id===id});
-    if(!job)return;
+    const job=jobs.find(function(j){return j&&String(j.id)===String(id)});
+    if(!job)return null;
     const form=(hooks.getForms()||{})[id]||null;
     const updated=new Date(Math.max(timeOf(job.updated),timeOf(form&&form.updated))||Date.now()).toISOString();
-    if(!job.updated)job.updated=updated;
-    await fb.setDoc(jobRef(id),plain({id:id,job:job,form:form,updated:updated,deleted:false}));
+    const copy=Object.assign({},job);
+    if(!copy.updated)copy.updated=updated;
+    return {data:plain({id:String(job.id),job:copy,form:form,updated:updated,deleted:false}),sig:contentSig(job,form)};
+  }
+  async function commitJobOps(items){
+    const CHUNK=400;
+    for(let i=0;i<items.length;i+=CHUNK){
+      const chunk=items.slice(i,i+CHUNK);
+      const batch=fb.writeBatch(db);
+      const ready=[];
+      chunk.forEach(function(item){
+        const built=jobPayload(item.op.id);
+        if(!built||!built.data)return;
+        batch.set(jobRef(item.op.id),built.data);
+        ready.push({id:item.op.id,sig:built.sig});
+      });
+      if(!ready.length)continue;
+      await batch.commit();
+      ready.forEach(function(item){acked.set(String(item.id),item.sig)});
+    }
   }
   async function flush(){
     if(!state.user||!db)return;
+    if(quotaHeld()){state.phase='paused';state.error=quotaMessage();paint();return}
     if(typeof navigator!=='undefined'&&navigator.onLine===false){state.phase='offline';paint();return}
     const drained=drainOps(outbox(),true);
-    if(!drained.send.length){if(state.phase!=='synced'){state.phase='synced';paint()}return}
+    if(!drained.send.length){if(state.phase!=='synced'&&state.phase!=='paused'){state.phase='synced';paint()}return}
     state.phase='syncing';paint();
     const failed=[];
-    for(let i=0;i<drained.send.length;i++){
-      const op=drained.send[i];
-      try{
-        if(op.op==='job')await uploadJob(op.id);
-        else if(op.op==='photo')await uploadPhoto(op.id);
-        else if(op.op==='tomb')await fb.setDoc(tombRef(op.kind||'job',op.id),plain({kind:op.kind||'job',id:op.id,at:op.at}));
-      }catch(e){failed.push(op)}
+    const jobOps=[];
+    const other=[];
+    drained.send.forEach(function(op){
+      if(op.op==='job'){
+        const sig=localSig(op.id);
+        if(!sig||acked.get(String(op.id))===sig)return;
+        jobOps.push({op:op,sig:sig});
+      }else other.push(op);
+    });
+    try{await commitJobOps(jobOps)}
+    catch(e){
+      const leftover=jobOps.filter(function(item){return acked.get(String(item.op.id))!==item.sig}).map(function(item){return item.op});
+      if(isQuotaError(e)){holdQuota();failed.push.apply(failed,leftover.concat(other));other.length=0}
+      else failed.push.apply(failed,leftover);
+    }
+    if(!quotaHeld()){
+      for(let i=0;i<other.length;i++){
+        const op=other[i];
+        try{
+          if(op.op==='photo')await uploadPhoto(op.id);
+          else if(op.op==='tomb')await fb.setDoc(tombRef(op.kind||'job',op.id),plain({kind:op.kind||'job',id:op.id,at:op.at}));
+        }catch(e){
+          if(isQuotaError(e)){holdQuota();failed.push.apply(failed,other.slice(i));break}
+          failed.push(op);
+        }
+      }
     }
     setOutbox(failed.concat(drainOps(outbox(),false).keep.filter(function(op){
       return !drained.send.some(function(sent){return sent.op===op.op&&sent.id===op.id&&sent.kind===op.kind});
     })));
     state.unsyncedPhotos=unsynced.size;
-    if(failed.length){state.phase='offline';state.error='Some changes are still only on this device. They will sync when the connection is back.'}
+    if(quotaHeld()){state.phase='paused';state.error=quotaMessage()}
+    else if(failed.length){state.phase='offline';state.error='Some changes are still only on this device. They will sync when the connection is back.'}
     else{state.phase='synced';state.error='';state.lastSync=new Date().toISOString();const m=meta();m.lastSync=state.lastSync;writeStore(META_KEY,m)}
     paint();
   }
   function scheduleFlush(){
     clearTimeout(flushTimer);
-    flushTimer=setTimeout(function(){flush().catch(function(){state.phase='offline';paint()})},400);
+    if(quotaHeld()){state.phase='paused';state.error=quotaMessage();paint();return}
+    flushTimer=setTimeout(function(){flush().catch(function(){if(state.phase!=='paused'){state.phase='offline';paint()}})},1000);
   }
   async function pullOnce(){
     const jobsSnap=await fb.getDocs(col('jobs'));
@@ -338,6 +485,7 @@
     if(!user){
       unsubs.forEach(function(fn){try{fn()}catch(e){}});
       unsubs=[];
+      acked.clear();
       state.user=null;
       state.phase='signed-out';
       state.error='';
@@ -434,7 +582,7 @@
     }
     else if(key===hooks.formsKey){
       const forms=hooks.getForms()||{};
-      Object.keys(forms).forEach(function(id){enqueue({op:'job',id:id})});
+      Object.keys(forms).forEach(function(id){enqueueIfChanged(id)});
     }else return;
     if(typeof navigator!=='undefined'&&navigator.onLine===false){state.phase=state.user?'offline':state.phase;paint();return}
     if(state.user)scheduleFlush();
@@ -506,6 +654,7 @@
   return {
     configReady:configReady,preferRedirect:preferRedirect,signInFailure:signInFailure,docId:docId,photoFits:photoFits,statusLabel:statusLabel,panelHTML:panelHTML,
     reconcile:reconcile,queueOp:queueOp,drainOps:drainOps,plain:plain,
+    contentSig:contentSig,needsPush:needsPush,isQuotaError:isQuotaError,quotaMessage:quotaMessage,simulateSyncDay:simulateSyncDay,
     boot:boot,signIn:signIn,signOut:signOut,afterSave:afterSave,afterPhoto:afterPhoto,afterPhotoDelete:afterPhotoDelete,beforeClearAll:beforeClearAll,
     client:client,state:current
   };
