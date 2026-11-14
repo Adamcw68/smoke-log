@@ -24,7 +24,7 @@
   const state={
     configured:false,signedIn:false,email:'',uid:'',isAdmin:false,adminChecked:false,
     draftEmail:'',agencyCode:'Ray White Maclean/Yamba',password:'',logins:[],auto:true,
-    message:'',busy:false,showOnce:null
+    message:'',busy:false,showOnce:null,requests:[],access:{}
   };
   let hooks=null,pending=false;
 
@@ -58,7 +58,11 @@
       </details>
       <h2>Logins</h2>${logins}
       <label class="tog"><span>Publish when a job is archived or marked done</span><input type="checkbox" id="portalauto" ${state.auto?'checked':''}></label>
-      <button type="button" class="btn pri" id="portalpub" ${state.busy?'disabled':''}>Publish to portal</button>`:'';
+      <button type="button" class="btn pri" id="portalpub" ${state.busy?'disabled':''}>Publish to portal</button>
+      <h2 id="inbox">Job requests</h2>
+      <p class="note">Agents send these from their portal. The access phone is shown here only. Completing a request deletes it. Google Calendar changes only when you tap Add to calendar.</p>
+      <button type="button" class="btn" id="portalinbox" ${state.busy?'disabled':''}>Load job requests</button>
+      ${inboxHTML()}`:'';
     const signed=state.signedIn?`<p class="note" id="portalaccount">${esc(state.email)} · uid ${esc(state.uid)}${state.isAdmin?' · admin':''}</p>`:'<p class="note">Sign in with Sync before creating a login or publishing. Worksheets on this phone stay here.</p>';
     return `<section class="f" id="portalpanel" aria-label="Agency portal"><h2>Agency portal</h2>
       <p class="note">Each agency signs in at its own portal and sees only its properties. Tenant names, phone numbers and email addresses are not published.</p>
@@ -68,6 +72,16 @@
       ${state.message?'<p class="note" id="portalmsg">'+esc(state.message)+'</p>':''}
       <details><summary>Firebase setup</summary><p class="note" id="portalsteps" style="white-space:pre-wrap">${esc(steps)}</p></details>
       </section>`;
+  }
+  function inboxHTML(){
+    const api=typeof CCSARequests!=='undefined'?CCSARequests:(typeof require==='function'?function(){try{return require('./requests.js')}catch(e){return null}}():null);
+    if(!state.requests.length)return '<p class="note">No requests loaded.</p>';
+    return state.requests.map(function(row){
+      const who=row.status==='completed'?null:state.access[row.id];
+      const label=api?api.statusLabel(row.status):row.status;
+      const buttons=row.status==='new'?'<button type="button" class="pri" data-accept="'+esc(row.id)+'">Accept</button><button type="button" data-reqstatus="declined" data-req="'+esc(row.id)+'">Decline</button>':row.status==='accepted'?'<button type="button" data-reqstatus="scheduled" data-req="'+esc(row.id)+'">Mark scheduled</button><button type="button" data-reqcal="'+esc(row.id)+'">Add to calendar</button>':row.status==='scheduled'?'<button type="button" data-reqstatus="completed" data-req="'+esc(row.id)+'">Mark completed</button>':'';
+      return '<article class="card" data-request="'+esc(row.id)+'"><div class="chiprow"><span class="badge">'+esc(label)+'</span><span class="badge">'+esc(row.agencyCode)+'</span></div><div class="addr">'+esc(row.address)+'</div><div class="meta">'+esc(row.tenancy)+(row.timeframe?' · '+esc(row.timeframe):'')+(who?' · '+esc(who.contactName)+' '+esc(who.contactPhone):'')+'</div><div class="row">'+buttons+'</div></article>';
+    }).join('');
   }
   function repaint(){
     const el=typeof document!=='undefined'?document.getElementById('portalpanel'):null;
@@ -255,6 +269,70 @@
     if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(password).then(done).catch(function(){state.message='Copy was blocked. The password is still on screen.';repaint()});
     else{state.message='Copy is not available in this browser. The password is still on screen.';repaint()}
   }
+  async function loadInbox(){
+    const c=client();
+    const portal=lib();
+    if(!c.ready||!state.isAdmin||!portal){say('Sign in as the portal admin before loading requests.');return}
+    state.busy=true;repaint();
+    try{
+      const requests=[];
+      const access={};
+      const agencies=portal.agencies();
+      for(let i=0;i<agencies.length;i++){
+        const id=agencies[i].id;
+        const rs=await c.fb.getDocs(c.fb.collection(c.db,'portal',id,'requests'));
+        rs.forEach(function(d){requests.push(d.data())});
+        const as=await c.fb.getDocs(c.fb.collection(c.db,'portal',id,'access'));
+        as.forEach(function(d){access[d.id]=d.data()});
+      }
+      requests.sort(function(a,b){return (a.createdAt||'')<(b.createdAt||'')?1:-1});
+      state.requests=requests;
+      state.access=access;
+      state.message=requests.length?requests.length+' request'+(requests.length===1?'':'s')+'.':'No requests yet.';
+    }catch(e){
+      state.message='The requests could not be loaded. Nothing was changed.';
+    }finally{state.busy=false;repaint()}
+  }
+  async function writeStatus(id,status){
+    const c=client();
+    const request=state.requests.filter(function(row){return row.id===id})[0];
+    if(!c.ready||!request||typeof CCSARequests==='undefined')return;
+    const access=state.access[id]||null;
+    const moved=CCSARequests.applyStatus(request,access,status);
+    if(!moved.ok){say(moved.error);return}
+    state.busy=true;
+    try{
+      await c.fb.setDoc(c.fb.doc(c.db,'portal',request.agencyId,'requests',request.id),moved.request);
+      if(status==='completed'&&access){
+        await c.fb.deleteDoc(c.fb.doc(c.db,'portal',request.agencyId,'access',request.id));
+        delete state.access[id];
+      }
+      const at=state.requests.findIndex(function(row){return row.id===id});
+      if(at>=0)state.requests[at]=moved.request;
+      state.message=CCSARequests.statusLabel(status)+'.';
+    }catch(e){
+      state.message='That status was not saved. The request on the server was left as it was.';
+    }finally{state.busy=false;repaint()}
+  }
+  async function acceptRequest(id){
+    const request=state.requests.filter(function(row){return row.id===id})[0];
+    if(!request||typeof CCSARequests==='undefined')return;
+    const access=state.access[id]||null;
+    const job=CCSARequests.localJob(request,access);
+    if(hooks&&hooks.addJob)hooks.addJob(job);
+    await writeStatus(id,'accepted');
+    state.message='Worksheet created on this phone. The access phone is not published.';
+    repaint();
+  }
+  async function calendarRequest(id){
+    const request=state.requests.filter(function(row){return row.id===id})[0];
+    if(!request||typeof CCSARequests==='undefined')return;
+    const job=CCSARequests.localJob(request,state.access[id]||null);
+    if(!hooks||!hooks.calendarJob){say('Calendar was not changed.');return}
+    const result=await hooks.calendarJob(job);
+    say(result&&result.message?result.message:'Calendar was not changed.');
+    if(result&&result.ok&&request.status==='accepted')await writeStatus(id,'scheduled');
+  }
   function bind(root){
     const box=root&&root.id==='portalpanel'?root:(root&&root.querySelector?root.querySelector('#portalpanel'):null);
     if(!box)return;
@@ -283,6 +361,10 @@
       if(b.id==='portalreset')sendReset();
       if(b.dataset.portalDisable)setDisabled(b.dataset.portalDisable,true);
       if(b.dataset.portalEnable)setDisabled(b.dataset.portalEnable,false);
+      if(b.id==='portalinbox')loadInbox();
+      if(b.dataset.accept)acceptRequest(b.dataset.accept);
+      if(b.dataset.req)writeStatus(b.dataset.req,b.dataset.reqstatus);
+      if(b.dataset.reqcal)calendarRequest(b.dataset.reqcal);
     };
   }
   function boot(next){

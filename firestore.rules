@@ -6,6 +6,8 @@ rules_version = '2';
 // portal-job-keys: id,propertyId,agencyId,agencyCode,address,street,town,ident,tenancy,status,serviceDate,appointment,appointmentTime,lastService,due,result,alarmCount,priorDate,priorResult,publishedAt
 // portal-certificate-keys: id,propertyId,jobId,agencyId,agencyCode,address,ident,tenancy,date,lastInspection,tech,statement,result,alarms,publishedAt
 // portal-invoice-keys: id,number,propertyId,jobId,agencyId,agencyCode,address,ident,tenancy,issueDate,dueDate,status,paidAt,gstRegistered,businessName,abn,businessAddress,businessPhone,businessEmail,bankName,bsb,accountName,accountNumber,terms,lines,exCents,gstCents,totalCents,publishedAt
+// portal-request-keys: id,agencyId,agencyCode,propertyId,address,ident,tenancy,timeframe,notes,status,createdAt,fileName,fileType,fileData
+// portal-access-keys: id,agencyId,requestId,contactName,contactPhone,createdAt
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() {
@@ -175,6 +177,52 @@ service cloud.firestore {
         && data.publishedAt is string
         && data.publishedAt.size() < 40;
     }
+    function requestStatus(v) {
+      return v == 'new' || v == 'accepted' || v == 'scheduled' || v == 'completed' || v == 'declined';
+    }
+    function validRequest(agencyId, docId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['id','agencyId','agencyCode','propertyId','address','ident','tenancy','timeframe','notes','status','createdAt','fileName','fileType','fileData'])
+        && data.id == docId
+        && docIdOk(docId)
+        && data.agencyId == agencyId
+        && agencyKey(agencyId)
+        && docIdOk(data.propertyId)
+        && plainText(data.agencyCode, 80)
+        && plainText(data.address, 300)
+        && data.address.size() > 0
+        && plainText(data.ident, 160)
+        && tenancyOk(data.tenancy)
+        && data.tenancy.size() > 0
+        && plainText(data.timeframe, 120)
+        && plainText(data.notes, 500)
+        && requestStatus(data.status)
+        && data.createdAt is string
+        && data.createdAt.size() > 8
+        && data.createdAt.size() < 40
+        && plainText(data.fileName, 120)
+        && (data.fileType == '' || data.fileType == 'application/pdf' || data.fileType == 'image/jpeg' || data.fileType == 'image/png')
+        && data.fileData is string
+        && data.fileData.size() < 620000
+        && (data.fileData == '' || data.fileData.matches('^[A-Za-z0-9+/=]+$'));
+    }
+    function validAccess(agencyId, docId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['id','agencyId','requestId','contactName','contactPhone','createdAt'])
+        && data.id == docId
+        && docIdOk(docId)
+        && data.agencyId == agencyId
+        && agencyKey(agencyId)
+        && data.requestId == docId
+        && plainText(data.contactName, 80)
+        && data.contactName.size() > 0
+        && data.contactPhone is string
+        && data.contactPhone.size() > 8
+        && data.contactPhone.size() < 24
+        && data.contactPhone.matches('^(?:\\+?61|0)[0-9 \\-]{8,16}$')
+        && data.createdAt is string
+        && data.createdAt.size() < 40;
+    }
     function validPortal(agencyId, kind, docId) {
       return (kind == 'properties' && validProperty(agencyId, docId))
         || (kind == 'jobs' && validJob(agencyId, docId))
@@ -221,6 +269,19 @@ service cloud.firestore {
       allow read: if portalKind(kind) && (isAdmin() || ownsAgency(agencyId));
       allow create, update: if isAdmin() && portalKind(kind) && validPortal(agencyId, kind, docId);
       allow delete: if isAdmin() && portalKind(kind);
+    }
+
+    match /portal/{agencyId}/requests/{docId} {
+      allow read: if isAdmin() || ownsAgency(agencyId);
+      allow create: if ownsAgency(agencyId) && validRequest(agencyId, docId) && request.resource.data.status == 'new';
+      allow update: if isAdmin() && validRequest(agencyId, docId);
+      allow delete: if isAdmin();
+    }
+
+    match /portal/{agencyId}/access/{docId} {
+      allow get, list: if isAdmin();
+      allow create: if ownsAgency(agencyId) && validAccess(agencyId, docId);
+      allow update, delete: if isAdmin();
     }
 
     match /{document=**} {

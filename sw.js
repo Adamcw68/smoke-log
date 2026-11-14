@@ -1,4 +1,4 @@
-const C='ccsa-v2.29.0-20261114';const F=['./','index.html','calpush.js','labelread.js','sheetfill.js','jobrefresh.js','gsignin.js','pdflib.js','transfer.js','firebase-config.js','livesync.js','portaldata.js','certificate.js','invoice.js','portaladmin.js','manifest.webmanifest','icon-32.png','icon-180.png','icon-192.png','icon-512.png'];
+const C='ccsa-v2.30.0-20261114';const F=['./','index.html','calpush.js','labelread.js','sheetfill.js','jobrefresh.js','gsignin.js','pdflib.js','transfer.js','firebase-config.js','livesync.js','portaldata.js','certificate.js','invoice.js','requests.js','portaladmin.js','manifest.webmanifest','icon-32.png','icon-180.png','icon-192.png','icon-512.png'];
 const O=['ocr/tesseract.min.js','ocr/worker.min.js','ocr/eng.traineddata.gz'];
 function simd(){try{return WebAssembly.validate(new Uint8Array([0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,10,10,1,8,0,65,0,253,15,253,98,11]))}catch(e){return false}}
 const rq=u=>new Request(u,{cache:'reload'});

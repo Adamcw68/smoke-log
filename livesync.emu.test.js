@@ -3,7 +3,7 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const {initializeTestEnvironment,assertFails,assertSucceeds}=require('@firebase/rules-unit-testing');
-const {doc,getDoc,setDoc,onSnapshot}=require('firebase/firestore');
+const {doc,getDoc,setDoc,deleteDoc,onSnapshot}=require('firebase/firestore');
 require('./transfer.js');
 const sync=require('./livesync.js');
 const portal=require('./portaldata.js');
@@ -127,4 +127,23 @@ test('an agency login reads only its own portal and cannot write',async()=>{
   await assertFails(setDoc(doc(agent,'portal/rwm/invoices/'+invoice.id),invoice));
   await assertFails(setDoc(doc(admin,'portal/rwm/invoices/'+invoice.id),Object.assign({},invoice,{contact:'Jane Tenant'})));
   await assertFails(getDoc(doc(signedOut,'portal/rwm/invoices/'+invoice.id)));
+  const request={
+    id:'req-18-river',agencyId:'rwm',agencyCode:'Ray White Maclean/Yamba',propertyId:prop.propertyId||prop.id,
+    address:prop.address,ident:'',tenancy:'Permanent',timeframe:'Next fortnight',notes:'Two alarms',
+    status:'new',createdAt:'2026-11-14T01:00:00.000Z',fileName:'',fileType:'',fileData:''
+  };
+  const access={id:request.id,agencyId:'rwm',requestId:request.id,contactName:'Sam Resident',contactPhone:'0412 555 019',createdAt:request.createdAt};
+  await assertSucceeds(setDoc(doc(agent,'portal/rwm/requests/'+request.id),request));
+  await assertSucceeds(setDoc(doc(agent,'portal/rwm/access/'+request.id),access));
+  await assertSucceeds(getDoc(doc(agent,'portal/rwm/requests/'+request.id)));
+  await assertFails(getDoc(doc(agent,'portal/rwm/access/'+request.id)));
+  await assertFails(getDoc(doc(other,'portal/rwm/requests/'+request.id)));
+  await assertFails(setDoc(doc(other,'portal/rwm/requests/'+request.id),Object.assign({},request,{agencyId:'lifestyle'})));
+  await assertFails(setDoc(doc(agent,'portal/rwm/requests/'+request.id),Object.assign({},request,{status:'accepted'})));
+  await assertFails(setDoc(doc(agent,'portal/rwm/requests/'+request.id),Object.assign({},request,{contactPhone:'0412 555 019'})));
+  await assertSucceeds(getDoc(doc(admin,'portal/rwm/access/'+request.id)));
+  await assertSucceeds(setDoc(doc(admin,'portal/rwm/requests/'+request.id),Object.assign({},request,{status:'accepted'})));
+  await assertSucceeds(setDoc(doc(admin,'portal/rwm/requests/'+request.id),Object.assign({},request,{status:'completed'})));
+  await assertSucceeds(deleteDoc(doc(admin,'portal/rwm/access/'+request.id)));
+  await assertFails(deleteDoc(doc(agent,'portal/rwm/access/'+request.id)));
 });
