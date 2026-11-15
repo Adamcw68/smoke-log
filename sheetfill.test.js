@@ -14,6 +14,25 @@ const ELD='Elders Real Estate Clarence Valley';
 const YV='Yamba Valley Real Estate';
 const PRIV='Private Owner';
 
+test('peacock and sage are ready and cocoa is an event with no colour',function(){
+  const peacock=fill.visitColour('7');
+  const sage=fill.visitColour(2);
+  const cocoa=fill.visitColour('');
+  const basil=fill.visitColour('10');
+  assert.equal(peacock.ready,true);
+  assert.equal(peacock.label,'Tenant home');
+  assert.equal(sage.ready,true);
+  assert.equal(sage.label,'Get keys');
+  assert.equal(cocoa.ready,false);
+  assert.equal(cocoa.waiting,true);
+  assert.equal(fill.visitColour(null).waiting,true);
+  assert.equal(basil.ready,false);
+  assert.equal(basil.waiting,false);
+  assert.equal(fill.readyLine(12,3,0),'12 ready, 3 skipped (waiting on tenant)');
+  assert.equal(fill.readyLine(2,0,0),'2 ready');
+  assert.equal(fill.readyLine(2,1,1),'2 ready, 2 skipped (1 waiting on tenant)');
+});
+
 test('known agencies map to the four names and unknown names stay',function(){
   const cases=[
     ['RWY',RW],['rwy',RW],['Ray White Yamba',RW],['Ray White, Yamba',RW],['Raywhite Yamba',RW],
