@@ -180,6 +180,8 @@ body.snk .toast{bottom:calc(160px + env(safe-area-inset-bottom))}
 .badge.hol{background:#DCEBFF;color:#0B3F80;box-shadow:inset 0 0 0 1.5px #1F5FA8}
 .badge.perm{background:#F0EFEF;color:var(--ink);box-shadow:inset 0 0 0 1.5px #8E8A8B}
 .badge.due{background:#B5161C;color:#fff}
+.badge.visit-home{background:#D6F0FA;color:#03577A}
+.badge.visit-keys{background:#E5F6EF;color:#0E6B45}
 .row .unarch,.btn.unarch,.archban .unarch{background:var(--blue);border-color:var(--blue);color:#fff}
 .btn.unall{width:100%;margin:0 0 10px;min-height:52px;background:var(--blue);border-color:var(--blue);color:#fff}
 .archban{flex-wrap:wrap}
@@ -381,7 +383,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="pdflib.js"></script><script src="transfer.js"></script><script src="firebase-config.js"></script><script src="livesync.js"></script><script src="portaldata.js"></script><script src="certificate.js"></script><script src="invoice.js"></script><script src="requests.js"></script><script src="portaladmin.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.38.0 (20261115)';
+const APP_VERSION='2.39.0 (20261115)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -653,6 +655,34 @@ function applyCalendar(events){ // sets svc on non-archived matches; caller reco
     if(ch)changed++});
   if(formsChanged)save(LS.forms,FORMS);
   return {events:events.length,matched:hits.size,changed,unmatched,details:detailJobs}}
+function visitOf(ev){return window.SheetFill&&SheetFill.visitColour?SheetFill.visitColour(ev&&ev.colorId):{ready:true,kind:'',label:'',waiting:false}}
+function readyLine(ready,waiting,other){return window.SheetFill&&SheetFill.readyLine?SheetFill.readyLine(ready,waiting,other):(ready+' ready')}
+/* Peacock and Sage come in. Cocoa is no colour on the event. Anything else stays out. A job already here is never deleted. */
+function ingestCalendar(events){
+  events=events||[];
+  let ready=0,waiting=0,other=0;
+  const readyEvents=[];
+  events.forEach(ev=>{
+    const c=visitOf(ev);
+    if(!c.ready){if(c.waiting)waiting++;else other++;return}
+    ready++;readyEvents.push(ev)});
+  readyEvents.forEach(ev=>{
+    const made=ensureJobForEvent(ev);
+    made.job.notReady=false;
+    made.job.visit=visitOf(ev).kind});
+  const r=applyCalendar(readyEvents);
+  const seen=new Map();
+  events.forEach(ev=>{
+    const j=matchEventJob(ev);if(!j)return;
+    if(!seen.has(j.id))seen.set(j.id,[]);
+    seen.get(j.id).push(ev)});
+  seen.forEach((evs,id)=>{
+    const j=JOBS.find(x=>x.id===id);if(!j)return;
+    const best=pickEvent(j,evs),c=visitOf(best);
+    if(c.ready){j.notReady=false;j.visit=c.kind}else j.notReady=true});
+  r.ready=ready;r.waiting=waiting;r.other=other;r.summary=readyLine(ready,waiting,other);
+  save(LS.jobs,JOBS);
+  return r}
 /* v2.9: last imported/synced events stay on the phone so each one can open its worksheet. */
 const LS_CALEV='ccsa.calevents.v1';
 let CAL_EVENTS=load(LS_CALEV,[]);
@@ -686,7 +716,10 @@ function ensureJobForEvent(ev){
   JOBS.push(j);recomputeRouteOrder();save(LS.jobs,JOBS);
   return {job:j,created:true}}
 function openEventWorksheet(ev){
+  const c=visitOf(ev),existing=matchEventJob(ev);
+  if(!c.ready&&!existing){toast(c.waiting?'Not ready yet. Waiting on the tenant. Nothing was added.':'This appointment is not marked ready. Nothing was added.');return}
   const r=ensureJobForEvent(ev);
+  if(c.ready){r.job.notReady=false;r.job.visit=c.kind;save(LS.jobs,JOBS)}
   if(r.created)toast('No matching job – started a worksheet for this appointment');
   location.hash='#job/'+encodeURIComponent(r.job.id)}
 function calDayList(){return [...new Set(CAL_EVENTS.map(ev=>String(ev.iso).slice(0,10)))]}
@@ -712,8 +745,9 @@ function calEntriesHTML(){
   const none=UI.filter==='done'?'No completed appointments this day.':UI.filter==='todo'?'No to-do appointments this day.':UI.filter==='arch'?'No archived appointments this day.':'No appointments this day.';
   return `<section class="calents" id="calents" aria-label="Calendar entries"><div class="calhd"><b>Calendar entries</b><span class="note">${count}</span></div>
   <div class="calnav"><button type="button" id="calprev" aria-label="Earlier day"${at<=0?' disabled':''}>‹</button><div class="calday">${esc(calDayLabel(day))}</div><button type="button" id="calnext" aria-label="Later day"${at<0||at>=days.length-1?' disabled':''}>›</button></div>
-  ${shown.length?shown.map(({ev,i})=>{const job=matchEventJob(ev),title=eventTitle(ev),st=job?statusOf(job):'';
-    return `<article class="calent"><div class="caltime">${esc(evClock(ev.iso))}</div><div class="calbody"><div class="calsum">${esc(title)}</div>${st?`<span class="badge sb sb-${st}">${ST[st]}</span>`:''}${ev.location&&ev.location!==title?`<div class="note">${esc(ev.location)}</div>`:''}${job?(isArch(job)?'<div class="note">Archived job</div>':''):'<div class="note">Not on the job list yet – this starts a worksheet.</div>'}</div><button type="button" class="btn pri calopen" data-calev="${i}" aria-label="Open worksheet for ${esc(title)}">Open worksheet</button></article>`}).join(''):`<p class="empty">${esc(none)}</p>`}
+  ${shown.length?shown.map(({ev,i})=>{const job=matchEventJob(ev),title=eventTitle(ev),st=job?statusOf(job):'',c=visitOf(ev),held=!c.ready&&!job;
+    const note=held?(c.waiting?'Skipped. Waiting on the tenant.':'Skipped. Not marked ready.'):job?(isArch(job)?'Archived job':job.notReady?'Not ready. The worksheet is still here.':''):'Not on the job list yet – this starts a worksheet.';
+    return `<article class="calent"><div class="caltime">${esc(evClock(ev.iso))}</div><div class="calbody"><div class="calsum">${esc(title)}</div>${st?`<span class="badge sb sb-${st}">${ST[st]}</span>`:''}${held?`<span class="badge due">Skipped</span>`:''}${ev.location&&ev.location!==title?`<div class="note">${esc(ev.location)}</div>`:''}${note?`<div class="note">${note}</div>`:''}</div>${held?'':`<button type="button" class="btn pri calopen" data-calev="${i}" aria-label="Open worksheet for ${esc(title)}">Open worksheet</button>`}</article>`}).join(''):`<p class="empty">${esc(none)}</p>`}
   <p class="note calfoot">The job list follows this order. Open worksheet uses the same address match.</p></section>`}
 function bindCalEntries(root){
   root=root||document;
@@ -771,7 +805,7 @@ async function fetchGcalEvents(token){
   return items.map(normalizeCalEvent).filter(Boolean)}
 function calResultMsg(r){
   const pl=(n,w)=>n+' '+w+(n===1?'':'s');
-  let msg=`Matched ${pl(r.matched,'job')} to the calendar`+(r.changed?`, updated ${pl(r.changed,'appointment time')}`:'')+'. The job list follows calendar order.';
+  let msg=(r.summary?r.summary+'. ':'')+`Matched ${pl(r.matched,'job')} to the calendar`+(r.changed?`, updated ${pl(r.changed,'appointment time')}`:'')+'. The job list follows calendar order.';
   if(r.unmatched)msg+=` ${pl(r.unmatched,'event')} had no matching address.`;
   if(r.details)msg+=` Filled property or alarm details on ${pl(r.details,'worksheet')}.`;
   return msg}
@@ -793,7 +827,7 @@ async function syncFromGoogle(opts){
     catch(e){if(e.code===401){GCAL.token='';GCAL.exp=0;gcalSave();if(opts.auto)throw e;token=await requestToken('consent');events=await fetchGcalEvents(token)}else throw e}
     if(!events.length)throw new Error('No appointments on that calendar in the next few months.');
     storeCalendarEvents(events);
-    const r=applyCalendar(events);recomputeRouteOrder();save(LS.jobs,JOBS);
+    const r=ingestCalendar(events);recomputeRouteOrder();save(LS.jobs,JOBS);
     const pending=JOBS.filter(j=>isArch(j)&&j.calPush&&j.calPush.pending).map(j=>j.id);
     if(pending.length&&gcalCanWrite()){try{const pr=await pushArchivedIds(pending);if(pr&&pr.summary)r.calPush=pr.summary}catch(e){console.warn(e);r.calPush='Calendar was not changed.'}}
     GCAL.lastSync=Date.now();GCAL.lastOk=true;GCAL.lastMsg=calResultMsg(r)+(r.calPush?' '+r.calPush:'');GCAL.connected=true;gcalSave();
@@ -1036,7 +1070,7 @@ async function importFiles(files,mode){
     }catch(e){console.warn(e);st.bad.push(file.name+': '+e.message)}}
   save(LS.set,SET);
   if(mode==='replace'&&all.length){mergeJobs(all);if(all.some(j=>j.svc))st.timed=true;for(const d of all._d||[])await restoreExtras(d,null);st.add=all.length}
-  if(st.calEvents.length){storeCalendarEvents(st.calEvents);st.cal=applyCalendar(st.calEvents);st.timed=true}
+  if(st.calEvents.length){storeCalendarEvents(st.calEvents);st.cal=ingestCalendar(st.calEvents);st.timed=true}
   if(st.timed){recomputeRouteOrder();save(LS.jobs,JOBS)}
   else if(!(mode==='replace'&&all.length))save(LS.jobs,JOBS);
   const pl=(n,w)=>n+' '+w+(n===1?'':'s'),kind=st.sheets===st.files?'spreadsheet':'file';
@@ -1044,7 +1078,7 @@ async function importFiles(files,mode){
   if(st.packMsg&&!st.add&&!st.sheets&&!(st.calEvents&&st.calEvents.length)){
     msg=st.packMsg;
   }else if(st.cal&&!st.add&&!st.sheets){
-    msg=`Matched ${pl(st.cal.matched,'job')} to the calendar`+(st.cal.changed?`, updated ${pl(st.cal.changed,'appointment time')}`:'')+'. The job list follows calendar order.';
+    msg=(st.cal.summary?st.cal.summary+'. ':'')+`Matched ${pl(st.cal.matched,'job')} to the calendar`+(st.cal.changed?`, updated ${pl(st.cal.changed,'appointment time')}`:'')+'. The job list follows calendar order.';
     if(st.cal.unmatched)msg+=` ${pl(st.cal.unmatched,'event')} had no matching address.`;
   }else{
     msg=mode==='replace'?`Replaced the job list with ${pl(st.add,'job')} from ${pl(st.files,kind)}`:`Added ${pl(st.add,'job')} from ${pl(st.files,kind)}, ${pl(st.dup,'duplicate')} skipped`;
@@ -1402,7 +1436,7 @@ function card(j){
   const slot=[j.order!=null?'#'+j.order:'',when?pad2(when.getHours())+':'+pad2(when.getMinutes()):''].filter(Boolean).join(' · ');
   const day=when&&String(j.svc).slice(0,10)!==todayISO()?when.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'}):(!when&&j.due?'Due '+fmtDMY(j.due):'');
   return `<div class="swp ${ar?'r':''}"><div class="card st-${st}" data-id="${esc(j.id)}" data-status="${st}">
-  <div class="chiprow">${slot?`<span class="badge slot">${slot}</span>`:''}<span class="badge sb sb-${st}">${ST[st]}${ar?' '+hhmm(j.arch):''}</span>${j.section?`<span class="badge ${j.section==='Holiday'?'hol':'perm'}">${j.section==='Holiday'?'🏖️ ':''}${esc(j.section)}</span>`:''}${ar&&done?'<span class="badge sb sb-done">✓ Done</span>':''}${ar&&j.calPush?(j.calPush.ok?'<span class="badge sb sb-done">Basil on calendar</span>':j.calPush.pending?'<span class="badge due">Calendar not updated</span>':''):''}${due?'<span class="badge due">⚠️ Replace due</span>':''}${nn?`<span class="badge newb">🆕 ${nn} NEW</span>`:''}${pc?`<span class="badge">📷 ${pc}</span>`:''}${day?`<span class="badge">${day}</span>`:''}</div>
+  <div class="chiprow">${slot?`<span class="badge slot">${slot}</span>`:''}<span class="badge sb sb-${st}">${ST[st]}${ar?' '+hhmm(j.arch):''}</span>${j.section?`<span class="badge ${j.section==='Holiday'?'hol':'perm'}">${j.section==='Holiday'?'🏖️ ':''}${esc(j.section)}</span>`:''}${ar&&done?'<span class="badge sb sb-done">✓ Done</span>':''}${j.notReady?'<span class="badge due" data-visit="waiting">Not ready</span>':j.visit==='tenant'?'<span class="badge visit-home" data-visit="tenant">Tenant home</span>':j.visit==='keys'?'<span class="badge visit-keys" data-visit="keys">Get keys</span>':''}${ar&&j.calPush?(j.calPush.ok?'<span class="badge sb sb-done">Basil on calendar</span>':j.calPush.pending?'<span class="badge due">Calendar not updated</span>':''):''}${due?'<span class="badge due">⚠️ Replace due</span>':''}${nn?`<span class="badge newb">🆕 ${nn} NEW</span>`:''}${pc?`<span class="badge">📷 ${pc}</span>`:''}${day?`<span class="badge">${day}</span>`:''}</div>
   <div class="addr">${esc(j.addr)}</div>
   <div class="meta">${esc(j.agent)}${j.ident?' · '+esc(j.ident):''}</div>${j.src?`<div class="srctag" title="Source spreadsheet">📄 ${esc(j.src)}</div>`:''}
   <div class="meta">👤 ${esc(j.contact||'—')} · 🔔 ${j.alarms??'?'} alarm${j.alarms==1?'':'s'} · 🪜 ${esc(j.ladder||'—')}</div>

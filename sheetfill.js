@@ -135,6 +135,22 @@
     if(k==='hol'||k==='holiday')return 'Holiday';
     return '';
   }
+  /* Google event colours. Peacock and Sage are ready. No colorId means the event is using the calendar's own colour. On this calendar that colour is Cocoa: the tenant has not been in touch. */
+  function visitColour(colorId){
+    const id=String(colorId==null?'':colorId).trim();
+    if(id==='7')return {ready:true,kind:'tenant',label:'Tenant home',waiting:false};
+    if(id==='2')return {ready:true,kind:'keys',label:'Get keys',waiting:false};
+    if(!id)return {ready:false,kind:'',label:'',waiting:true};
+    return {ready:false,kind:'',label:'',waiting:false};
+  }
+  function readyLine(ready,waiting,other){
+    ready=ready|0;waiting=waiting|0;other=other|0;
+    const skipped=waiting+other;
+    if(!skipped)return ready+' ready';
+    if(!other)return ready+' ready, '+skipped+' skipped (waiting on tenant)';
+    if(!waiting)return ready+' ready, '+other+' skipped';
+    return ready+' ready, '+skipped+' skipped ('+waiting+' waiting on tenant)';
+  }
   /* An Agent: line wins, including an unknown name. A title tag fills only a blank. */
   function readEvent(ev){
     ev=ev||{};
@@ -284,5 +300,5 @@
   }
   function isPrivateOwner(v){return print(v)===PRIV}
   function agencyChoices(){return CHOICES.slice()}
-  return {print:print,stripTail:stripTail,readTitle:readTitle,readEvent:readEvent,visitConflicts:visitConflicts,fromEvent:fromEvent,forForm:forForm,agentForForm:agentForForm,tenancyName:tenancyName,tenancyForForm:tenancyForForm,agentSlot:agentSlot,agencyFields:agencyFields,agencyChoices:agencyChoices,isPrivateOwner:isPrivateOwner,phoneFormat:phoneFormat,soundDraft:soundDraft,soundFinal:soundFinal};
+  return {print:print,stripTail:stripTail,readTitle:readTitle,readEvent:readEvent,visitConflicts:visitConflicts,fromEvent:fromEvent,forForm:forForm,agentForForm:agentForForm,tenancyName:tenancyName,tenancyForForm:tenancyForForm,agentSlot:agentSlot,agencyFields:agencyFields,agencyChoices:agencyChoices,isPrivateOwner:isPrivateOwner,phoneFormat:phoneFormat,soundDraft:soundDraft,soundFinal:soundFinal,visitColour:visitColour,readyLine:readyLine};
 });
