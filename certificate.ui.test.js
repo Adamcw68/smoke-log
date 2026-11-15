@@ -40,7 +40,9 @@ test('the portal service report says 240V and the PDF page matches',{timeout:900
   assert.equal(/\bHW\b/.test(view),false);
   assert.equal(view.includes('Jane Tenant'),false);
   assert.equal(view.includes('0400 111 222'),false);
-  assert.match(await page.$eval('[data-download]',el=>el.textContent),/Download PDF/);
+  assert.match(await page.$eval('#certificate [data-download]',el=>el.textContent),/Download PDF/);
+  assert.equal(await page.$$eval('#certificate [data-compliance]',els=>els.length),0);
+  assert.equal(await page.$$eval('#certificate button',els=>els.length),1);
   const report=await page.$('#certificate');
   await report.screenshot({path:path.join(ART,'service_report_portal.png')});
 

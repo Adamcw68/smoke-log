@@ -43,6 +43,10 @@ test('a service report matches the agency layout and leaves the tenant off',func
   assert.match(text,/0412 092 233/);
   assert.match(text,/c\/- Ray White Maclean\/Yamba/);
   assert.match(text,/0\.94 0\.18 0\.20/);
+  assert.match(text,/\/Subtype \/Image/);
+  assert.equal(text.includes('(CC) Tj'),false);
+  assert.equal(text.includes('(v) Tj'),false);
+  assert.match(text,/ arc\n/);
   assert.match(text,/Report Date: 12\/08\/2026/);
   assert.match(text,/SERVICE DETAILS/);
   assert.match(text,/18 River Street, Maclean NSW 2463/);
