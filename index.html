@@ -200,7 +200,7 @@ header[class^=st-] img{background:#fff;border-radius:8px;padding:2px 4px}
 /* v2.4 technician control */
 .tech{margin:2px 0 6px}
 .tseg{display:flex;gap:8px}
-.tseg button{flex:1;min-height:56px;border:2px solid var(--line);background:#fff;border-radius:14px;font-size:16px;font-weight:800;color:var(--ink);padding:6px 8px;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.15}
+.tseg button{flex:1;min-height:56px;border:2px solid var(--line);background:#fff;border-radius:14px;font-size:13px;font-weight:800;color:var(--ink);padding:4px 4px;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.15;white-space:normal;text-align:center}
 .tseg button small{font-size:12px;font-weight:600;color:#5A5657;margin-top:2px}
 .tseg button.on{background:var(--pri);border-color:var(--pri);color:#fff}
 .tseg button.on small{color:#fff}
@@ -381,7 +381,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="pdflib.js"></script><script src="transfer.js"></script><script src="firebase-config.js"></script><script src="livesync.js"></script><script src="portaldata.js"></script><script src="certificate.js"></script><script src="invoice.js"></script><script src="requests.js"></script><script src="portaladmin.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.37.0 (20261114)';
+const APP_VERSION='2.38.0 (20261115)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -402,20 +402,21 @@ let JOBS=load(LS.jobs,[]), FORMS=load(LS.forms,{}), UI=load(LS.ui,{sort:'route',
 // A saved worksheet name is kept. A blank one is filled from the signed-in account, or from SET.tech.
 function techClean(v){return clean(v).slice(0,40)}
 function signedTech(){if(!window.CCSASync||!CCSASync.technicianFromAccount||!CCSASync.state)return '';return CCSASync.technicianFromAccount(CCSASync.state().user)||''}
-function deviceTech(){const t=techClean(SET.tech);if(!t||/^adam westerman$/i.test(t))return 'Adam';return t}
-function currentTech(){return signedTech()||deviceTech()||'Adam'}
-function addRecent(n){n=techClean(n);if(!n||n==='Adam'||n==='Craig')return;SET.techRecent=[n,...(SET.techRecent||[]).filter(x=>x.toLowerCase()!==n.toLowerCase())].slice(0,6);save(LS.set,SET)}
-function applyTechName(f,name){const n=techClean(name)||'Adam';f.tech=n;if(n==='Adam'||n==='Craig'){f.techMode=n;f.techOther=''}else{f.techMode='other';f.techOther=n}}
-function techMig(f){if(!f)return f;const picked=window.CCSASync&&CCSASync.worksheetTech?CCSASync.worksheetTech(f.tech,currentTech()):{tech:techClean(f.tech)||currentTech(),fill:!techClean(f.tech)};if(!picked.fill){if(!f.techMode)applyTechName(f,picked.tech);f.tech=picked.tech;return f}applyTechName(f,picked.tech);return f}
-function techSet(f,mode,name){if(mode==='Adam'||mode==='Craig')applyTechName(f,mode);else{f.techOther=techClean(name??f.techOther);f.tech=f.techOther||currentTech();f.techMode='other'}}
-function techNew(){const d=currentTech();return d==='Adam'||d==='Craig'?{techMode:d,techOther:'',tech:d}:{techMode:'other',techOther:d,tech:d}}
+function deviceTech(){const t=techClean(SET.tech);if(!t||/^adam$/i.test(t)||/^adam westerman$/i.test(t))return 'Adam Westerman';if(/^craig$/i.test(t)||/^craig robinson$/i.test(t))return 'Craig Robinson';return t}
+function currentTech(){return signedTech()||deviceTech()||'Adam Westerman'}
+function addRecent(n){n=techClean(n);if(!n||n==='Adam Westerman'||n==='Craig Robinson'||/^adam$/i.test(n)||/^craig$/i.test(n))return;SET.techRecent=[n,...(SET.techRecent||[]).filter(x=>x.toLowerCase()!==n.toLowerCase())].slice(0,6);save(LS.set,SET)}
+function applyTechName(f,name){const n=techClean(name)||'Adam Westerman';f.tech=n;if(n==='Adam Westerman'||n==='Craig Robinson'){f.techMode=n;f.techOther=''}else{f.techMode='other';f.techOther=n}}
+function techMig(f){if(!f)return f;const picked=window.CCSASync&&CCSASync.worksheetTech?CCSASync.worksheetTech(f.tech,currentTech()):{tech:techClean(f.tech)||currentTech(),fill:!techClean(f.tech),upgrade:false};if(picked.fill||picked.upgrade||!f.techMode)applyTechName(f,picked.tech);else f.tech=picked.tech;return f}
+function techSet(f,mode,name){if(mode==='Adam Westerman'||mode==='Craig Robinson')applyTechName(f,mode);else{f.techOther=techClean(name??f.techOther);f.tech=f.techOther||currentTech();f.techMode='other'}}
+function techNew(){const d=currentTech();return d==='Adam Westerman'||d==='Craig Robinson'?{techMode:d,techOther:'',tech:d}:{techMode:'other',techOther:d,tech:d}}
+function upgradeDeviceTech(){const t=techClean(SET.tech);let next='';if(/^adam$/i.test(t))next='Adam Westerman';else if(/^craig$/i.test(t))next='Craig Robinson';const rec=(SET.techRecent||[]).map(n=>{const c=techClean(n);if(/^adam$/i.test(c))return 'Adam Westerman';if(/^craig$/i.test(c))return 'Craig Robinson';return c}).filter((n,i,a)=>n&&n!=='Adam Westerman'&&n!=='Craig Robinson'&&a.indexOf(n)===i);const changed=!!next||JSON.stringify(rec)!==JSON.stringify(SET.techRecent||[]);if(!changed)return;if(next)SET.tech=next;SET.techRecent=rec;save(LS.set,SET)}
 function techMigrateAll(){if(SET.techV===2)return;
-  if(!SET.techRecent)SET.techRecent=[];const old=techClean(SET.tech);if(old&&old.toLowerCase()!=='adam'&&!/^adam westerman$/i.test(old))addRecent(old);
-  if(!techClean(SET.tech))SET.tech='Adam';SET.techV=2;save(LS.set,SET)}
-function techCtl(f){const name=f.tech||currentTech(),known=name==='Adam'||name==='Craig',oth=!known,rec=(SET.techRecent||[]);
+  if(!SET.techRecent)SET.techRecent=[];const old=techClean(SET.tech);if(old&&!/^adam( westerman)?$/i.test(old))addRecent(old);
+  if(!techClean(SET.tech))SET.tech='Adam Westerman';SET.techV=2;save(LS.set,SET)}
+function techCtl(f){const name=f.tech||currentTech(),known=name==='Adam Westerman'||name==='Craig Robinson',oth=!known,rec=(SET.techRecent||[]);
   const btn=(id,label)=>{const on=id==='other'?oth:name===id;return `<button type="button" role="radio" aria-checked="${on}" data-tmode="${id}" class="${on?'on':''}">${on?'✓ ':''}${esc(label)}</button>`};
   return`<div class="tech" id="techctl"><div class="tseg" role="radiogroup" aria-label="Technician">
-   ${btn('Adam','Adam')}${btn('Craig','Craig')}${btn('other','Other')}</div>
+   ${btn('Adam Westerman','Adam Westerman')}${btn('Craig Robinson','Craig Robinson')}${btn('other','Other')}</div>
    <div id="tothr" ${oth?'':'hidden'}><label class="l" for="tother">Other technician's name</label><input class="t" id="tother" data-tother="1" type="text" autocomplete="name" autocapitalize="words" maxlength="40" value="${esc(oth?name:(f.techOther||''))}" placeholder="Type the technician's name">
    ${rec.length?`<div class="tchips" aria-label="Recent names"><span class="note">Recent:</span>${rec.map(n=>`<button type="button" data-tpick="${esc(n)}" class="${oth&&name===n?'on':''}">${esc(n)}</button>`).join('')}</div>`:''}</div>
    <p class="note tprint" id="tprint">On the worksheet: <b>${esc(name)}</b></p></div>`}
@@ -1415,16 +1416,16 @@ function clearHead(){$('header').className=''}
 /* ---------- job form ---------- */
 function setTechHTML(){const signed=signedTech();
   if(signed)return `<section class="f settech" id="settech"><h2>Technician</h2><p class="note" id="techsigned">Signed in as <b>${esc(signed)}</b>. New worksheets use this name. You can still change it on a worksheet.</p></section>`;
-  const d=deviceTech(),known=d==='Adam'||d==='Craig',oth=!known;
+  const d=deviceTech(),known=d==='Adam Westerman'||d==='Craig Robinson',oth=!known;
   const btn=(id,label)=>{const on=id==='other'?oth:d===id;return `<button type="button" role="radio" aria-checked="${on}" data-sdef="${id}" class="${on?'on':''}">${on?'✓ ':''}${esc(label)}</button>`};
   return`<section class="f settech" id="settech"><h2>Technician</h2><p class="note">Nobody is signed in. New worksheets use this name. It stays on this phone.</p>
-  <div class="tseg" role="radiogroup" aria-label="Technician">${btn('Adam','Adam')}${btn('Craig','Craig')}${btn('other','Other')}</div>
+  <div class="tseg" role="radiogroup" aria-label="Technician">${btn('Adam Westerman','Adam Westerman')}${btn('Craig Robinson','Craig Robinson')}${btn('other','Other')}</div>
   <div id="sdoth" ${oth?'':'hidden'}><label class="l" for="sdname">Other name</label><input class="t" id="sdname" type="text" maxlength="40" autocapitalize="words" value="${esc(oth?d:'')}" placeholder="Type a name">
   ${(SET.techRecent||[]).length?`<div class="tchips"><span class="note">Recent:</span>${SET.techRecent.map(n=>`<button type="button" data-sdpick="${esc(n)}" class="${oth&&d===n?'on':''}">${esc(n)}</button>`).join('')}</div>`:''}</div></section>`}
 function bindSetTech(){const s=$('#settech');if(!s)return;const re=()=>{s.outerHTML=setTechHTML();bindSetTech()};
-  s.querySelectorAll('[data-sdef]').forEach(b=>b.onclick=()=>{if(b.dataset.sdef==='Adam'||b.dataset.sdef==='Craig'){SET.tech=b.dataset.sdef;save(LS.set,SET);toast('New worksheets: '+SET.tech);re()}else{$('#sdoth').hidden=false;const i=$('#sdname');if(i)i.focus()}});
+  s.querySelectorAll('[data-sdef]').forEach(b=>b.onclick=()=>{if(b.dataset.sdef==='Adam Westerman'||b.dataset.sdef==='Craig Robinson'){SET.tech=b.dataset.sdef;save(LS.set,SET);toast('New worksheets: '+SET.tech);re()}else{$('#sdoth').hidden=false;const i=$('#sdname');if(i)i.focus()}});
   s.querySelectorAll('[data-sdpick]').forEach(b=>b.onclick=()=>{SET.tech=b.dataset.sdpick;save(LS.set,SET);toast('New worksheets: '+SET.tech);re()});
-  const i=$('#sdname');if(!i)return;i.oninput=()=>{const v=techClean(i.value);SET.tech=v||'Adam';save(LS.set,SET)};i.onchange=()=>{addRecent(i.value);if(techClean(i.value)){toast('New worksheets: '+SET.tech);re()}}}
+  const i=$('#sdname');if(!i)return;i.oninput=()=>{const v=techClean(i.value);SET.tech=v||'Adam Westerman';save(LS.set,SET)};i.onchange=()=>{addRecent(i.value);if(techClean(i.value)){toast('New worksheets: '+SET.tech);re()}}}
 function chips(name,opts,val,multi){return`<div class="chips" data-chips="${name}" ${multi?'data-multi="1"':''}>${opts.map(o=>`<button type="button" data-v="${esc(o)}" class="${(multi?(val||[]).includes(o):String(val)===String(o))?'on':''}">${esc(o)}</button>`).join('')}</div>`}
 function migNew(a){if(!a.yn)a.yn={};if(a.newAns!=='Yes'&&a.newAns!=='No'&&a.newAns!=='')a.newAns=a.isNew?'Yes':'';if(a.newAns==='Yes'&&!a.isNew)a.isNew=true;if(a.newAns!=='Yes'&&a.isNew)a.isNew=false}
 function unansNew(f){if(!f)return[];return f.al.slice(0,f.alarms||0).map((a,i)=>a.newAns!=='Yes'&&a.newAns!=='No'?i:-1).filter(i=>i>=0)}
@@ -1990,7 +1991,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   $('#file').onchange=e=>{const fl=[...e.target.files],md=IMPMODE;IMPMODE='add';e.target.value='';if(fl.length)importFiles(fl,md)};
   $('#xfer').onchange=e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)importWorksheetFile(f)};
   $('#calfile').onchange=e=>{const fl=[...e.target.files];e.target.value='';if(fl.length)importFiles(fl,'add')};
-  try{techMigrateAll()}catch(e){console.warn(e)}document.title='CCSA Worksheets';if(gcalLive())loadGis().catch(()=>{});
+  try{techMigrateAll();upgradeDeviceTech()}catch(e){console.warn(e)}document.title='CCSA Worksheets';if(gcalLive())loadGis().catch(()=>{});
   if(window.CCSAInvoice)CCSAInvoice.mount(null,{getJobs:function(){return JOBS},getForms:function(){return FORMS},storage:localStorage,toast:toast});
   if(window.CCSAPortal)CCSAPortal.boot({getJobs:function(){return JOBS},getForms:function(){return FORMS},storage:localStorage,client:function(){return window.CCSASync&&CCSASync.client?CCSASync.client():{ready:false}},toast:toast,config:function(){return window.CCSA_FIREBASE},addJob:addPortalJob,calendarJob:calendarForPortalJob});
   render();

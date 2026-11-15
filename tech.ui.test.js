@@ -1,4 +1,4 @@
-/* Synthetic worksheet: Craig is filled on the form and on the PDF. Firebase is not contacted. */
+/* Synthetic worksheet: Craig Robinson is filled on the form and on the PDF. Firebase is not contacted. */
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('fs');
@@ -37,22 +37,33 @@ test('a signed-in Craig fills a blank worksheet and its PDF',{timeout:120000},as
     window.CCSA_SYNC_DISABLED=true;
     localStorage.setItem('ccsa.jobs.v1',JSON.stringify(jobs));
     localStorage.setItem('ccsa.forms.v1',JSON.stringify(forms));
-    localStorage.setItem('ccsa.settings.v1',JSON.stringify({tech:'Adam',techV:2,techRecent:[],ocr:false}));
+    localStorage.setItem('ccsa.settings.v1',JSON.stringify({tech:'Craig',techV:2,techRecent:['Adam'],ocr:false}));
   },[job,kept],{keptjob:keptForm});
   await page.goto(BASE,{waitUntil:'domcontentloaded'});
   await page.waitForSelector('#settech');
-  assert.match(await page.$eval('#settech',el=>el.innerText),/Adam/);
+  assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('ccsa.settings.v1')).tech),'Craig Robinson');
+  assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('ccsa.settings.v1')).techRecent),[]);
+  assert.match(await page.$eval('#settech',el=>el.innerText),/Craig Robinson/);
   await page.evaluate(()=>{
     const orig=CCSASync.state.bind(CCSASync);
     CCSASync.state=function(){const s=orig();s.user={email:'craig@clarencecoastsmokealarms.com.au',displayName:'Someone Else',uid:'synthetic'};return s};
     if(typeof paintSync==='function')paintSync();
   });
-  await page.waitForFunction(()=>/Signed in as Craig/.test(document.getElementById('settech').innerText));
+  await page.waitForFunction(()=>/Signed in as Craig Robinson/.test(document.getElementById('settech').innerText));
   await page.evaluate(()=>{location.hash='#job/craigjob'});
   await page.waitForSelector('#techctl');
   const formName=await page.$eval('#tprint',el=>el.innerText);
-  assert.match(formName,/Craig/);
-  assert.equal(await page.evaluate(()=>FORMS.craigjob.tech),'Craig');
+  assert.match(formName,/Craig Robinson/);
+  assert.equal(await page.evaluate(()=>FORMS.craigjob.tech),'Craig Robinson');
+  const upgraded=await page.evaluate(()=>{
+    const j={id:'short',addr:'1 Short St, Yamba NSW 2464',street:'1 Short St',agent:'RWY',section:'Holiday',p1:'',p2:'',ptype:'House',beds:1,alarms:1,ladder:'Sm',exp:[],svc:'2026-11-14T03:00:00+11:00'};
+    JOBS.push(j);
+    FORMS.short={tech:'Craig',techMode:'Craig',techOther:'',date:'2026-11-14',ident:'',agent:'RWY',agentSet:true,tenancy:'Holiday',tenancySet:true,addr:j.addr,ptype:'House',levels:1,beds:1,alarms:1,ladder:'Sm',asPrev:false,asPhotos:false,asPhotosSet:false,photos:[],comments:'',done:false,updated:'2026-11-14T01:00:00.000Z',al:[{yn:{cleaned:'Yes'},photos:[]}]};
+    FORMS.othername={tech:'Sam Lee',techMode:'other',techOther:'Sam Lee',date:'2026-11-14',agent:'RWY',agentSet:true,tenancy:'Holiday',tenancySet:true,addr:'2 Other St',ptype:'House',alarms:1,al:[{photos:[]}],photos:[]};
+    return {short:formFor(j).tech,other:formFor({id:'othername',addr:'2 Other St',agent:'RWY',section:'Holiday',p1:'',p2:'',ptype:'House',exp:[],alarms:1}).tech};
+  });
+  assert.equal(upgraded.short,'Craig Robinson');
+  assert.equal(upgraded.other,'Sam Lee');
   await page.evaluate(()=>{location.hash='#job/keptjob'});
   await page.waitForFunction(()=>/Adam Westerman/.test(document.getElementById('tprint').innerText));
   assert.equal(await page.evaluate(()=>FORMS.keptjob.tech),'Adam Westerman');
@@ -70,6 +81,8 @@ test('a signed-in Craig fills a blank worksheet and its PDF',{timeout:120000},as
     const items=Array.isArray(content.items)?content.items:[];
     return items.map(it=>it.str||'').join(' ');
   });
-  assert.match(text,/Craig/);
-  await (await page.$('#prev img')).screenshot({path:path.join(ART,'technician_pdf_craig.png')});
+  assert.match(text,/Craig Robinson/);
+  const report=await page.evaluate(()=>document.querySelector('.pdfbox').innerText);
+  assert.doesNotMatch(report,/Technician does not fit/);
+  await (await page.$('#prev img')).screenshot({path:path.join(ART,'technician_pdf_craig_robinson.png')});
 });
