@@ -9,6 +9,7 @@
   const PAGE_W=595.28;
   const PAGE_H=841.89;
   const ACCENT=[0.05,0.42,0.38];
+  const RED=[0.94,0.18,0.20];
   const INK=[0.224,0.208,0.212];
   const MUTED=[0.373,0.357,0.361];
   const LINE=[0.788,0.776,0.776];
@@ -83,9 +84,9 @@
     const hardwired=/240/.test(power);
     const nine=/9v/.test(power);
     const lith=/lithium/.test(power);
-    if(hardwired&&lith)return 'HW Lithium '+sensor+' Alarm';
+    if(hardwired&&lith)return '240V Lithium '+sensor+' Alarm';
     if(lith)return 'Lithium Battery '+sensor+' Alarm';
-    if(hardwired)return 'HW '+sensor+' Alarm';
+    if(hardwired)return '240V '+sensor+' Alarm';
     if(nine)return '9V '+sensor+' Alarm';
     return sensor+' Alarm';
   }
@@ -102,7 +103,7 @@
     'Australian Standard 3786',
     'Section 3.7.2.2 (houses) / Part E2, Spec 2.2a 3(c)(i) (units) of the Building Code of Australia'
   ];
-  const LEGEND='HW: hard-wired, battery can be changed. 9V: battery only, battery can be changed. HW lithium: hard-wired, sealed battery. Lithium: battery only, sealed battery.';
+  const LEGEND='240V: hard-wired, battery can be changed. 9V: battery only, battery can be changed. 240V lithium: hard-wired, sealed battery. Lithium: battery only, sealed battery.';
   function viewModel(cert){
     cert=cert||{};
     const who=party(cert.agencyCode);
@@ -128,7 +129,7 @@
       };
     });
     return {
-      title:'Service report',
+      title:'SERVICE REPORT',
       brand:'Clarence Coast Smoke Alarms',
       phone:'0412 092 233',
       attention:attention,
@@ -137,7 +138,7 @@
       serviceAddress:safeLine(cert.address),
       jobNumber:safeLine(cert.ident||''),
       serviceReason:'Subscription Service',
-      inspector:safeLine(cert.tech)||'Adam Westerman',
+      inspector:safeLine(cert.tech),
       lastInspection:dmy(cert.lastInspection),
       compliant:!alarms.some(function(a){return a.action==='Failed'}),
       complianceLead:'Clarence Coast Smoke Alarms fitted or checked every alarm in the table below. This visit was recorded against:',
@@ -184,13 +185,15 @@
     this.text('F2',12,x+6,fromTop+10,'CC',WHITE);
   };
   Doc.prototype.header=function(continued,kicker){
+    const service=!kicker;
     this.mark(36,16);
-    this.text('F1',9,80,16,kicker||'Service report',MUTED);
-    this.text('F2',12,80,30,'Clarence Coast Smoke Alarms',ACCENT);
-    this.cmd(rgb(ACCENT)+' RG\n1.2 w\n80 '+num(PAGE_H-46)+' m 310 '+num(PAGE_H-46)+' l S\n');
-    this.text('F1',8,80,50,'0412 092 233',MUTED);
-    if(continued)this.text('F1',8,400,16,'continued',MUTED);
-    this.top=70;
+    this.text('F1',8,80,16,kicker||'SERVICE REPORT',MUTED);
+    this.text('F2',12,80,28,'Clarence Coast Smoke Alarms',service?RED:ACCENT);
+    this.text('F1',8,80,46,'0412 092 233',MUTED);
+    const ruleY=PAGE_H-62;
+    this.cmd(rgb(service?RED:ACCENT)+' RG\n'+(service?'2':'1.2')+' w\n36 '+num(ruleY)+' m '+(service?num(PAGE_W-36):'310')+' '+num(ruleY)+' l S\n');
+    if(continued)this.text('F1',8,430,16,'continued',MUTED);
+    this.top=74;
   };
   Doc.prototype.finish=function(){
     if(this.ops.length)this.pages.push(this.ops.join(''));
@@ -202,6 +205,8 @@
     const view=viewModel(cert);
     const doc=new Doc();
     doc.header(false);
+    const dateY=doc.top;
+    doc.text('F1',9,360,dateY,'Report Date: '+(view.reportDate||''),INK);
     wrap(view.attention,9,300,false).forEach(function(line){
       doc.text('F1',9,36,doc.top,line,INK);
       doc.top+=12;
@@ -210,8 +215,7 @@
       doc.text('F1',9,36,doc.top,line,INK);
       doc.top+=12;
     });
-    doc.text('F1',9,380,70,'Report Date: '+(view.reportDate||''),INK);
-    doc.top=Math.max(doc.top,96);
+    doc.top=Math.max(doc.top,dateY+14)+12;
     const detailY=doc.top;
     doc.text('F2',9,36,detailY,'SERVICE DETAILS',INK);
     doc.cmd(rgb(INK)+' RG\n0.6 w\n36 '+num(PAGE_H-detailY-11)+' m 118 '+num(PAGE_H-detailY-11)+' l S\n');
