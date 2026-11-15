@@ -177,23 +177,36 @@
       const hits=portal.bundleClean(built);
       if(hits.length)throw new Error('Publish stopped because tenant contact details were still in the portal data.');
       const ids=Object.keys(built.agencies);
-      if(!ids.length){note('No jobs have an agency, so nothing was published.');return}
-      let properties=0,certificates=0,visits=0,invoices=0;
+      const needs=built.needsAgency||[];
+      if(!ids.length&&!needs.length){note('No jobs have an agency, so nothing was published.');return}
       if(window.CCSAInvoice&&CCSAInvoice.syncDrafts)CCSAInvoice.syncDrafts();
+      let records=0,agencies=0,denied=0,attempted=0;
+      const held=[];
       for(let i=0;i<ids.length;i++){
         const agency=built.agencies[ids[i]];
-        const remote=await fetchJobs(c,ids[i]);
-        const plan=portal.planWrites(agency,remote,today);
-        if(portal.tenantHits(plan).length)throw new Error('Publish stopped because tenant contact details were still in the portal data.');
-        plan.invoices=window.CCSAInvoice?CCSAInvoice.portalCopies(agency.id,today,now):[];
-        if(window.CCSAInvoice&&CCSAInvoice.tenantHits(plan.invoices).length)throw new Error('Publish stopped because an invoice still had tenant contact details.');
-        await commitPlan(c,ids[i],plan);
-        properties+=plan.properties.length;certificates+=plan.certificates.length;visits+=plan.jobs.length;invoices+=plan.invoices.length;
+        attempted++;
+        try{
+          const remote=await fetchJobs(c,ids[i]);
+          const plan=portal.planWrites(agency,remote,today);
+          if(portal.tenantHits(plan).length)throw new Error('tenant contact details were still in the portal data');
+          plan.invoices=window.CCSAInvoice?CCSAInvoice.portalCopies(agency.id,today,now):[];
+          if(window.CCSAInvoice&&CCSAInvoice.tenantHits(plan.invoices).length)throw new Error('an invoice still had tenant contact details');
+          const checked=portal.filterPlan(ids[i],plan);
+          checked.held.forEach(function(item){held.push(item)});
+          const sent=(checked.plan.jobs||[]).length+(checked.plan.properties||[]).length+(checked.plan.certificates||[]).length+(checked.plan.invoices||[]).length;
+          const writes=sent+(checked.plan.deleteJobIds||[]).length+(checked.plan.deleteCertificateIds||[]).length;
+          if(writes)await commitPlan(c,ids[i],checked.plan);
+          if(sent){records+=sent;agencies++}
+        }catch(err){
+          const code=err&&err.code||'';
+          if(code==='permission-denied')denied++;
+          else held.push({label:agency.name||agency.code||ids[i],reason:(err&&err.message)||'the portal was not updated'});
+        }
       }
-      note('Published '+visits+' visit'+(visits===1?'':'s')+', '+properties+' propert'+(properties===1?'y':'ies')+', '+certificates+' certificate'+(certificates===1?'':'s')+' and '+invoices+' invoice'+(invoices===1?'':'s')+'. Tenant contact details were left out. Draft invoices were not sent. Google Calendar was not changed.',true);
+      note(portal.publishSummary({records:records,agencies:agencies,held:held,needs:needs,denied:denied,attempted:attempted}),true);
     }catch(e){
       const code=e&&e.code||'';
-      if(code==='permission-denied')note('Firestore refused the publish. This account needs an admins document, and the latest rules need to be deployed. Jobs on this phone were not changed.',true);
+      if(code==='permission-denied')note(portal.publishSummary({records:0,agencies:0,denied:1,attempted:1}),true);
       else note((e&&e.message)||'The portal was not updated. Jobs on this phone were not changed.',true);
     }finally{
       state.busy=false;repaint();

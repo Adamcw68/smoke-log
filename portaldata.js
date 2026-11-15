@@ -44,6 +44,40 @@
     return clean(v).toLowerCase().replace(/&/g,' and ').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,80);
   }
   function agencies(){return AGENCIES.map(function(a){return {id:a.id,code:a.code,name:a.name}})}
+  const AGENCY_ALIASES=[
+    ['ray white maclean yamba','rwm'],['ray white yamba maclean','rwm'],['ray white maclean','rwm'],['ray white yamba','rwm'],['rwy','rwm'],['rwm','rwm'],
+    ['ray white grafton','rwg'],['rwg','rwg'],
+    ['raine and horne maclean yamba','rh'],['raine and horne','rh'],['r and h','rh'],['rh','rh'],
+    ['lifestyle maclean yamba','lifestyle'],['lifestyle maclean','lifestyle'],['lifestyle yamba','lifestyle'],['lifestyle','lifestyle'],['life','lifestyle'],
+    ['lj hooker iluka','ljh'],['ljh iluka','ljh'],['l j hooker iluka','ljh'],['ljh','ljh'],
+    ['mckimms grafton','mckimms'],['mc kimms grafton','mckimms'],['mc kimms','mckimms'],['mckimms','mckimms'],
+    ['dougherty property grafton','dougherty'],['dougherty property','dougherty'],['dougherty','dougherty'],
+    ['elders real estate clarence valley','elders'],['elders real estate','elders'],['elders','elders'],
+    ['yamba valley real estate','yamba-valley'],['yamba valley','yamba-valley']
+  ];
+  function wordsOf(v){
+    return clean(v).toLowerCase().replace(/&/g,' and ').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim();
+  }
+  function agencyById(id){
+    const found=AGENCIES.filter(function(a){return a.id===id})[0];
+    return found?{id:found.id,code:found.code,name:found.name}:null;
+  }
+  function fuzzyAgency(code){
+    const words=wordsOf(code);
+    const compact=words.replace(/ /g,'');
+    if(/^(ljh|ljhooker|ljhiluka|ljhookeriluka)$/.test(compact)||compact.indexOf('ljhookeriluka')===0||compact.indexOf('ljhiluka')===0)return agencyById('ljh');
+    const aliases=AGENCY_ALIASES.slice().sort(function(a,b){return b[0].length-a[0].length});
+    for(let i=0;i<aliases.length;i++){
+      const alias=aliases[i][0];
+      if(words===alias||words.indexOf(alias+' ')===0)return agencyById(aliases[i][1]);
+    }
+    const glued=aliases.filter(function(a){return a[0].replace(/ /g,'').length>=8}).sort(function(a,b){return b[0].replace(/ /g,'').length-a[0].replace(/ /g,'').length});
+    for(let i=0;i<glued.length;i++){
+      const needle=glued[i][0].replace(/ /g,'');
+      if(compact.indexOf(needle)===0&&compact.length>needle.length)return agencyById(glued[i][1]);
+    }
+    return null;
+  }
   function agencyFromCode(raw){
     const lib=sheets();
     const code=lib?lib.agencyFields(raw).agent:clean(raw);
@@ -51,9 +85,10 @@
     if((lib&&lib.isPrivateOwner&&lib.isPrivateOwner(code))||code==='Private Owner')return {id:'',code:'Private Owner',name:'',privateOwner:true};
     const known=AGENCIES.filter(function(a){return a.code===code||a.id===code})[0];
     if(known)return {id:known.id,code:known.code,name:known.name};
-    const id=slug(code);
-    if(!id)return null;
-    return {id:id,code:code,name:code};
+    const fuzzy=fuzzyAgency(code)||fuzzyAgency(raw);
+    if(fuzzy)return fuzzy;
+    const label=clean(raw)||code;
+    return {id:'',code:label,name:label,needsAgency:true};
   }
   function tenancyOf(job,form){
     const lib=sheets();
@@ -115,9 +150,12 @@
     return h+':'+m[2]+' '+ap;
   }
   function scrubString(v){
-    return clean(String(v)
+    let s=clean(String(v)
       .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,'')
       .replace(/(?:\+?61|0)[ \-]*[2-478](?:[ \-]*\d){8}\b/g,''));
+    s=s.replace(/@/g,' at ');
+    s=s.replace(/\d{8,}/g,function(run){return run.replace(/(\d{7})(?=\d)/g,'$1 ')});
+    return clean(s);
   }
   function phoneOrEmail(v){
     const s=String(v==null?'':v);
@@ -268,8 +306,8 @@
       return {
         n:i+1,
         location:alarmLocation(a),
-        type:pickList(a&&a.sensor,TYPES),
-        power:pickList(a&&a.power,POWERS),
+        type:scrubString(pickList(a&&a.sensor,TYPES)),
+        power:scrubString(pickList(a&&a.power,POWERS)),
         expiry:expiryOf(a&&a.expiry),
         result:alarmResult(a)
       };
@@ -279,9 +317,10 @@
   function mapOne(job,form,publishedAt){
     if(!job)return null;
     const agency=agencyFromCode((form&&form.agentSet&&form.agent)||(form&&form.agent)||job.agent||'');
-    if(!agency||agency.privateOwner||!agency.id)return null;
+    if(!agency)return null;
     const address=addressOf(job,form);
-    if(!address)return null;
+    if(agency.needsAgency)return {needsAgency:true,address:address,ident:scrubString((form&&form.ident)||job.ident||''),agent:scrubString(agency.code||agency.name||'')};
+    if(agency.privateOwner||!agency.id||!address)return null;
     const status=portalStatus(job,form);
     const appt=appointmentOf(job.svc);
     const serviceDate=status==='completed'?(ymd(form&&form.date)||appt.date||ymd(job.last)):'';
@@ -297,7 +336,7 @@
       id:id,
       propertyId:propertyId,
       agencyId:agency.id,
-      agencyCode:agency.code,
+      agencyCode:scrubString(agency.code),
       address:address,
       street:scrubString(job.street||''),
       town:scrubString(job.town||''),
@@ -324,7 +363,7 @@
         propertyId:propertyId,
         jobId:row.id,
         agencyId:agency.id,
-        agencyCode:agency.code,
+        agencyCode:scrubString(agency.code),
         address:address,
         ident:row.ident,
         tenancy:tenancy,
@@ -356,7 +395,7 @@
       propertyId:propertyId,
       jobId:String(job.id||''),
       agencyId:agency.id||'',
-      agencyCode:agency.code||'',
+      agencyCode:scrubString(agency.code||''),
       address:address,
       ident:scrubString(form.ident||job.ident||''),
       tenancy:tenancyOf(job,form),
@@ -422,11 +461,13 @@
     const day=ymd(today)||sydneyToday();
     const publishedAt=now||day;
     const agencies={};
+    const needsAgency=[];
     (jobs||[]).forEach(function(job){
       if(!job)return;
       const form=forms&&job.id!=null?forms[job.id]:null;
       const mapped=mapOne(job,form,publishedAt);
       if(!mapped)return;
+      if(mapped.needsAgency){needsAgency.push({address:mapped.address,ident:mapped.ident,agent:mapped.agent});return}
       const bucket=agencies[mapped.agency.id]||(agencies[mapped.agency.id]={
         id:mapped.agency.id,code:mapped.agency.code,name:mapped.agency.name,
         jobs:[],certificates:[],retractCertificates:[],properties:[],seen:{}
@@ -443,7 +484,7 @@
       bucket.properties=rollup(bucket.jobs,day,bucket);
       bucket.properties.forEach(function(p){p.publishedAt=publishedAt});
     });
-    return {today:day,publishedAt:publishedAt,agencies:agencies};
+    return {today:day,publishedAt:publishedAt,agencies:agencies,needsAgency:needsAgency};
   }
   function planWrites(localAgency,remoteJobs,today){
     localAgency=localAgency||{id:'',jobs:[],certificates:[],retractCertificates:[]};
@@ -483,6 +524,141 @@
   }
   function alarmKeysOk(alarms){
     return Array.isArray(alarms)&&alarms.every(function(a){return sameKeys(a,ALARM_KEYS)&&['pass','replace','fail','incomplete'].indexOf(a.result)>=0});
+  }
+  const INVOICE_KEYS=['id','number','propertyId','jobId','agencyId','agencyCode','address','ident','tenancy','issueDate','dueDate','status','paidAt','gstRegistered','businessName','abn','businessAddress','businessPhone','businessEmail','bankName','bsb','accountName','accountNumber','terms','lines','exCents','gstCents','totalCents','publishedAt'];
+  function docIdOk(id){
+    return typeof id==='string'&&id.length>0&&id.length<160&&/^[a-z0-9-]+$/.test(id);
+  }
+  function agencyKeyOk(id){
+    return typeof id==='string'&&/^[a-z0-9-]{1,40}$/.test(id);
+  }
+  function dayOk(v){return typeof v==='string'&&(v===''||/^\d{4}-\d{2}-\d{2}$/.test(v))}
+  function timeOk(v){return typeof v==='string'&&(v===''||/^\d{2}:\d{2}$/.test(v))}
+  function textProblem(v,max){
+    if(typeof v!=='string')return 'is not text';
+    if(v.length>=max)return 'is too long';
+    if(v.indexOf('@')>=0)return 'contains @';
+    if(/[0-9]{8}/.test(v))return 'has 8 digits in a row';
+    return '';
+  }
+  function publishCheck(kind,agencyId,data){
+    if(!data||typeof data!=='object')return 'missing record';
+    if(!agencyKeyOk(agencyId))return 'agency id is not allowed';
+    if(data.agencyId!==agencyId)return 'agency id does not match';
+    if(!docIdOk(data.id))return 'id has characters the portal rejects';
+    const keys=kind==='properties'?PROPERTY_KEYS:kind==='jobs'?JOB_KEYS:kind==='certificates'?CERT_KEYS:kind==='invoices'?INVOICE_KEYS:null;
+    if(!keys)return 'unknown record';
+    if(!sameKeys(data,keys))return 'keys do not match';
+    const agency=textProblem(data.agencyCode,80);
+    if(agency)return 'agency name '+agency;
+    const address=textProblem(data.address,300);
+    if(address)return 'address '+address;
+    if(!data.address)return 'address is empty';
+    if(kind!=='certificates'&&kind!=='invoices'){
+      const street=textProblem(data.street,160);
+      if(street)return 'street '+street;
+      const town=textProblem(data.town,80);
+      if(town)return 'town '+town;
+    }
+    const ident=textProblem(data.ident,160);
+    if(ident)return 'identifier '+ident;
+    if(data.tenancy!==''&&data.tenancy!=='Permanent'&&data.tenancy!=='Holiday')return 'tenancy is not permanent or holiday';
+    if(typeof data.publishedAt!=='string'||data.publishedAt.length>=40)return 'published time is not allowed';
+    if(kind==='properties'){
+      if(['compliant','due soon','overdue','failed'].indexOf(data.compliance)<0)return 'compliance status is not allowed';
+      if(!dayOk(data.lastService)||!dayOk(data.due))return 'date is not allowed';
+      if(typeof data.alarmCount!=='number'||data.alarmCount<0||data.alarmCount>=40)return 'alarm count is not allowed';
+    }
+    if(kind==='jobs'){
+      if(!docIdOk(data.propertyId))return 'property id has characters the portal rejects';
+      if(['upcoming','booked','completed'].indexOf(data.status)<0)return 'status is not allowed';
+      if(!dayOk(data.serviceDate)||!dayOk(data.appointment)||!timeOk(data.appointmentTime)||!dayOk(data.lastService)||!dayOk(data.due)||!dayOk(data.priorDate))return 'date is not allowed';
+      if(['','pass','replace','fail','incomplete'].indexOf(data.result)<0||['','pass','replace','fail','incomplete'].indexOf(data.priorResult)<0)return 'result is not allowed';
+      if(typeof data.alarmCount!=='number'||data.alarmCount<0||data.alarmCount>=40)return 'alarm count is not allowed';
+    }
+    if(kind==='certificates'){
+      if(!docIdOk(data.propertyId)||!docIdOk(data.jobId))return 'id has characters the portal rejects';
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(data.date)||!dayOk(data.lastInspection))return 'date is not allowed';
+      const tech=textProblem(data.tech,80);
+      if(tech)return 'technician '+tech;
+      const statement=textProblem(data.statement,900);
+      if(statement)return 'statement '+statement;
+      if(['pass','replace','fail','incomplete'].indexOf(data.result)<0)return 'result is not allowed';
+      if(!Array.isArray(data.alarms)||data.alarms.length>=30)return 'alarm list is not allowed';
+      for(let i=0;i<data.alarms.length;i++){
+        const alarm=data.alarms[i]||{};
+        const bits=['location','type','power','expiry'].map(function(key){return textProblem(String(alarm[key]==null?'':alarm[key]),160)}).filter(Boolean);
+        if(bits.length)return 'alarm text '+bits[0];
+      }
+    }
+    if(kind==='invoices'){
+      if(!docIdOk(data.propertyId))return 'property id has characters the portal rejects';
+      if(typeof data.jobId!=='string'||!data.jobId||data.jobId.length>=120)return 'job id is not allowed';
+      if(!/^INV-[0-9]{4,}$/.test(data.number))return 'invoice number is not allowed';
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(data.issueDate)||!/^\d{4}-\d{2}-\d{2}$/.test(data.dueDate)||!dayOk(data.paidAt))return 'date is not allowed';
+      if(['unpaid','paid','overdue'].indexOf(data.status)<0)return 'status is not allowed';
+      if(typeof data.gstRegistered!=='boolean')return 'GST flag is not allowed';
+      const name=textProblem(data.businessName,120);
+      if(name||!data.businessName)return 'business name '+(name||'is empty');
+      if(data.abn!==''&&!/^[0-9 ]{11,14}$/.test(data.abn))return 'ABN is not allowed';
+      const biz=textProblem(data.businessAddress,300);
+      if(biz)return 'business address '+biz;
+      if(typeof data.businessPhone!=='string'||data.businessPhone.length>=40)return 'business phone is not allowed';
+      if(data.businessEmail!==''&&(typeof data.businessEmail!=='string'||data.businessEmail.length>=200||!/.+@.+\../.test(data.businessEmail)))return 'business email is not allowed';
+      const bank=textProblem(data.bankName,80);
+      if(bank)return 'bank name '+bank;
+      if(data.bsb!==''&&!/^[0-9]{3}-?[0-9]{3}$/.test(data.bsb))return 'BSB is not allowed';
+      const account=textProblem(data.accountName,80);
+      if(account)return 'account name '+account;
+      if(data.accountNumber!==''&&!/^[0-9]{1,12}$/.test(data.accountNumber))return 'account number is not allowed';
+      const terms=textProblem(data.terms,300);
+      if(terms)return 'terms '+terms;
+      if(!Array.isArray(data.lines)||!data.lines.length||data.lines.length>=30)return 'invoice lines are not allowed';
+      for(let i=0;i<data.lines.length;i++){
+        const line=textProblem(String(data.lines[i]&&data.lines[i].description||''),300);
+        if(line)return 'invoice line '+line;
+      }
+      if(typeof data.exCents!=='number'||typeof data.gstCents!=='number'||typeof data.totalCents!=='number')return 'amounts are not allowed';
+      if(data.exCents<0||data.gstCents<0||data.totalCents<0)return 'amounts are not allowed';
+    }
+    return '';
+  }
+  function filterPlan(agencyId,plan){
+    const held=[];
+    function keep(kind,rows){
+      const ok=[];
+      (rows||[]).forEach(function(row){
+        const reason=publishCheck(kind,agencyId,row);
+        if(reason)held.push({label:row&&(row.address||row.ident||row.id)||kind,reason:reason,kind:kind,id:row&&row.id});
+        else ok.push(row);
+      });
+      return ok;
+    }
+    return {
+      plan:{
+        jobs:keep('jobs',plan&&plan.jobs),
+        properties:keep('properties',plan&&plan.properties),
+        certificates:keep('certificates',plan&&plan.certificates),
+        invoices:keep('invoices',plan&&plan.invoices),
+        deleteJobIds:(plan&&plan.deleteJobIds||[]).filter(docIdOk),
+        deleteCertificateIds:(plan&&plan.deleteCertificateIds||[]).filter(docIdOk)
+      },
+      held:held
+    };
+  }
+  function publishSummary(info){
+    info=info||{};
+    const records=info.records|0;
+    const agencies=info.agencies|0;
+    const held=info.held||[];
+    const needs=info.needs||[];
+    const denied=info.denied|0;
+    const attempted=info.attempted|0;
+    if(info.adminReadFailed)return 'Could not check the admin record. Jobs on this phone were not changed.';
+    if(attempted>0&&agencies===0&&denied===attempted)return 'Firestore refused the publish. This account needs an admins document, and the latest rules need to be deployed. Jobs on this phone were not changed.';
+    let msg=held.length?('Published '+records+'. Held back '+held.length+': '+held.map(function(item){return (item.label||'a record')+' ('+(item.reason||'does not match the portal rules')+')'}).join('; ')):'Published '+records+' records to '+agencies+' agencies';
+    if(needs.length)msg+='. Needs agency: '+needs.map(function(item){return (item.address||item.ident||'a job')+(item.agent?' ('+item.agent+')':'')}).join('; ');
+    return msg;
   }
   function bundleClean(bundle){
     const hits=tenantHits(bundle);
@@ -631,6 +807,10 @@
     SAMPLE_TENANT:SAMPLE_TENANT,
     agencies:agencies,
     agencyFromCode:agencyFromCode,
+    scrubString:scrubString,
+    publishCheck:publishCheck,
+    filterPlan:filterPlan,
+    publishSummary:publishSummary,
     complianceStatus:complianceStatus,
     complianceLabel:complianceLabel,
     resultLabel:resultLabel,

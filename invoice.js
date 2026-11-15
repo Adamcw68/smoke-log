@@ -315,6 +315,10 @@
       terms:settings.termsText
     };
   }
+  function textField(v){
+    const lib=portal();
+    return lib&&lib.scrubString?lib.scrubString(v):clean(v);
+  }
   function toPortal(invoice,settings,today,now){
     if(!invoice||invoice.draft||!numberValue(invoice.number))return null;
     const biz=businessBlock(settings||{});
@@ -326,26 +330,26 @@
       propertyId:invoice.propertyId,
       jobId:String(invoice.jobId||''),
       agencyId:invoice.agencyId,
-      agencyCode:invoice.agencyCode,
-      address:clean(invoice.address),
-      ident:clean(invoice.ident),
+      agencyCode:textField(invoice.agencyCode),
+      address:textField(invoice.address),
+      ident:textField(invoice.ident),
       tenancy:invoice.tenancy==='Holiday'||invoice.tenancy==='Permanent'?invoice.tenancy:'',
       issueDate:ymd(invoice.issueDate),
       dueDate:ymd(invoice.dueDate),
       status:status,
       paidAt:ymd(invoice.paidAt),
       gstRegistered:!!invoice.gstRegistered,
-      businessName:biz.businessName,
+      businessName:textField(biz.businessName),
       abn:biz.abn,
-      businessAddress:biz.businessAddress,
+      businessAddress:textField(biz.businessAddress),
       businessPhone:biz.businessPhone,
       businessEmail:biz.businessEmail,
-      bankName:biz.bankName,
+      bankName:textField(biz.bankName),
       bsb:biz.bsb,
-      accountName:biz.accountName,
+      accountName:textField(biz.accountName),
       accountNumber:biz.accountNumber,
-      terms:biz.terms,
-      lines:(invoice.lines||[]).map(function(line){return {description:clean(line.description),qty:Math.max(0,Math.round(Number(line.qty)||0)),unitCents:cents(line.unitCents),amountCents:cents(line.amountCents)}}),
+      terms:textField(biz.terms),
+      lines:(invoice.lines||[]).map(function(line){return {description:textField(line.description),qty:Math.max(0,Math.round(Number(line.qty)||0)),unitCents:cents(line.unitCents),amountCents:cents(line.amountCents)}}),
       exCents:cents(invoice.exCents),
       gstCents:cents(invoice.gstCents),
       totalCents:cents(invoice.totalCents),
