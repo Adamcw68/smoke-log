@@ -31,8 +31,39 @@ test('known agencies map onto the four portal logins and a legacy name is kept',
   assert.equal(portal.agencyFromCode('Yamba Valley').id,'yamba-valley');
   assert.equal(portal.agencies().some(function(a){return a.name==='Private Owner'||a.name==='Elders'}),false);
   assert.deepEqual(portal.agencies().map(function(a){return a.name}),['Ray White Maclean/Yamba','Lifestyle Maclean/Yamba','Raine & Horne Maclean/Yamba','LJH Iluka','McKimms Grafton','Ray White Grafton','Dougherty Property Grafton','Elders Real Estate Clarence Valley','Yamba Valley Real Estate']);
-  assert.equal(portal.agencyFromCode('Coast Homes').id,'coast-homes');
+  assert.equal(portal.agencyFromCode('LJHooker Iluka').id,'ljh');
+  assert.equal(portal.agencyFromCode('LJ Hooker-Iluka').code,'LJH Iluka');
+  assert.equal(portal.agencyFromCode('Lifestyle OCR!! junk').id,'lifestyle');
+  assert.equal(portal.agencyFromCode('Coast Homes').needsAgency,true);
+  assert.equal(portal.agencyFromCode('Coast Homes').id,'');
   assert.equal(portal.agencyFromCode(''),null);
+});
+
+test('a building name with @ and a long digit run can be published',function(){
+  assert.equal(portal.scrubString('Seaview @ Iluka'),'Seaview at Iluka');
+  assert.equal(portal.scrubString('Block 12345678'),'Block 1234567 8');
+  assert.equal(portal.scrubString('Call jane.tenant@example.com or 0400 111 222'),'Call or');
+  const built=portal.buildPortal([
+    {id:'sea',agent:'RWM',addr:'1 Seaview Street, Iluka NSW 2466',street:'1 Seaview Street',town:'Iluka',ident:'Seaview @ Iluka',section:'Permanent',alarms:1,arch:'2026-11-15T01:00:00.000Z',due:'2027-11-15',last:'2025-11-15',tech:'Adam Westerman'},
+    {id:'other',agent:'Coast Homes',addr:'9 Other Street, Yamba NSW 2464',street:'9 Other Street',town:'Yamba',ident:'Lot 123456789',section:'Permanent',alarms:0,arch:null}
+  ],{
+    sea:{agent:'RWM',agentSet:true,addr:'1 Seaview Street, Iluka NSW 2466',ident:'Seaview @ Iluka',tenancy:'Permanent',date:'2026-11-15',done:true,tech:'Adam Westerman',alarms:1,al:[{room:'Hallway @ rear',power:['240v'],sensor:['Photo-Electric'],expiry:'11/2036',yn:{comply:'Yes',located:'Yes',button:'Yes',affixed:'Yes'}}]}
+  },'2026-11-15','2026-11-15T00:00:00.000Z');
+  const job=built.agencies.rwm.jobs.filter(function(row){return row.ident.indexOf('Seaview')===0})[0];
+  assert.equal(job.ident,'Seaview at Iluka');
+  assert.equal(job.ident.indexOf('@'),-1);
+  assert.equal(/[0-9]{8}/.test(JSON.stringify(built.agencies)),false);
+  assert.equal(built.agencies.rwm.certificates[0].alarms[0].location.indexOf('@'),-1);
+  assert.equal(portal.publishCheck('jobs','rwm',job),'');
+  assert.equal(built.needsAgency.length,1);
+  assert.equal(built.needsAgency[0].agent,'Coast Homes');
+  assert.equal(built.needsAgency[0].ident,'Lot 1234567 89');
+  const bad=Object.assign({},job,{ident:'Seaview @ Iluka'});
+  assert.equal(portal.publishCheck('jobs','rwm',bad),'identifier contains @');
+  const summary=portal.publishSummary({records:4,agencies:1,held:[{label:'9 Other Street',reason:'address contains @'}],needs:built.needsAgency,denied:0,attempted:1});
+  assert.equal(summary,'Published 4. Held back 1: 9 Other Street (address contains @). Needs agency: 9 Other Street, Yamba NSW 2464 (Coast Homes)');
+  assert.match(portal.publishSummary({records:0,agencies:0,denied:2,attempted:2}),/admins document/);
+  assert.equal(portal.publishSummary({records:3,agencies:1}).indexOf('admins'),-1);
 });
 
 test('a portal record drops tenant names, phones and emails',function(){
@@ -223,12 +254,12 @@ test('password fields start hidden and the eye button does not submit the form',
 test('the service worker leaves the portal alone and does not clear site data',function(){
   const sw=fs.readFileSync('sw.js','utf8');
   const html=fs.readFileSync('index.html','utf8');
-  assert.match(sw,/ccsa-v2\.40\.0-20261115/);
+  assert.match(sw,/ccsa-v2\.41\.0-20261115/);
   assert.match(sw,/requests\.js/);
   assert.match(sw,/portaldata\.js/);
   assert.ok(sw.includes('if(/\\/portal(?:\\/|$)/.test(u.pathname))return;'));
   assert.doesNotMatch(sw,/indexedDB\.deleteDatabase|localStorage\.clear|caches\.keys\(\)\.then\(k=>Promise\.all\(k\.map/);
-  assert.match(html,/APP_VERSION='2\.40\.0 \(20261115\)'/);
+  assert.match(html,/APP_VERSION='2\.41\.0 \(20261115\)'/);
   assert.match(html,/portaladmin\.js/);
   assert.match(html,/portalNudge/);
 });

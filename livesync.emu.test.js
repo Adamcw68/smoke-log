@@ -147,3 +147,29 @@ test('an agency login reads only its own portal and cannot write',async()=>{
   await assertSucceeds(deleteDoc(doc(admin,'portal/rwm/access/'+request.id)));
   await assertFails(deleteDoc(doc(agent,'portal/rwm/access/'+request.id)));
 });
+
+test('an admin can publish a building name that had an @ and an 8-digit run',async()=>{
+  await env.clearFirestore();
+  await env.withSecurityRulesDisabled(async(ctx)=>{
+    await setDoc(doc(ctx.firestore(),'admins/adam'),{email:'adam@example.com',since:'2026-11-15'});
+  });
+  const built=portal.buildPortal([
+    {id:'sea',agent:'LJHooker Iluka',addr:'1 Seaview Street, Iluka NSW 2466',street:'1 Seaview Street',town:'Iluka',ident:'Seaview @ Iluka',section:'Permanent',alarms:1,arch:'2026-11-15T01:00:00.000Z',due:'2027-11-15',last:'2025-11-15',tech:'Adam Westerman'}
+  ],{
+    sea:{agent:'LJHooker Iluka',agentSet:true,addr:'1 Seaview Street 12345678, Iluka NSW 2466',ident:'Seaview @ Iluka',tenancy:'Permanent',date:'2026-11-15',done:true,tech:'Adam Westerman',alarms:1,al:[{room:'Hallway',power:['240v'],sensor:['Photo-Electric'],expiry:'11/2036',yn:{comply:'Yes',located:'Yes',button:'Yes',affixed:'Yes'}}]}
+  },'2026-11-15','2026-11-15T00:00:00.000Z');
+  const bucket=built.agencies.ljh;
+  assert.ok(bucket);
+  const job=bucket.jobs[0];
+  const prop=bucket.properties[0];
+  assert.equal(job.ident,'Seaview at Iluka');
+  assert.equal(job.address.indexOf('@'),-1);
+  assert.equal(/[0-9]{8}/.test(job.address),false);
+  assert.match(job.address,/1234567 8/);
+  const admin=env.authenticatedContext('adam').firestore();
+  await assertSucceeds(setDoc(doc(admin,'portal/ljh/properties/'+prop.id),prop));
+  await assertSucceeds(setDoc(doc(admin,'portal/ljh/jobs/'+job.id),job));
+  if(bucket.certificates[0])await assertSucceeds(setDoc(doc(admin,'portal/ljh/certificates/'+bucket.certificates[0].id),bucket.certificates[0]));
+  const stored=await getDoc(doc(admin,'portal/ljh/jobs/'+job.id));
+  assert.equal(stored.data().ident,'Seaview at Iluka');
+});
