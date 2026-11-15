@@ -152,6 +152,22 @@ test('a later booking keeps the completed visit',function(){
   assert.equal(undone.agencies.rwm.certificates.length,0);
 });
 
+test('a finished job keeps a blank technician blank on the service report',function(){
+  const job={id:'plain',agent:'RWM',addr:'2 Sample Street, Yamba NSW 2464',street:'2 Sample Street',town:'Yamba',ident:'',last:'',alarms:1,arch:null,tech:''};
+  const form={agent:'RWM',addr:job.addr,date:'',done:true,tech:'',alarms:1,al:[{room:'Hallway',power:['240v'],sensor:['Photo-Electric'],expiry:'',yn:{comply:'Yes',located:'Yes',button:'Yes',affixed:'Yes'}}]};
+  const cert=portal.localCertificate(job,form);
+  assert.equal(cert.tech,'');
+  assert.equal(cert.date,'');
+  assert.equal(cert.ident,'');
+  assert.equal(cert.lastInspection,'');
+  assert.equal(cert.alarms[0].power,'240v');
+  assert.equal(JSON.stringify(cert).includes('Adam Westerman'),false);
+  assert.equal(portal.localCertificate(job,Object.assign({},form,{done:false})),null);
+  const owned=portal.localCertificate({id:'own',agent:'Private Owner',addr:'7 Owner Street, Yamba NSW 2464',arch:null,tech:'Craig Robinson'},{agent:'Private Owner',addr:'7 Owner Street, Yamba NSW 2464',done:true,tech:'Craig Robinson',date:'2026-08-12',alarms:0,al:[]});
+  assert.equal(owned.agencyCode,'Private Owner');
+  assert.equal(owned.tech,'Craig Robinson');
+});
+
 test('expiry is MM/YYYY and a blank agency is not published',function(){
   assert.equal(portal.expiryOf('8/2031'),'08/2031');
   assert.equal(portal.expiryOf('2031-08'),'08/2031');
@@ -207,12 +223,12 @@ test('password fields start hidden and the eye button does not submit the form',
 test('the service worker leaves the portal alone and does not clear site data',function(){
   const sw=fs.readFileSync('sw.js','utf8');
   const html=fs.readFileSync('index.html','utf8');
-  assert.match(sw,/ccsa-v2\.39\.0-20261115/);
+  assert.match(sw,/ccsa-v2\.40\.0-20261115/);
   assert.match(sw,/requests\.js/);
   assert.match(sw,/portaldata\.js/);
   assert.ok(sw.includes('if(/\\/portal(?:\\/|$)/.test(u.pathname))return;'));
   assert.doesNotMatch(sw,/indexedDB\.deleteDatabase|localStorage\.clear|caches\.keys\(\)\.then\(k=>Promise\.all\(k\.map/);
-  assert.match(html,/APP_VERSION='2\.39\.0 \(20261115\)'/);
+  assert.match(html,/APP_VERSION='2\.40\.0 \(20261115\)'/);
   assert.match(html,/portaladmin\.js/);
   assert.match(html,/portalNudge/);
 });

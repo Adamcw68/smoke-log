@@ -330,7 +330,7 @@
         tenancy:tenancy,
         date:serviceDate,
         lastInspection:(function(){const last=ymd(job.last);return last&&last!==serviceDate?last:''})(),
-        tech:scrubString((form&&form.tech)||job.tech||'')||'Adam Westerman',
+        tech:scrubString((form&&form.tech)||job.tech||''),
         statement:'',
         result:result,
         alarms:alarmsOf(form),
@@ -341,6 +341,33 @@
       retract=propertyId+'-'+ymd(form.date);
     }
     return {agency:agency,job:row,certificate:certificate,retract:retract};
+  }
+  /* A local service report for a finished job. Blank fields stay blank. */
+  function localCertificate(job,form){
+    if(!job||!form||!(form.done||job.arch))return null;
+    const address=addressOf(job,form);
+    if(!address)return null;
+    const agency=agencyFromCode((form.agentSet&&form.agent)||form.agent||job.agent||'')||{id:'',code:''};
+    const serviceDate=ymd(form.date)||'';
+    const propertyId=propertyKey(address);
+    const last=ymd(job.last);
+    return {
+      id:propertyId+'-'+(serviceDate||'undated'),
+      propertyId:propertyId,
+      jobId:String(job.id||''),
+      agencyId:agency.id||'',
+      agencyCode:agency.code||'',
+      address:address,
+      ident:scrubString(form.ident||job.ident||''),
+      tenancy:tenancyOf(job,form),
+      date:serviceDate,
+      lastInspection:last&&last!==serviceDate?last:'',
+      tech:scrubString(form.tech||job.tech||''),
+      statement:'',
+      result:serviceResult(form)||'',
+      alarms:alarmsOf(form),
+      publishedAt:''
+    };
   }
   function byDateDesc(list,field){
     return list.slice().sort(function(a,b){
@@ -615,6 +642,7 @@
     serviceResult:serviceResult,
     expiryOf:expiryOf,
     buildPortal:buildPortal,
+    localCertificate:localCertificate,
     rollup:rollup,
     planWrites:planWrites,
     counts:counts,

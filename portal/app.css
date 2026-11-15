@@ -63,11 +63,11 @@ textarea.t{min-height:88px}
 .cert th{font-size:12px;color:var(--mut)}
 .statement{background:#f7f6f6;border-radius:10px;padding:12px;margin-top:16px}
 .foot{margin-top:14px;color:var(--mut);font-size:13px}
-.report{--report:#0d6b61;background:#fff;color:#222;max-width:820px;margin:0 auto;padding:22px 22px 28px;box-shadow:0 2px 10px rgba(0,0,0,.12);font-size:13px;line-height:1.35}
-.reporthead{display:flex;gap:12px;align-items:flex-start}
+.report{--report:#EF2E32;background:#fff;color:#222;max-width:820px;margin:0 auto;padding:22px 22px 28px;box-shadow:0 2px 10px rgba(0,0,0,.12);font-size:13px;line-height:1.35}
+.reporthead{display:flex;gap:12px;align-items:flex-start;border-bottom:3px solid var(--report);padding-bottom:10px}
 .reportlogo{width:64px;height:64px;border-radius:8px;object-fit:cover;border:3px solid var(--report);background:#fff}
-.reporttitle{font-size:12px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:#666}
-.reportbrand{margin-top:2px;color:var(--report);font-weight:750;font-size:18px;border-bottom:2px solid var(--report);display:inline-block;padding-bottom:2px}
+.reporttitle{font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:#666}
+.reportbrand{margin-top:2px;color:#222;font-weight:750;font-size:18px}
 .reportphone{color:#777;font-size:12px;margin-top:4px}
 .reporttop{display:flex;justify-content:space-between;gap:16px;margin-top:16px}
 .reportdetail{display:flex;justify-content:space-between;gap:18px;margin-top:14px;align-items:flex-start}
