@@ -46,7 +46,8 @@ test('a service report matches the agency layout and leaves the tenant off',func
   assert.match(text,/\/Subtype \/Image/);
   assert.equal(text.includes('(CC) Tj'),false);
   assert.equal(text.includes('(v) Tj'),false);
-  assert.match(text,/ arc\n/);
+  assert.match(text,/ c\n/);
+  assert.equal(text.includes(' arc\n'),false);
   assert.match(text,/Report Date: 12\/08\/2026/);
   assert.match(text,/SERVICE DETAILS/);
   assert.match(text,/18 River Street, Maclean NSW 2463/);

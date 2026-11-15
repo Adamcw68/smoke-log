@@ -186,16 +186,26 @@
   Doc.prototype.roundPath=function(x,fromTop,w,h,r){
     const y=PAGE_H-fromTop-h;
     const x0=x,y0=y,x1=x+w,y1=y+h;
-    const arc=function(cx,cy,a0,a1){return num(cx)+' '+num(cy)+' '+num(r)+' '+a0+' '+a1+' arc\n'};
-    this.cmd(num(x0+r)+' '+num(y0)+' m\n'+num(x1-r)+' '+num(y0)+' l\n'+arc(x1-r,y0+r,270,360)+num(x1)+' '+num(y1-r)+' l\n'+arc(x1-r,y1-r,0,90)+num(x0+r)+' '+num(y1)+' l\n'+arc(x0+r,y1-r,90,180)+num(x0)+' '+num(y0+r)+' l\n'+arc(x0+r,y0+r,180,270)+'h\n');
+    const k=r*0.5523;
+    const c=function(x1,y1,x2,y2,x3,y3){return num(x1)+' '+num(y1)+' '+num(x2)+' '+num(y2)+' '+num(x3)+' '+num(y3)+' c\n'};
+    this.cmd(num(x0+r)+' '+num(y0)+' m\n'
+      +num(x1-r)+' '+num(y0)+' l\n'
+      +c(x1-r+k,y0,x1,y0+r-k,x1,y0+r)
+      +num(x1)+' '+num(y1-r)+' l\n'
+      +c(x1,y1-r+k,x1-r+k,y1,x1-r,y1)
+      +num(x0+r)+' '+num(y1)+' l\n'
+      +c(x0+r-k,y1,x0,y1-r+k,x0,y1-r)
+      +num(x0)+' '+num(y0+r)+' l\n'
+      +c(x0,y0+r-k,x0+r-k,y0,x0+r,y0)
+      +'h\n');
   };
   Doc.prototype.logo=function(x,fromTop,size){
     this.rect(x,fromTop,size,size,WHITE);
     const inset=3.2;
     const y=PAGE_H-(fromTop+inset)-(size-inset*2);
     this.cmd('q\n'+num(size-inset*2)+' 0 0 '+num(size-inset*2)+' '+num(x+inset)+' '+num(y)+' cm\n/Im1 Do\nQ\n');
-    this.roundPath(x,fromTop,size,size,5);
-    this.cmd(rgb(RED)+' RG\n2.2 w\nS\n');
+    this.roundPath(x,fromTop,size,size,6);
+    this.cmd(rgb(RED)+' RG\n2.2 w\n1 J 1 j\nS\n');
   };
   Doc.prototype.checkBox=function(x,fromTop){
     const s=12;
