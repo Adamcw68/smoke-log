@@ -12,15 +12,19 @@ function form(updated,db,agent){
 
 test('the signed-in account supplies a short technician name and a saved name stays',function(){
   assert.equal(sync.technicianFromAccount(null),'');
-  assert.equal(sync.technicianFromAccount({email:'bearus69@gmail.com',displayName:'Adam Westerman'}),'Adam');
-  assert.equal(sync.technicianFromAccount({email:'Craig@ClarenceCoastSmokeAlarms.com.au',displayName:'Craig Jones'}),'Craig');
-  assert.equal(sync.technicianFromAccount({email:'sam.lee@example.com',displayName:'Sam Lee'}),'Sam');
+  assert.equal(sync.technicianFromAccount({email:'bearus69@gmail.com',displayName:'Adam Westerman'}),'Adam Westerman');
+  assert.equal(sync.technicianFromAccount({email:'Craig@ClarenceCoastSmokeAlarms.com.au',displayName:'Craig Jones'}),'Craig Robinson');
+  assert.equal(sync.technicianFromAccount({email:'sam.lee@example.com',displayName:'Sam Lee'}),'Sam Lee');
   assert.equal(sync.technicianFromAccount({email:'pat.nguyen@example.com',displayName:''}),'Pat');
-  assert.equal(sync.worksheetTech('Adam Westerman','Craig').tech,'Adam Westerman');
-  assert.equal(sync.worksheetTech('Adam Westerman','Craig').fill,false);
-  assert.equal(sync.worksheetTech('','Craig').tech,'Craig');
-  assert.equal(sync.worksheetTech('   ','Adam').tech,'Adam');
-  assert.equal(sync.worksheetTech('','') .tech,'Adam');
+  assert.equal(sync.worksheetTech('Adam Westerman','Craig Robinson').tech,'Adam Westerman');
+  assert.equal(sync.worksheetTech('Adam Westerman','Craig Robinson').fill,false);
+  assert.equal(sync.worksheetTech('Adam','Craig Robinson').tech,'Adam Westerman');
+  assert.equal(sync.worksheetTech('Craig','Adam Westerman').tech,'Craig Robinson');
+  assert.equal(sync.worksheetTech('Craig','Adam Westerman').upgrade,true);
+  assert.equal(sync.worksheetTech('Sam Lee','Craig Robinson').tech,'Sam Lee');
+  assert.equal(sync.worksheetTech('','Craig Robinson').tech,'Craig Robinson');
+  assert.equal(sync.worksheetTech('   ','Adam Westerman').tech,'Adam Westerman');
+  assert.equal(sync.worksheetTech('','').tech,'Adam Westerman');
 });
 
 test('placeholders turn sync off and a real config leaves it on',function(){

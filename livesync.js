@@ -57,30 +57,36 @@
     return SIGN_IN_ORIGIN+path+String(loc.search||'')+String(loc.hash||'');
   }
   const TECH_ACCOUNTS={
-    'bearus69@gmail.com':'Adam',
-    'craig@clarencecoastsmokealarms.com.au':'Craig'
+    'bearus69@gmail.com':'Adam Westerman',
+    'craig@clarencecoastsmokealarms.com.au':'Craig Robinson'
   };
   function techWord(s){
     const w=String(s||'').trim().split(/\s+/)[0]||'';
     if(!w)return '';
     return w.charAt(0).toUpperCase()+w.slice(1).toLowerCase();
   }
-  /* Signed-in Google account → the short name printed on new worksheets. */
+  function expandShortTech(name){
+    const t=String(name==null?'':name).replace(/\s+/g,' ').trim();
+    if(/^adam$/i.test(t))return 'Adam Westerman';
+    if(/^craig$/i.test(t))return 'Craig Robinson';
+    return t;
+  }
+  /* Signed-in Google account → the name printed on new worksheets. */
   function technicianFromAccount(user){
     if(!user)return '';
     const email=String(user.email||'').trim().toLowerCase();
     if(TECH_ACCOUNTS[email])return TECH_ACCOUNTS[email];
-    const display=String(user.displayName||'').trim();
-    if(display)return techWord(display);
+    const display=String(user.displayName||'').replace(/\s+/g,' ').trim();
+    if(display)return display;
     const local=(email.split('@')[0]||'').split(/[._+-]/)[0];
     return techWord(local);
   }
-  /* A saved technician stays. A blank worksheet takes the current name. */
+  /* Exact Adam or Craig from v2.37.0 becomes the full name. Any other saved name stays. A blank worksheet takes the current name. */
   function worksheetTech(saved, current){
-    const have=String(saved==null?'':saved).replace(/\s+/g,' ').trim();
-    if(have)return {tech:have,fill:false};
-    const next=String(current==null?'':current).replace(/\s+/g,' ').trim()||'Adam';
-    return {tech:next,fill:true};
+    const raw=String(saved==null?'':saved).replace(/\s+/g,' ').trim();
+    if(raw){const next=expandShortTech(raw);return {tech:next,fill:false,upgrade:next!==raw}}
+    const next=expandShortTech(current)||'Adam Westerman';
+    return {tech:next,fill:true,upgrade:false};
   }
   function hostingNotice(host, loc){
     const h=String(host||'').toLowerCase();
