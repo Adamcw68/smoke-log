@@ -49,6 +49,7 @@ test('a service report matches the agency layout and leaves the tenant off',func
   assert.match(text,/ c\n/);
   assert.equal(text.includes(' arc\n'),false);
   assert.match(text,/Report Date: 12\/08\/2026/);
+  assert.match(text,/Valid until: 12\/08\/2027/);
   assert.match(text,/SERVICE DETAILS/);
   assert.match(text,/18 River Street, Maclean NSW 2463/);
   assert.match(text,/Subscription Service/);
@@ -92,12 +93,16 @@ test('a service report matches the agency layout and leaves the tenant off',func
   assert.match(ownedPdf,/Attention: The owner/);
   assert.equal(ownedPdf.includes('c/-'),false);
   assert.equal(ownedPdf.includes('Private Owner'),false);
-  const dueCert=certs.complianceModel(cert,{due:'2027-08-12'});
+  const dueCert=certs.complianceModel(cert,{due:'2028-01-01'});
   assert.equal(dueCert.title,'Compliance certificate');
   assert.equal(dueCert.validUntil,'12/08/2027');
+  assert.equal(view.validUntil,'12/08/2027');
+  assert.equal(certs.complianceModel({date:'2024-02-29',alarms:[{result:'pass'}]}).validUntil,'28/02/2025');
+  assert.equal(certs.complianceModel({date:'2026-01-31',alarms:[{result:'pass'}]}).validUntil,'31/01/2027');
   const dueText=certs.pdfText(certs.buildCompliancePdf(cert,{due:'2027-08-12'}));
   assert.match(dueText,/Compliance certificate/);
   assert.match(dueText,/12\/08\/2027/);
+  assert.equal(dueText.includes('01/01/2028'),false);
   assert.match(dueText,/meeting the smoke alarm checks/);
   assert.equal(dueText.includes('Jane Tenant'),false);
   assert.equal(dueText.includes('Smoke Alarms Australia'),false);

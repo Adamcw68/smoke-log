@@ -70,6 +70,12 @@
     if(!m)return '';
     return m[3]+'/'+m[2]+'/'+m[1];
   }
+  function validUntilDate(iso,compliant){
+    if(!compliant)return '';
+    const data=dataApi();
+    const next=data&&data.addMonths?data.addMonths(String(iso||'').slice(0,10),12):'';
+    return dmy(next);
+  }
   function party(code){
     const data=dataApi();
     const found=data&&data.agencyFromCode?data.agencyFromCode(code):null;
@@ -138,6 +144,7 @@
       attention:attention,
       postal:postal,
       reportDate:dmy(cert.date),
+      validUntil:validUntilDate(cert.date,!(cert.alarms||[]).some(function(a){return String(a&&a.result||'').toLowerCase()==='fail'})),
       serviceAddress:safeLine(cert.address),
       jobNumber:safeLine(cert.ident||''),
       serviceReason:'Subscription Service',
@@ -249,6 +256,7 @@
     doc.header(false);
     const dateY=doc.top;
     doc.text('F1',9,360,dateY,'Report Date: '+(view.reportDate||''),INK);
+    if(view.validUntil)doc.text('F1',9,360,dateY+12,'Valid until: '+view.validUntil,INK);
     wrap(view.attention,9,300,false).forEach(function(line){
       doc.text('F1',9,36,doc.top,line,INK);
       doc.top+=12;
@@ -257,7 +265,7 @@
       doc.text('F1',9,36,doc.top,line,INK);
       doc.top+=12;
     });
-    doc.top=Math.max(doc.top,dateY+14)+12;
+    doc.top=Math.max(doc.top,dateY+(view.validUntil?26:14))+12;
     const detailY=doc.top;
     doc.text('F2',9,36,detailY,'SERVICE DETAILS',INK);
     doc.cmd(rgb(INK)+' RG\n0.6 w\n36 '+num(PAGE_H-detailY-11)+' m 118 '+num(PAGE_H-detailY-11)+' l S\n');
@@ -406,7 +414,7 @@
   function complianceModel(cert,extra){
     extra=extra||{};
     const report=viewModel(cert||{});
-    const due=dmy(extra.due||(cert&&cert.due)||'');
+    const due=report.compliant?report.validUntil:'';
     const ok=!!(report.compliant&&due);
     return {
       title:'Compliance certificate',

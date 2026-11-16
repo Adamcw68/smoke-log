@@ -109,6 +109,23 @@ test('each agency sees only its own properties',function(){
   });
 });
 
+test('a service stays valid for 12 calendar months, including a leap day',function(){
+  assert.equal(portal.addMonths('2026-08-12',12),'2027-08-12');
+  assert.equal(portal.addMonths('2026-01-31',12),'2027-01-31');
+  assert.equal(portal.addMonths('2024-02-29',12),'2025-02-28');
+  assert.equal(portal.addMonths('2023-03-01',12),'2024-03-01');
+  const built=portal.buildPortal([
+    {id:'leap',agent:'RWM',addr:'1 Leap Street, Yamba NSW 2464',street:'1 Leap Street',town:'Yamba',due:'',last:'',alarms:1,arch:'2024-02-29T01:00:00.000Z'}
+  ],{
+    leap:{agent:'RWM',addr:'1 Leap Street, Yamba NSW 2464',date:'2024-02-29',done:true,tech:'Adam Westerman',alarms:1,al:[{room:'Hallway',power:['240v'],sensor:['Photo-Electric'],expiry:'02/2034',yn:{comply:'Yes',located:'Yes',button:'Yes',affixed:'Yes'}}]}
+  },'2024-03-01','2024-03-01T00:00:00.000Z');
+  const job=built.agencies.rwm.jobs[0];
+  assert.equal(job.due,'2025-02-28');
+  assert.equal(built.agencies.rwm.properties[0].due,'2025-02-28');
+  assert.equal(portal.complianceStatus({result:'pass',due:job.due,today:'2024-06-01'}),'compliant');
+  assert.equal(portal.complianceStatus({result:'pass',due:job.due,today:'2025-03-01'}),'overdue');
+});
+
 test('compliance is compliant, due soon, overdue or failed',function(){
   const today='2026-11-13';
   assert.equal(portal.complianceStatus({result:'pass',due:'2027-08-12',today:today}),'compliant');
@@ -254,12 +271,12 @@ test('password fields start hidden and the eye button does not submit the form',
 test('the service worker leaves the portal alone and does not clear site data',function(){
   const sw=fs.readFileSync('sw.js','utf8');
   const html=fs.readFileSync('index.html','utf8');
-  assert.match(sw,/ccsa-v2\.45\.0-20261116/);
+  assert.match(sw,/ccsa-v2\.46\.0-20261116/);
   assert.match(sw,/requests\.js/);
   assert.match(sw,/portaldata\.js/);
   assert.ok(sw.includes('if(/\\/portal(?:\\/|$)/.test(u.pathname))return;'));
   assert.doesNotMatch(sw,/indexedDB\.deleteDatabase|localStorage\.clear|caches\.keys\(\)\.then\(k=>Promise\.all\(k\.map/);
-  assert.match(html,/APP_VERSION='2\.45\.0 \(20261116\)'/);
+  assert.match(html,/APP_VERSION='2\.46\.0 \(20261116\)'/);
   assert.match(html,/portaladmin\.js/);
   assert.match(html,/portalNudge/);
 });
