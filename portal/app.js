@@ -22,10 +22,12 @@
     (session.properties||[]).forEach(function(p){map[p.id]=p});
     return map;
   }
-  function matches(text){
+  function matches(){
+    const parts=Array.prototype.slice.call(arguments);
+    if(window.CCSAAddress)return CCSAAddress.matches(parts,view.q);
     const q=(view.q||'').trim().toLowerCase();
     if(!q)return true;
-    return String(text||'').toLowerCase().indexOf(q)>=0;
+    return parts.join(' ').toLowerCase().indexOf(q)>=0;
   }
   function whenJob(job){
     if(job.status==='completed')return data().prettyDate(job.serviceDate)||'Completed';
@@ -136,7 +138,7 @@
     return '<div class="demo" id="adminbar" role="status"><b>Admin</b><label for="adminagency">Agency</label><select id="adminagency">'+agencyOptions(session.agency.id)+'</select><div class="actions"><button type="button" id="admininbox">Job requests</button></div></div>';
   }
   function propertyCards(){
-    let list=session.properties.filter(function(p){return matches(p.address+' '+p.ident+' '+p.town)&&( !view.filter||p.compliance===view.filter)});
+    let list=session.properties.filter(function(p){return matches(p.address,p.street,p.town,p.ident)&&( !view.filter||p.compliance===view.filter)});
     if(!list.length)return '<p class="empty">No properties to show.</p>';
     return list.map(function(p){
       const last=p.lastService?data().prettyDate(p.lastService):'No service on file';
@@ -162,14 +164,14 @@
     }).join('');
   }
   function jobsView(){
-    const upcoming=session.jobs.filter(function(j){return j.status!=='completed'&&matches(j.address)}).sort(function(a,b){return (a.appointment||'9999')<(b.appointment||'9999')?-1:1});
-    const completed=session.jobs.filter(function(j){return j.status==='completed'&&matches(j.address)}).sort(function(a,b){return (a.serviceDate||'')<(b.serviceDate||'')?1:-1});
+    const upcoming=session.jobs.filter(function(j){return j.status!=='completed'&&matches(j.address,j.street,j.town,j.ident)}).sort(function(a,b){return (a.appointment||'9999')<(b.appointment||'9999')?-1:1});
+    const completed=session.jobs.filter(function(j){return j.status==='completed'&&matches(j.address,j.street,j.town,j.ident)}).sort(function(a,b){return (a.serviceDate||'')<(b.serviceDate||'')?1:-1});
     const mine=(session.requests||[]).slice().sort(function(a,b){return (a.createdAt||'')<(b.createdAt||'')?1:-1});
     const ask=session.admin?'':'<div class="actions"><button type="button" class="pri" id="newjob">New job</button></div>';
     return ask+(view.notice?'<p class="note" id="reqnote">'+esc(view.notice)+'</p>':'')+'<h2 class="sectionh">Your requests</h2>'+requestCards(mine)+'<h2 class="sectionh">Upcoming</h2>'+jobCards(upcoming,'No upcoming jobs.')+'<h2 class="sectionh">Completed</h2>'+jobCards(completed,'No completed jobs.');
   }
   function certificatesView(){
-    const list=(session.certificates||[]).filter(function(c){return matches(c.address+' '+c.ident)}).sort(function(a,b){return a.date<b.date?1:-1});
+    const list=(session.certificates||[]).filter(function(c){return matches(c.address,c.ident)}).sort(function(a,b){return a.date<b.date?1:-1});
     if(!list.length)return '<p class="empty">No certificates yet.</p>';
     return list.map(function(c){
       return '<article class="card"><div class="pills"><span class="pill '+(c.result==='fail'?'fail':'ok')+'">'+esc(data().resultLabel(c.result))+'</span></div><h2>'+esc(c.address)+'</h2><p class="meta">'+esc(data().prettyDate(c.date))+' · '+esc(c.agencyCode)+'</p><div class="actions"><button type="button" data-certificate="'+esc(c.id)+'">View</button><button type="button" data-download="'+esc(c.id)+'">Download PDF</button></div></article>';
