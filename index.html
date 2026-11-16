@@ -70,6 +70,7 @@ textarea.t{min-height:96px}
 .bar:empty{display:none}
 .vh{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none}
 .photos{margin-top:12px;border-top:1px dashed var(--line);padding-top:4px}
+.alarm .photos.lead{margin-top:2px;margin-bottom:12px;border-top:0;border-bottom:1px dashed var(--line);padding-top:0;padding-bottom:8px}
 .photos .pc{color:var(--pri)}
 .photos .row{margin-top:8px}
 label.btn{cursor:pointer;position:relative}
@@ -402,7 +403,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="pdflib.js"></script><script src="transfer.js"></script><script src="firebase-config.js"></script><script src="livesync.js"></script><script src="portaldata.js"></script><script src="certificate.js"></script><script src="invoice.js"></script><script src="requests.js"></script><script src="portaladmin.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.41.0 (20261115)';
+const APP_VERSION='2.42.0 (20261116)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -1189,10 +1190,10 @@ function quickHTML(j,f){const cur=quickSlot(j,f),slots=[...f.al.slice(0,f.alarms
   return`<section class="f quick" id="quick" aria-label="Add photos"><div class="qh"><b>📷 Photos</b><span class="note" id="qto">Saving to: <b>${slotName(cur)}</b>${cur===quickDefault(f)&&!QSEL[j.id]?' (next without a photo)':''}</span></div>
   <div class="qchips" role="radiogroup" aria-label="Photo goes to">${slots.map(sl=>{const c=refsOf(f,sl).length;return`<button type="button" role="radio" aria-checked="${sl===cur}" data-qslot="${sl}" class="${sl===cur?'on':''}${c?' has':''}">${sl===cur?'● ':''}${slotName(sl)}${c?` <span class="qn">📷${c}</span>`:''}</button>`}).join('')}</div>
   <div class="row"><label class="btn pri pbtn">📷 Take photo<input class="vh" type="file" accept="image/*" capture="environment" data-photo="${cur}" data-quick="1"></label><label class="btn pbtn">🖼️ Gallery<input class="vh" type="file" accept="image/*" multiple data-photo="${cur}" data-quick="1"></label></div>
-  ${cur!=='job'&&SET.ocr!==false?'<p class="note">Alarm photos are read automatically – check the suggested label details under that alarm.</p>':''}</section>`}
+  ${cur!=='job'&&SET.ocr!==false?'<p class="note">Alarm photos are read automatically – check the suggested label details at the top of that alarm.</p>':''}</section>`}
 function paintQuick(f){const q=$('#quick');if(!q||!CURJOB||FORMS[CURJOB]!==f)return;const j=JOBS.find(x=>x.id===CURJOB);if(j)q.outerHTML=quickHTML(j,f)}
-function photoBox(slot,title){return`<div class="photos" data-slot="${slot}"><label class="l">${title} <span class="pc" id="pc-${slot}"></span></label><div class="thumbs" id="th-${slot}"></div>
-  <div class="row"><label class="btn pri pbtn">📷 Add photo<input class="vh" type="file" accept="image/*" capture="environment" data-photo="${slot}"></label><label class="btn pbtn">🖼️ Gallery<input class="vh" type="file" accept="image/*" multiple data-photo="${slot}"></label></div></div>`}
+function photoBox(slot,title){const lead=/^al\d+$/.test(slot);return`<div class="photos${lead?' lead':''}" data-slot="${slot}"><label class="l">${title} <span class="pc" id="pc-${slot}"></span></label><div class="thumbs" id="th-${slot}"></div>
+  <div class="row"><label class="btn pri pbtn">📷 ${lead?'Take photo':'Add photo'}<input class="vh" type="file" accept="image/*" capture="environment" data-photo="${slot}"></label><label class="btn pbtn">🖼️ Gallery<input class="vh" type="file" accept="image/*" multiple data-photo="${slot}"></label></div></div>`}
 async function paintThumbs(f,slot){paintQuick(f);const box=document.getElementById('th-'+slot);if(!box)return;const ids=refsOf(f,slot).slice();
   const pc=document.getElementById('pc-'+slot);if(pc)pc.textContent=ids.length?'('+ids.length+')':'';
   box.innerHTML=ids.map((id,k)=>`<button type="button" class="th" data-ph="${esc(id)}" data-slot="${slot}" aria-label="${slotName(slot)} photo ${k+1}"><img alt=""></button>`).join('');
@@ -1522,6 +1523,7 @@ function ncHTML(a,i){const nv=a.newAns||'',c=a.yn.cleaned||'',isN=nv==='Yes';
 function alarmHTML(a,i){
   return`<div class="alarm ${a.isNew?'isnew':''}" id="al${i}"><h3>Smoke alarm #${i+1}<span class="badge newb" id="newb${i}" ${a.isNew?'':'hidden'}>🆕 NEW</span>${i>=3?' <span class="note">(goes in Notes)</span>':''}<button type="button" data-allyes="${i}">All Yes</button></h3>
   ${a.calRef?`<p class="note">Calendar text kept for review: ${esc(a.calRef)}</p>`:''}
+  ${photoBox('al'+i,'Photos – alarm '+(i+1))}<div id="ocr-al${i}"></div>
   <div class="yn nc" id="nc${i}">${ncHTML(a,i)}</div>
   <label class="l">Mounted on</label>${chips('al.'+i+'.mount',['Ceiling','Wall'],a.mount)}
   <label class="l">Location</label>${chips('al.'+i+'.room',ROOMS,a.room)}
@@ -1535,7 +1537,7 @@ function alarmHTML(a,i){
   <label class="l">Expiry (MM/YYYY)</label>${inp('al.'+i+'.expiry',a.expiry,'MM/YYYY','text','inputmode="numeric" maxlength="7"')}<p class="note" id="made${i}" ${a.mfd?'':'hidden'}>${a.mfd?'Made '+esc(a.mfd):''}</p>
   <div class="row" style="margin-top:6px"><button type="button" data-exp10="${i}">Expiry = service date + 10 yrs</button></div>
   <label class="l">Checks</label><div class="yn" id="yn${i}">${QS.map(([k,q])=>ynRow(i,k,q,a.yn[k],a)).join('')}</div>
-  ${photoBox('al'+i,'Photos – alarm '+(i+1))}<div id="ocr-al${i}"></div></div>`;
+  </div>`;
 }
 function serviceCert(j){
   if(!j||!window.CCSAPortalData||!CCSAPortalData.localCertificate)return null;
