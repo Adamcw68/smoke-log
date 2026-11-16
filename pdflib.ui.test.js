@@ -363,7 +363,7 @@ test('worksheet rules stay, photos stay in the saved PDF, and reload keeps them'
     const x=c.getContext('2d');x.fillStyle='#2457c5';x.fillRect(0,0,80,60);x.fillStyle='#fff';x.font='16px sans-serif';x.fillText('Sample',8,36);
     const blob=await new Promise(res=>c.toBlob(res,'image/jpeg',0.85));
     const file=new File([blob],'sample.jpg',{type:'image/jpeg'});
-    const input=document.querySelector('#quick input[type="file"][multiple]');
+    const input=document.querySelector('#al0 input[type="file"][multiple]');
     const dt=new DataTransfer();dt.items.add(file);input.files=dt.files;
     input.dispatchEvent(new Event('change',{bubbles:true}));
   });
@@ -412,7 +412,7 @@ test('worksheet rules stay, photos stay in the saved PDF, and reload keeps them'
   assert.equal(after.cleaned,'Yes');
   assert.equal(after.isNew,true);
   const sw=await page.evaluate(async()=>await (await fetch('sw.js')).text());
-  assert.match(sw,/ccsa-v2\.42\.0-20261116/);
+  assert.match(sw,/ccsa-v2\.43\.0-20261116/);
   assert.match(sw,/pdflib\.js/);
   assert.match(sw,/sheetfill\.js/);
   assertNoAppError(page);

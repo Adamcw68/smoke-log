@@ -403,7 +403,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="pdflib.js"></script><script src="transfer.js"></script><script src="firebase-config.js"></script><script src="livesync.js"></script><script src="portaldata.js"></script><script src="certificate.js"></script><script src="invoice.js"></script><script src="requests.js"></script><script src="portaladmin.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.42.0 (20261116)';
+const APP_VERSION='2.43.0 (20261116)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -1571,7 +1571,6 @@ function renderJob(id){
   const tel=[j.p1,j.p2].filter(Boolean);
   $('main').innerHTML=`
   ${isArch(j)?`<div class="archban"><span>📥 Archived ${hhmm(j.arch)} – hidden from the job list</span><button type="button" class="unarch big" id="jrest">↩️ Unarchive</button></div>`:''}
-  ${quickHTML(j,f)}
   <section class="f"><h2>Job</h2>
    <div class="meta">${j.section?`<span class="badge ${j.section==='Holiday'?'hol':'perm'}">${esc(j.section)}</span>`:''}👤 ${esc(j.contact||'—')} ${j.directions?'· '+esc(j.directions):''}</div>
    ${j.notes||j.ic?`<div class="note" style="margin-top:6px">Sheet notes: ${esc([j.ic,j.notes].filter(Boolean).join(' · '))}${j.last?' · last service '+fmtDMY(j.last):''}</div>`:''}

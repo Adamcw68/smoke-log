@@ -34,6 +34,13 @@ test('the camera sits at the top of every alarm, before the fields it can fill',
   assert.ok(job>0);
   assert.ok(html.indexOf("photoBox('job'",job)>job);
   assert.ok(html.indexOf("photoBox('job'",job)<html.indexOf('Photos are compressed',job));
+  const sheet=html.slice(html.indexOf('function renderJob'),html.indexOf('function paintYn'));
+  const alarmsAt=sheet.indexOf('<h2>Smoke alarm locations</h2>');
+  assert.ok(alarmsAt>0);
+  assert.equal(sheet.slice(0,alarmsAt).indexOf('quickHTML'),-1);
+  assert.equal(sheet.indexOf('id="quick"'),-1);
+  assert.ok(sheet.indexOf('alarmHTML')>alarmsAt);
+  assert.match(box,/data-photo="\$\{slot\}"/);
 });
 
 test('a label reading still has to be applied, and an existing answer is not replaced quietly',function(){
