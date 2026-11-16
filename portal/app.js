@@ -225,7 +225,7 @@
     const rows=model.alarms.map(function(a){
       return '<tr><td data-label="Product">'+esc(a.product)+'</td><td data-label="Location">'+esc(a.location||'')+'</td><td data-label="Expiry">'+esc(a.expiry||'')+'</td><td data-label="Action">'+esc(a.action)+'</td><td data-label="Reason">'+esc(a.reason)+'</td></tr>';
     }).join('');
-    const side=[['Job Number',model.jobNumber],['Service Reason',model.serviceReason],['Inspected by',model.inspector],['Last Inspection Date',model.lastInspection]].map(function(pair){
+    const side=[['Job Number',model.jobNumber],['Service Reason',model.serviceReason],['Valid until',model.validUntil],['Inspected by',model.inspector],['Last Inspection Date',model.lastInspection]].filter(function(pair){return pair[0]!=='Valid until'||pair[1]}).map(function(pair){
       return '<div class="reportsideitem"><span>'+esc(pair[0])+'</span><b>'+esc(pair[1]||'')+'</b></div>';
     }).join('');
     const laws=model.laws.map(function(law){return '<li>'+esc(law)+'</li>'}).join('');

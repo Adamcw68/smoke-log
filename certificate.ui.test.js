@@ -35,8 +35,8 @@ test('the portal service report says 240V and the PDF page matches',{timeout:900
   assert.match(view,/c\/- Ray White Maclean\/Yamba/);
   assert.match(view,/240V Photoelectric Alarm/);
   assert.match(view,/Lithium Battery Photoelectric Alarm/);
-  assert.match(view,/240V: hard-wired, battery can be changed/);
-  assert.match(view,/240V lithium: hard-wired, sealed battery/);
+  assert.match(view,/240V: mains-powered \(hard-wired\), battery can be changed/);
+  assert.match(view,/240V lithium: mains-powered \(hard-wired\), sealed battery/);
   assert.equal(/\bHW\b/.test(view),false);
   assert.equal(view.includes('Jane Tenant'),false);
   assert.equal(view.includes('0400 111 222'),false);
@@ -70,7 +70,7 @@ test('the portal service report says 240V and the PDF page matches',{timeout:900
   });
   assert.match(drawn,/SERVICE REPORT/);
   assert.match(drawn,/240V Photoelectric Alarm/);
-  assert.match(drawn,/240V: hard-wired/);
+  assert.match(drawn,/240V: mains-powered/);
   assert.equal(/\bHW\b/.test(drawn),false);
   assert.equal(drawn.includes('Jane Tenant'),false);
   const canvas=await pdfPage.$('canvas');
