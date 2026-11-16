@@ -115,6 +115,16 @@
     const dt=new Date(Date.UTC(+m[1],+m[2]-1,+m[3]+(+n||0)));
     return dt.getUTCFullYear()+'-'+pad2(dt.getUTCMonth()+1)+'-'+pad2(dt.getUTCDate());
   }
+  /* Twelve calendar months. 31 Jan stays 31 Jan. 29 Feb lands on 28 Feb when the next year is not a leap year. */
+  function addMonths(v,months){
+    const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd(v));
+    if(!m)return '';
+    const y=+m[1],month=+m[2]-1,day=+m[3],shift=+months||0;
+    const first=new Date(Date.UTC(y,month+shift,1));
+    const last=new Date(Date.UTC(first.getUTCFullYear(),first.getUTCMonth()+1,0)).getUTCDate();
+    const dt=new Date(Date.UTC(first.getUTCFullYear(),first.getUTCMonth(),Math.min(day,last)));
+    return dt.getUTCFullYear()+'-'+pad2(dt.getUTCMonth()+1)+'-'+pad2(dt.getUTCDate());
+  }
   function sydneyParts(ms){
     const fmt=new Intl.DateTimeFormat('en-AU',{timeZone:'Australia/Sydney',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
     const p=Object.fromEntries(fmt.formatToParts(new Date(ms)).map(function(x){return [x.type,x.value]}));
@@ -262,7 +272,7 @@
   function dueOf(job,form,serviceDate){
     if(ymd(job&&job.due))return ymd(job.due);
     const base=serviceDate||ymd(job&&job.last);
-    return base?addDays(base,365):'';
+    return base?addMonths(base,12):'';
   }
   function complianceStatus(spec){
     spec=spec||{};
@@ -431,7 +441,7 @@
       const prior=list.filter(function(j){return j.priorDate&&(j.priorResult==='pass'||j.priorResult==='replace'||j.priorResult==='fail')}).sort(function(a,b){return a.priorDate<b.priorDate?1:-1})[0];
       const result=completed.length?(completed[0].result||''):(prior?prior.priorResult:'');
       const lastService=completed.length?completed[0].serviceDate:(prior?prior.priorDate:(latest.lastService||''));
-      const due=(completed.length&&completed[0].due)||(latest&&latest.due)||(lastService?addDays(lastService,365):'');
+      const due=(completed.length&&completed[0].due)||(latest&&latest.due)||(lastService?addMonths(lastService,12):'');
       const alarmCount=completed.length?completed[0].alarmCount:(latest.alarmCount||0);
       properties.push({
         id:propertyId,
@@ -818,6 +828,7 @@
     prettyDate:prettyDate,
     prettyTime:prettyTime,
     sydneyToday:sydneyToday,
+    addMonths:addMonths,
     alarmResult:alarmResult,
     serviceResult:serviceResult,
     expiryOf:expiryOf,

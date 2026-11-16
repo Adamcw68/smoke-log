@@ -70,6 +70,12 @@
     if(!m)return '';
     return m[3]+'/'+m[2]+'/'+m[1];
   }
+  function validUntilDate(iso,compliant){
+    if(!compliant)return '';
+    const data=dataApi();
+    const next=data&&data.addMonths?data.addMonths(String(iso||'').slice(0,10),12):'';
+    return dmy(next);
+  }
   function party(code){
     const data=dataApi();
     const found=data&&data.agencyFromCode?data.agencyFromCode(code):null;
@@ -106,9 +112,10 @@
     'Australian Standard 3786',
     'Section 3.7.2.2 (houses) / Part E2, Spec 2.2a 3(c)(i) (units) of the Building Code of Australia'
   ];
-  const LEGEND='240V: hard-wired, battery can be changed. 9V: battery only, battery can be changed. 240V lithium: hard-wired, sealed battery. Lithium: battery only, sealed battery.';
-  function viewModel(cert){
+  const LEGEND='240V: mains-powered (hard-wired), battery can be changed. 9V: battery only, battery can be changed. 240V lithium: mains-powered (hard-wired), sealed battery. Lithium: battery only, sealed battery.';
+  function viewModel(cert,mode){
     cert=cert||{};
+    const compliance=mode==='compliance';
     const who=party(cert.agencyCode);
     const owner=safeLine(cert.owner||cert.ownerName||'');
     let attention='';
@@ -132,16 +139,18 @@
       };
     });
     return {
-      title:'SERVICE REPORT',
+      title:compliance?'COMPLIANCE CERTIFICATE':'SERVICE REPORT',
       brand:'Clarence Coast Smoke Alarms',
       phone:'0412 092 233',
       attention:attention,
       postal:postal,
       reportDate:dmy(cert.date),
+      validUntil:validUntilDate(cert.date,!(cert.alarms||[]).some(function(a){return String(a&&a.result||'').toLowerCase()==='fail'})),
       serviceAddress:safeLine(cert.address),
       jobNumber:safeLine(cert.ident||''),
       serviceReason:'Subscription Service',
-      inspector:safeLine(cert.tech),
+      inspector:compliance?'':safeLine(cert.tech),
+      hideInspector:compliance,
       lastInspection:dmy(cert.lastInspection),
       compliant:!alarms.some(function(a){return a.action==='Failed'}),
       complianceLead:'Clarence Coast Smoke Alarms fitted or checked every alarm in the table below. This visit was recorded against:',
@@ -227,13 +236,12 @@
       +'f\n');
   };
   Doc.prototype.header=function(continued,kicker){
-    const service=!kicker;
     this.logo(36,14,46);
-    this.text('F1',8,92,16,kicker||'SERVICE REPORT',MUTED,service?0.7:0);
+    this.text('F1',8,92,16,kicker||'SERVICE REPORT',MUTED,0.7);
     this.text('F2',13,92,30,'Clarence Coast Smoke Alarms',INK);
     this.text('F1',8,92,48,'0412 092 233',MUTED);
     const ruleY=PAGE_H-68;
-    this.cmd(rgb(service?RED:ACCENT)+' RG\n'+(service?'2.2':'1.2')+' w\n36 '+num(ruleY)+' m '+(service?num(PAGE_W-36):'310')+' '+num(ruleY)+' l S\n');
+    this.cmd(rgb(RED)+' RG\n2.2 w\n36 '+num(ruleY)+' m '+num(PAGE_W-36)+' '+num(ruleY)+' l S\n');
     if(continued)this.text('F1',8,470,16,'continued',MUTED);
     this.top=82;
   };
@@ -243,12 +251,13 @@
     return this.pages;
   };
 
-  function drawCertificate(cert){
-    const view=viewModel(cert);
+  function drawCertificate(cert,mode){
+    const view=viewModel(cert,mode);
     const doc=new Doc();
-    doc.header(false);
+    doc.header(false,view.title);
     const dateY=doc.top;
     doc.text('F1',9,360,dateY,'Report Date: '+(view.reportDate||''),INK);
+    if(view.validUntil)doc.text('F1',9,360,dateY+12,'Valid until: '+view.validUntil,INK);
     wrap(view.attention,9,300,false).forEach(function(line){
       doc.text('F1',9,36,doc.top,line,INK);
       doc.top+=12;
@@ -257,7 +266,7 @@
       doc.text('F1',9,36,doc.top,line,INK);
       doc.top+=12;
     });
-    doc.top=Math.max(doc.top,dateY+14)+12;
+    doc.top=Math.max(doc.top,dateY+(view.validUntil?26:14))+12;
     const detailY=doc.top;
     doc.text('F2',9,36,detailY,'SERVICE DETAILS',INK);
     doc.cmd(rgb(INK)+' RG\n0.6 w\n36 '+num(PAGE_H-detailY-11)+' m 118 '+num(PAGE_H-detailY-11)+' l S\n');
@@ -268,10 +277,11 @@
     });
     const side=[
       ['Job Number',view.jobNumber],
-      ['Service Reason',view.serviceReason],
-      ['Inspected by',view.inspector],
-      ['Last Inspection Date',view.lastInspection]
+      ['Service Reason',view.serviceReason]
     ];
+    if(view.validUntil)side.push(['Valid until',view.validUntil]);
+    if(!view.hideInspector)side.push(['Inspected by',view.inspector]);
+    side.push(['Last Inspection Date',view.lastInspection]);
     let sy=detailY;
     side.forEach(function(pair){
       doc.text('F1',8,380,sy,pair[0],MUTED);
@@ -406,55 +416,24 @@
   function complianceModel(cert,extra){
     extra=extra||{};
     const report=viewModel(cert||{});
-    const due=dmy(extra.due||(cert&&cert.due)||'');
+    const due=report.compliant?report.validUntil:'';
     const ok=!!(report.compliant&&due);
     return {
-      title:'Compliance certificate',
+      title:'COMPLIANCE CERTIFICATE',
       brand:'Clarence Coast Smoke Alarms',
       phone:report.phone,
       attention:report.attention,
       address:report.serviceAddress,
-      statement:ok?'Clarence Coast Smoke Alarms records this property as meeting the smoke alarm checks from the latest visit.':'Clarence Coast Smoke Alarms does not record this property as compliant from the latest visit.',
+      statement:ok?report.complianceLead:report.failLead,
       validUntil:ok?due:'',
       validLabel:ok?'Valid until':'',
       date:report.reportDate,
-      inspector:report.inspector,
+      alarms:report.alarms.map(function(a){return {product:a.product,location:a.location}}),
       footer:report.footer
     };
   }
-  function drawCompliance(cert,extra){
-    const view=complianceModel(cert,extra);
-    const doc=new Doc();
-    doc.header(false,'Compliance certificate');
-    if(view.attention){
-      wrap(view.attention,9,500,false).forEach(function(line){
-        doc.text('F1',9,36,doc.top,line,INK);
-        doc.top+=12;
-      });
-    }
-    doc.top+=6;
-    wrap(view.address,12,500,true).forEach(function(line){
-      doc.text('F2',12,36,doc.top,line,INK);
-      doc.top+=16;
-    });
-    doc.top+=8;
-    wrap(view.statement,10,500,false).forEach(function(line){
-      doc.text('F1',10,36,doc.top,line,INK);
-      doc.top+=14;
-    });
-    doc.top+=8;
-    if(view.validUntil){
-      doc.text('F1',9,36,doc.top,'Valid until',MUTED);
-      doc.top+=12;
-      doc.text('F2',12,36,doc.top,view.validUntil,ACCENT);
-      doc.top+=20;
-    }
-    doc.text('F1',9,36,doc.top,'Latest visit '+(view.date||''),INK);
-    doc.top+=14;
-    doc.text('F1',9,36,doc.top,'Inspected by '+(view.inspector||''),INK);
-    doc.top+=20;
-    doc.text('F1',8,36,doc.top,view.footer,MUTED);
-    return doc.finish();
+  function drawCompliance(cert){
+    return drawCertificate(cert,'compliance');
   }
   function buildCompliancePdf(cert,extra){
     return buildPdf(drawCompliance(cert||{},extra||{}));

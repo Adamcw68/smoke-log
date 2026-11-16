@@ -409,7 +409,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script><script src="addressfind.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="pdflib.js"></script><script src="transfer.js"></script><script src="firebase-config.js"></script><script src="livesync.js"></script><script src="portaldata.js"></script><script src="certificate.js"></script><script src="invoice.js"></script><script src="requests.js"></script><script src="portaladmin.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.45.0 (20261116)';
+const APP_VERSION='2.47.0 (20261116)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -1555,6 +1555,20 @@ function alarmHTML(a,i){
 function serviceCert(j){
   if(!j||!window.CCSAPortalData||!CCSAPortalData.localCertificate)return null;
   return CCSAPortalData.localCertificate(j,FORMS[j.id]||null)}
+function complianceOffer(j){
+  const cert=serviceCert(j);
+  if(!cert||!window.CCSACertificate||!CCSACertificate.complianceModel)return null;
+  const model=CCSACertificate.complianceModel(cert);
+  return model.validUntil?{cert:cert,model:model}:null}
+function downloadComplianceCert(cert){
+  if(!cert||!window.CCSACertificate)return;
+  const bytes=CCSACertificate.buildCompliancePdf(cert);
+  const blob=new Blob([bytes],{type:'application/pdf'});
+  const a=document.createElement('a');
+  const url=URL.createObjectURL(blob);
+  a.href=url;a.download=CCSACertificate.complianceFileName(cert);
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),4000)}
 function downloadServiceReport(cert){
   if(!cert||!window.CCSACertificate)return;
   const bytes=CCSACertificate.buildCertificatePdf(cert);
@@ -1566,10 +1580,15 @@ function downloadServiceReport(cert){
   setTimeout(()=>URL.revokeObjectURL(url),4000)}
 function serviceReportHTML(model){
   const rows=model.alarms.map(a=>`<tr><td>${esc(a.product)}</td><td>${esc(a.location||'')}</td><td>${esc(a.expiry||'')}</td><td>${esc(a.action)}</td><td>${esc(a.reason)}</td></tr>`).join('');
-  const side=[['Job Number',model.jobNumber],['Service Reason',model.serviceReason],['Inspected by',model.inspector],['Last Inspection Date',model.lastInspection]].map(([k,v])=>`<div class="reportsideitem"><span>${esc(k)}</span><b>${esc(v||'')}</b></div>`).join('');
+  const fields=[['Job Number',model.jobNumber],['Service Reason',model.serviceReason]];
+  if(model.validUntil)fields.push(['Valid until',model.validUntil]);
+  if(!model.hideInspector)fields.push(['Inspected by',model.inspector]);
+  fields.push(['Last Inspection Date',model.lastInspection]);
+  const side=fields.map(([k,v])=>`<div class="reportsideitem"><span>${esc(k)}</span><b>${esc(v||'')}</b></div>`).join('');
   const laws=model.laws.map(law=>`<li>${esc(law)}</li>`).join('');
   const lead=model.compliant?model.complianceLead:model.failLead;
-  return `<article class="svcreport" id="certificate"><header class="reporthead"><img class="reportlogo" src="icon-192.png" alt=""><div><div class="reporttitle">${esc(model.title)}</div><div class="reportbrand">${esc(model.brand)}</div><div class="reportphone">${esc(model.phone)}</div></div></header><div class="reporttop"><div>${esc(model.attention)}</div><div>Report Date: <b>${esc(model.reportDate||'')}</b></div></div><div class="reportdetail"><div class="reportmain"><div><span class="reportlabel">SERVICE DETAILS</span> <span class="reportaddr">${esc(model.serviceAddress)}</span></div><div class="complybox">${model.compliant?'<span class="tick" aria-hidden="true">✓</span>':''}<div><p>${esc(lead)}</p><ul>${laws}</ul><p>${esc(model.batteryNote)}</p></div></div></div><div class="reportside">${side}</div></div><table><thead><tr><th>Product Description</th><th>Location</th><th>Expiry Date</th><th>Action</th><th>Reason</th></tr></thead><tbody>${rows||'<tr><td colspan="5">No alarms were recorded.</td></tr>'}</tbody></table><p class="legend">${esc(model.legend)}</p><p class="foot">${esc(model.footer)}</p><div class="row"><button type="button" class="btn pri" id="svpdf">Download PDF</button></div></article>`}
+  const pdfId=model.hideInspector?'ccpdf':'svpdf';
+  return `<article class="svcreport" id="${model.hideInspector?'compliance':'certificate'}"><header class="reporthead"><img class="reportlogo" src="icon-192.png" alt=""><div><div class="reporttitle">${esc(model.title)}</div><div class="reportbrand">${esc(model.brand)}</div><div class="reportphone">${esc(model.phone)}</div></div></header><div class="reporttop"><div>${esc(model.attention)}</div><div>Report Date: <b>${esc(model.reportDate||'')}</b></div>${model.validUntil?`<div id="validuntil">Valid until: <b>${esc(model.validUntil)}</b></div>`:''}</div><div class="reportdetail"><div class="reportmain"><div><span class="reportlabel">SERVICE DETAILS</span> <span class="reportaddr">${esc(model.serviceAddress)}</span></div><div class="complybox">${model.compliant?'<span class="tick" aria-hidden="true">✓</span>':''}<div><p>${esc(lead)}</p><ul>${laws}</ul><p>${esc(model.batteryNote)}</p></div></div></div><div class="reportside">${side}</div></div><table><thead><tr><th>Product Description</th><th>Location</th><th>Expiry Date</th><th>Action</th><th>Reason</th></tr></thead><tbody>${rows||'<tr><td colspan="5">No alarms were recorded.</td></tr>'}</tbody></table><p class="legend">${esc(model.legend)}</p><p class="foot">${esc(model.footer)}</p><div class="row"><button type="button" class="btn pri" id="${pdfId}">Download PDF</button></div></article>`}
 function renderServiceReport(id){
   const j=JOBS.find(x=>x.id===id),cert=j?serviceCert(j):null;
   clearHead();$('#ttl').textContent='Service report';$('#hbtn').textContent='‹ Job';$('#hbtn').className='back';$('#hbtn').onclick=()=>{location.hash='#job/'+encodeURIComponent(id)};
@@ -1577,6 +1596,13 @@ function renderServiceReport(id){
   if(!j||!cert||!window.CCSACertificate){$('main').innerHTML='<section class="f"><h2>Service report</h2><p class="note">The service report is available once this job is marked done.</p></section>';return}
   $('main').innerHTML=serviceReportHTML(CCSACertificate.viewModel(cert));
   if($('#svpdf'))$('#svpdf').onclick=()=>downloadServiceReport(cert)}
+function renderCompliance(id){
+  const j=JOBS.find(x=>x.id===id),offer=j?complianceOffer(j):null;
+  clearHead();$('#ttl').textContent='Compliance certificate';$('#hbtn').textContent='‹ Job';$('#hbtn').className='back';$('#hbtn').onclick=()=>{location.hash='#job/'+encodeURIComponent(id)};
+  $('#bar').innerHTML='';
+  if(!offer){$('main').innerHTML='<section class="f"><h2>Compliance certificate</h2><p class="note">A compliance certificate is available once this job is marked done and the visit passed.</p></section>';return}
+  $('main').innerHTML=serviceReportHTML(CCSACertificate.viewModel(offer.cert,'compliance'));
+  if($('#ccpdf'))$('#ccpdf').onclick=()=>downloadComplianceCert(offer.cert)}
 function renderJob(id){
   const j=JOBS.find(x=>x.id===id);if(!j){location.hash='';return}
   const f=formFor(j);touch(id);
@@ -1617,7 +1643,7 @@ function renderJob(id){
   <section class="f"><h2>Notes / comments</h2><textarea class="t" data-path="comments" placeholder="Printed in the Notes area on page 2">${esc(f.comments)}</textarea>
    <p class="note">Alarms 4 and up are printed in Notes automatically (the template has 3 alarm boxes).</p>
    <label class="tog">Job done<input type="checkbox" data-path="done" ${f.done?'checked':''}></label>
-   <section id="svcreport"><h2>Service report</h2><p class="note">${serviceCert(j)?'For the agency. Tenant names, phone numbers and email addresses are not on it.':'The service report is available once this job is marked done.'}</p>${serviceCert(j)?'<div class="row"><button type="button" class="btn" id="svopen">View service report</button><button type="button" class="btn pri" id="svdown">Download PDF</button></div>':''}</section>
+   <section id="svcreport"><h2>Service report</h2><p class="note">${serviceCert(j)?'For the agency. Tenant names, phone numbers and email addresses are not on it.':'The service report is available once this job is marked done.'}</p>${serviceCert(j)?`<div class="row"><button type="button" class="btn" id="svopen">View service report</button><button type="button" class="btn pri" id="svdown">Download PDF</button>${complianceOffer(j)?'<button type="button" class="btn" id="ccopen">Compliance certificate</button>':''}</div>`:''}</section>
    <div class="donepr" id="donepr" hidden><b>✓ Done – archive this job?</b><div class="row"><button type="button" class="good" id="dpa">📥 Archive</button><button type="button" id="dpn">Not now</button></div></div></section>`;
   $('#bar').innerHTML=`<button class="btn dark" id="gen">📄 Make PDF</button>${isArch(j)?'<button class="btn unarch" id="jarch">↩️ Unarchive</button>':'<button class="btn" id="jarch">📥 Archive</button>'}`;
   $('#gen').onclick=()=>cleanGate(j,f,'make PDF',()=>{location.hash='#pdf/'+encodeURIComponent(id)});
@@ -1628,6 +1654,7 @@ function renderJob(id){
   if($('#jlib'))$('#jlib').onclick=()=>{location.hash='#library/'+encodeURIComponent(window.CCSAPdf?CCSAPdf.serviceDay(j,f):'')};
   if($('#svopen'))$('#svopen').onclick=()=>{location.hash='#report/'+encodeURIComponent(id)};
   if($('#svdown'))$('#svdown').onclick=()=>downloadServiceReport(serviceCert(j));
+  if($('#ccopen'))$('#ccopen').onclick=()=>{location.hash='#compliance/'+encodeURIComponent(id)};
   bindCalReview(id,f);
   $('#dpa').onclick=()=>{save(LS.forms,FORMS);archiveJobs([id])};$('#dpn').onclick=()=>{$('#donepr').hidden=true};
   CURJOB=j.id;paintHead(j);bindForm(j,f);paintAllThumbs(f);syncAsPhotos(f);
@@ -2079,6 +2106,7 @@ async function exportJSON(){return exportWorksheets()}
 function render(){document.body.classList.remove('libmode');const h=decodeURIComponent(location.hash.slice(1));window.scrollTo(0,0);hideGate();if(h)hideSnack();
   if(h.startsWith('job/'))renderJob(h.slice(4));
   else if(h.startsWith('report/'))renderServiceReport(h.slice(7));
+  else if(h.startsWith('compliance/'))renderCompliance(h.slice(11));
   else if(h.startsWith('pdf/'))renderPDF(h.slice(4));
   else if(h.startsWith('kept/'))renderKept(h.slice(5));
   else if(h==='library'||h.startsWith('library/'))renderLibrary((h==='library'?'':h.slice(8))||(window.CCSAPdf?CCSAPdf.sydneyToday():''));
