@@ -49,6 +49,29 @@
     const found=hay(parts);
     return needle.split(' ').every(function(word){return found.indexOf(word)>=0});
   }
+  function tidy(v){return String(v||'').replace(/\s+/g,' ').trim()}
+  function trimEdge(v){return tidy(v).replace(/^[,]+|[,]+$/g,'').trim()}
+  /* Street (including a unit) on the first line, suburb and postcode on the second. */
+  function addressLines(addr,street,town){
+    addr=tidy(addr);
+    street=tidy(street);
+    town=tidy(town);
+    if(street&&addr.toLowerCase().indexOf(street.toLowerCase())===0){
+      return {line1:street,line2:trimEdge(addr.slice(street.length))};
+    }
+    if(town){
+      const at=addr.toLowerCase().lastIndexOf(town.toLowerCase());
+      if(at>0){
+        const line1=trimEdge(addr.slice(0,at));
+        const line2=trimEdge(addr.slice(at));
+        if(line1)return {line1:line1,line2:line2};
+      }
+    }
+    const comma=addr.lastIndexOf(',');
+    if(comma>0)return {line1:trimEdge(addr.slice(0,comma)),line2:trimEdge(addr.slice(comma+1))};
+    if(addr)return {line1:addr,line2:''};
+    return {line1:street||town,line2:street&&town?town:''};
+  }
   function jobFields(job,form){
     job=job||{};
     form=form||{};
@@ -63,5 +86,5 @@
       return matches(jobFields(job,forms&&job&&forms[job.id]),q);
     });
   }
-  return {canon:canon,matches:matches,jobFields:jobFields,searchJobs:searchJobs};
+  return {canon:canon,matches:matches,jobFields:jobFields,searchJobs:searchJobs,addressLines:addressLines};
 });

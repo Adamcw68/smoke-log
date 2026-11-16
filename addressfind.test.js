@@ -8,6 +8,18 @@ const unit={id:'queen',addr:'Unit 1, 14 Queen Street, Yamba NSW 2464',street:'Un
 const beach={id:'beach',addr:'8/5 Beach St, Yamba NSW 2464',street:'8/5 Beach St',town:'Yamba',agent:'Raine & Horne',section:'Holiday',arch:null};
 const forms={beach:{addr:'8/5 Beach Street, Yamba',ident:'Beach house',done:true}};
 
+test('a job header puts the unit and street above the suburb',function(){
+  assert.deepEqual(find.addressLines('Unit 1, 14 Queen Street, Yamba NSW 2464','Unit 1, 14 Queen Street','Yamba'),{line1:'Unit 1, 14 Queen Street',line2:'Yamba NSW 2464'});
+  assert.deepEqual(find.addressLines('18 River Street, Maclean NSW 2463','18 River Street','Maclean'),{line1:'18 River Street',line2:'Maclean NSW 2463'});
+  assert.deepEqual(find.addressLines('8/5 Beach St, Yamba NSW 2464','8/5 Beach St','Yamba'),{line1:'8/5 Beach St',line2:'Yamba NSW 2464'});
+  assert.deepEqual(find.addressLines('1 Sample St','1 Sample St',''),{line1:'1 Sample St',line2:''});
+  const html=fs.readFileSync('index.html','utf8');
+  assert.match(html,/header\.job \.jobst\{[^}]*font-size:1\.5rem/);
+  assert.match(html,/CCSAAddress\.addressLines/);
+  assert.match(html,/class="jobst"/);
+  assert.match(html,/class="jobsub"/);
+});
+
 test('street suffix, unit wording, suburb and part of the street all match',function(){
   assert.equal(find.matches([river.addr,river.street,river.town],'18 river st'),true);
   assert.equal(find.matches([river.addr],'RIVER'),true);
