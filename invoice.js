@@ -21,6 +21,11 @@
     if(typeof require==='function'){try{return require('./portaldata.js')}catch(e){return null}}
     return null;
   }
+  function addressLib(){
+    if(typeof CCSAAddress!=='undefined'&&CCSAAddress.matches)return CCSAAddress;
+    if(typeof require==='function'){try{return require('./addressfind.js')}catch(e){return null}}
+    return null;
+  }
   function pdfLib(){
     if(typeof CCSACertificate!=='undefined'&&CCSACertificate.buildPdf)return CCSACertificate;
     if(typeof require==='function'){try{return require('./certificate.js')}catch(e){return null}}
@@ -394,7 +399,12 @@
       if(from&&inv.issueDate&&inv.issueDate<from)return false;
       if(to&&inv.issueDate&&inv.issueDate>to)return false;
       if(query.agencyId&&inv.agencyId!==query.agencyId)return false;
-      if(query.q&&(inv.address||'').toLowerCase().indexOf(String(query.q).toLowerCase())<0&&(inv.number||'').toLowerCase().indexOf(String(query.q).toLowerCase())<0)return false;
+      if(query.q){
+        const lib=addressLib();
+        const addressHit=lib?lib.matches([inv.address,inv.ident],query.q):(inv.address||'').toLowerCase().indexOf(String(query.q).toLowerCase())>=0;
+        const numberHit=String(inv.number||'').toLowerCase().indexOf(String(query.q).trim().toLowerCase())>=0;
+        if(!addressHit&&!numberHit)return false;
+      }
       return true;
     });
   }
