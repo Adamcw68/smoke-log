@@ -9,6 +9,12 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.35 -apple-s
 header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:5px solid var(--brand);padding:8px 10px;padding-top:max(8px,env(safe-area-inset-top));display:flex;align-items:center;gap:8px;box-shadow:0 2px 6px rgba(0,0,0,.08)}
 header img{height:40px;width:auto;display:block}
 header .ttl{flex:1;min-width:0;font-weight:800;font-size:16px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header.job{align-items:flex-start}
+header.job img{margin-top:2px}
+header.job button{margin-top:2px}
+header.job .ttl{white-space:normal;overflow:visible;text-overflow:clip}
+header.job .jobst{display:block;font-size:1.5rem;font-weight:800;line-height:1.15;color:#161314;overflow-wrap:anywhere}
+header.job .jobsub{display:block;margin-top:2px;font-size:1.15rem;font-weight:700;line-height:1.25;color:#241f20}
 header button{background:var(--ink);color:#fff;border:0;border-radius:10px;min-height:42px;padding:0 12px;font-size:15px;font-weight:700}
 header button.back{background:#fff;color:var(--ink);border:2px solid var(--ink)}
 main{padding:10px 10px 130px;max-width:720px;margin:0 auto}
@@ -403,7 +409,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script><script src="addressfind.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="pdflib.js"></script><script src="transfer.js"></script><script src="firebase-config.js"></script><script src="livesync.js"></script><script src="portaldata.js"></script><script src="certificate.js"></script><script src="invoice.js"></script><script src="requests.js"></script><script src="portaladmin.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.43.0 (20261116)';
+const APP_VERSION='2.44.0 (20261116)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -1464,8 +1470,10 @@ function card(j){
   <div class="row">${tel.map(phoneLink).join('')||'<button disabled>No phone</button>'}<a href="${maps}" target="_blank" rel="noopener">🗺️ Map</a></div>
   <div class="row act"><a class="pri wide" href="#job/${encodeURIComponent(j.id)}">📝 Worksheet</a>${ar?`<button data-restore="${esc(j.id)}" class="unarch">↩️ Unarchive</button>`:`<button data-done="${esc(j.id)}" class="${done?'':'good'}">${done?'Undo done':'✓ Done'}</button><button data-arch="${esc(j.id)}" class="archbtn" aria-label="Archive job">📥 Archive</button>`}</div></div></div>`;
 }
-function paintHead(j){if(!j)return;const st=statusOf(j),h=$('header');h.className='st-'+st;
-  $('#ttl').innerHTML=`${esc(j.street||j.addr)}<span class="badge hst sb sb-${st}">${ST[st]}${replaceDue(j)?' · ⚠️ Replace due':''}</span>`}
+function paintHead(j){if(!j)return;const st=statusOf(j),h=$('header');h.className='st-'+st+' job';
+  const f=FORMS[j.id];
+  const lines=window.CCSAAddress&&CCSAAddress.addressLines?CCSAAddress.addressLines((f&&f.addr)||j.addr,j.street,j.town):{line1:j.street||j.addr||'',line2:''};
+  $('#ttl').innerHTML=`<span class="jobaddr"><span class="jobst">${esc(lines.line1)}</span>${lines.line2?`<span class="jobsub">${esc(lines.line2)}</span>`:''}</span><span class="badge hst sb sb-${st}">${ST[st]}${replaceDue(j)?' · ⚠️ Replace due':''}</span>`}
 function clearHead(){$('header').className=''}
 
 /* ---------- job form ---------- */
@@ -1568,7 +1576,7 @@ function renderServiceReport(id){
 function renderJob(id){
   const j=JOBS.find(x=>x.id===id);if(!j){location.hash='';return}
   const f=formFor(j);touch(id);
-  $('#ttl').textContent=j.street||j.addr;$('#hbtn').textContent='‹ Jobs';$('#hbtn').className='back';$('#hbtn').onclick=()=>{location.hash=''};
+  paintHead(j);$('#hbtn').textContent='‹ Jobs';$('#hbtn').className='back';$('#hbtn').onclick=()=>{location.hash=''};
   const tel=[j.p1,j.p2].filter(Boolean);
   $('main').innerHTML=`
   ${isArch(j)?`<div class="archban"><span>📥 Archived ${hhmm(j.arch)} – hidden from the job list</span><button type="button" class="unarch big" id="jrest">↩️ Unarchive</button></div>`:''}
