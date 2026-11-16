@@ -14,8 +14,14 @@ test('a job header puts the unit and street above the suburb',function(){
   assert.deepEqual(find.addressLines('8/5 Beach St, Yamba NSW 2464','8/5 Beach St','Yamba'),{line1:'8/5 Beach St',line2:'Yamba NSW 2464'});
   assert.deepEqual(find.addressLines('1 Sample St','1 Sample St',''),{line1:'1 Sample St',line2:''});
   const html=fs.readFileSync('index.html','utf8');
-  assert.match(html,/header\.job \.jobst\{[^}]*font-size:1\.5rem/);
+  assert.match(html,/header \.jobst,\.joblead \.jobst\{[^}]*font-size:1\.5rem/);
   assert.match(html,/CCSAAddress\.addressLines/);
+  const sync=html.slice(html.indexOf('function paintSync'),html.indexOf('async function backupForSync'));
+  const applied=html.slice(html.indexOf('async function applySyncResult'),html.indexOf('function syncHooks'));
+  assert.match(sync,/paintHead\(open\)/);
+  assert.match(applied,/openJobId\(\)/);
+  assert.match(applied,/paintHead\(open\)/);
+  assert.doesNotMatch(applied,/&&CURJOB\)renderJob/);
   assert.match(html,/class="jobst"/);
   assert.match(html,/class="jobsub"/);
 });

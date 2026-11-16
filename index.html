@@ -9,12 +9,12 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.35 -apple-s
 header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:5px solid var(--brand);padding:8px 10px;padding-top:max(8px,env(safe-area-inset-top));display:flex;align-items:center;gap:8px;box-shadow:0 2px 6px rgba(0,0,0,.08)}
 header img{height:40px;width:auto;display:block}
 header .ttl{flex:1;min-width:0;font-weight:800;font-size:16px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-header.job{align-items:flex-start}
-header.job img{margin-top:2px}
-header.job button{margin-top:2px}
-header.job .ttl{white-space:normal;overflow:visible;text-overflow:clip}
-header.job .jobst{display:block;font-size:1.5rem;font-weight:800;line-height:1.15;color:#161314;overflow-wrap:anywhere}
-header.job .jobsub{display:block;margin-top:2px;font-size:1.15rem;font-weight:700;line-height:1.25;color:#241f20}
+header.job,header:has(.jobst){align-items:flex-start}
+header.job img,header:has(.jobst) img,header.job button,header:has(.jobst) button{margin-top:2px}
+header.job .ttl,header:has(.jobst) .ttl{white-space:normal;overflow:visible;text-overflow:clip}
+header .jobst,.joblead .jobst{display:block;font-size:1.5rem;font-weight:800;line-height:1.15;color:#161314;overflow-wrap:anywhere;white-space:normal}
+header .jobsub,.joblead .jobsub{display:block;margin-top:2px;font-size:1.15rem;font-weight:700;line-height:1.25;color:#241f20;white-space:normal}
+.joblead{background:#fff;border-radius:14px;padding:12px 14px;margin:0 0 12px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
 header button{background:var(--ink);color:#fff;border:0;border-radius:10px;min-height:42px;padding:0 12px;font-size:15px;font-weight:700}
 header button.back{background:#fff;color:var(--ink);border:2px solid var(--ink)}
 main{padding:10px 10px 130px;max-width:720px;margin:0 auto}
@@ -409,7 +409,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script><script src="addressfind.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="pdflib.js"></script><script src="transfer.js"></script><script src="firebase-config.js"></script><script src="livesync.js"></script><script src="portaldata.js"></script><script src="certificate.js"></script><script src="invoice.js"></script><script src="requests.js"></script><script src="portaladmin.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.44.0 (20261116)';
+const APP_VERSION='2.45.0 (20261116)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -1470,10 +1470,14 @@ function card(j){
   <div class="row">${tel.map(phoneLink).join('')||'<button disabled>No phone</button>'}<a href="${maps}" target="_blank" rel="noopener">🗺️ Map</a></div>
   <div class="row act"><a class="pri wide" href="#job/${encodeURIComponent(j.id)}">📝 Worksheet</a>${ar?`<button data-restore="${esc(j.id)}" class="unarch">↩️ Unarchive</button>`:`<button data-done="${esc(j.id)}" class="${done?'':'good'}">${done?'Undo done':'✓ Done'}</button><button data-arch="${esc(j.id)}" class="archbtn" aria-label="Archive job">📥 Archive</button>`}</div></div></div>`;
 }
+function jobAddressInner(j){const f=j&&FORMS[j.id];
+  const lines=window.CCSAAddress&&CCSAAddress.addressLines?CCSAAddress.addressLines((f&&f.addr)||(j&&j.addr),j&&j.street,j&&j.town):{line1:(j&&(j.street||j.addr))||'',line2:''};
+  return `<span class="jobaddr"><span class="jobst">${esc(lines.line1||'')}</span>${lines.line2?`<span class="jobsub">${esc(lines.line2)}</span>`:''}</span>`}
 function paintHead(j){if(!j)return;const st=statusOf(j),h=$('header');h.className='st-'+st+' job';
-  const f=FORMS[j.id];
-  const lines=window.CCSAAddress&&CCSAAddress.addressLines?CCSAAddress.addressLines((f&&f.addr)||j.addr,j.street,j.town):{line1:j.street||j.addr||'',line2:''};
-  $('#ttl').innerHTML=`<span class="jobaddr"><span class="jobst">${esc(lines.line1)}</span>${lines.line2?`<span class="jobsub">${esc(lines.line2)}</span>`:''}</span><span class="badge hst sb sb-${st}">${ST[st]}${replaceDue(j)?' · ⚠️ Replace due':''}</span>`}
+  const addr=jobAddressInner(j);
+  $('#ttl').innerHTML=addr+`<span class="badge hst sb sb-${st}">${ST[st]}${replaceDue(j)?' · ⚠️ Replace due':''}</span>`;
+  const lead=document.getElementById('joblead');if(lead)lead.innerHTML=addr}
+function openJobId(){const h=location.hash||'';if(h.indexOf('#job/')!==0)return '';try{return decodeURIComponent(h.slice(5))}catch(e){return h.slice(5)}}
 function clearHead(){$('header').className=''}
 
 /* ---------- job form ---------- */
@@ -1580,6 +1584,7 @@ function renderJob(id){
   const tel=[j.p1,j.p2].filter(Boolean);
   $('main').innerHTML=`
   ${isArch(j)?`<div class="archban"><span>📥 Archived ${hhmm(j.arch)} – hidden from the job list</span><button type="button" class="unarch big" id="jrest">↩️ Unarchive</button></div>`:''}
+  <div class="joblead" id="joblead">${jobAddressInner(j)}</div>
   <section class="f"><h2>Job</h2>
    <div class="meta">${j.section?`<span class="badge ${j.section==='Holiday'?'hol':'perm'}">${esc(j.section)}</span>`:''}👤 ${esc(j.contact||'—')} ${j.directions?'· '+esc(j.directions):''}</div>
    ${j.notes||j.ic?`<div class="note" style="margin-top:6px">Sheet notes: ${esc([j.ic,j.notes].filter(Boolean).join(' · '))}${j.last?' · last service '+fmtDMY(j.last):''}</div>`:''}
@@ -2042,13 +2047,15 @@ async function calendarForPortalJob(job){
 function portalHTML(){return window.CCSAPortal?CCSAPortal.panelHTML():''}
 function bindPortal(root){if(window.CCSAPortal)CCSAPortal.bind(root)}
 function portalNudge(){if(window.CCSAInvoice&&CCSAInvoice.syncDrafts)CCSAInvoice.syncDrafts();if(window.CCSAPortal&&CCSAPortal.onArchived)CCSAPortal.onArchived()}
-function paintSync(){const el=document.getElementById('syncpanel');if(el&&window.CCSASync){el.outerHTML=CCSASync.panelHTML(CCSASync.state());bindSync(document.getElementById('syncpanel'))}const tech=document.getElementById('settech');if(tech&&!(tech.contains(document.activeElement))){tech.outerHTML=setTechHTML();bindSetTech()}if(window.CCSAPortal&&CCSAPortal.onSync)CCSAPortal.onSync()}
+function paintSync(){const el=document.getElementById('syncpanel');if(el&&window.CCSASync){el.outerHTML=CCSASync.panelHTML(CCSASync.state());bindSync(document.getElementById('syncpanel'))}const tech=document.getElementById('settech');if(tech&&!(tech.contains(document.activeElement))){tech.outerHTML=setTechHTML();bindSetTech()}if(window.CCSAPortal&&CCSAPortal.onSync)CCSAPortal.onSync();const open=JOBS.find(x=>x.id===openJobId());if(open)paintHead(open)}
 async function backupForSync(){const pack=await worksheetPack();const db=await new Promise((res,rej)=>{const r=indexedDB.open('ccsa-sync',1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('backups'))r.result.createObjectStore('backups',{keyPath:'id'})};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});await new Promise((res,rej)=>{const t=db.transaction('backups','readwrite');t.objectStore('backups').put({id:'before-first-sync',at:new Date().toISOString(),json:JSON.stringify(pack)});t.oncomplete=()=>res();t.onerror=()=>rej(t.error)})}
 async function applySyncResult(result){const drop=new Set(result.dropJobs||[]);JOBS=(result.jobs||[]).filter(j=>j&&!drop.has(j.id));FORMS=result.forms||{};(result.dropJobs||[]).forEach(id=>{delete FORMS[id]});try{localStorage.setItem(LS.jobs,JSON.stringify(JOBS));localStorage.setItem(LS.forms,JSON.stringify(FORMS))}catch(e){toast('Storage full – could not save')}
   for(const id of result.dropPhotos||[]){try{await photoDel(id)}catch(e){}}
   for(const p of result.pullPhotos||[]){if(!p||!p.b64)continue;try{await photoPut({id:p.id,job:p.job||'',slot:p.slot||'',type:p.type||'image/jpeg',data:b642ab(p.b64),w:p.w||0,h:p.h||0,ts:p.ts||''})}catch(e){console.warn(e)}}
   const typing=document.activeElement&&/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName);
-  if(!typing){if(onList())renderList();else if(location.hash.startsWith('#job/')&&CURJOB)renderJob(CURJOB)}}
+  const openId=openJobId();
+  if(openId){if(!typing)renderJob(openId);const open=JOBS.find(x=>x.id===openId);if(open)paintHead(open)}
+  else if(!typing&&onList())renderList()}
 function syncHooks(){
   return {jobsKey:LS.jobs,formsKey:LS.forms,storage:localStorage,getJobs:function(){return JOBS},getForms:function(){return FORMS},photoAll:function(){return photoAll().catch(function(){return []})},photoGet:function(id){return photoGet(id)},toB64:ab2b64,persistJobs:function(){try{localStorage.setItem(LS.jobs,JSON.stringify(JOBS))}catch(e){}},backup:backupForSync,applyResult:applySyncResult,paint:paintSync};
 }
