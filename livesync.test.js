@@ -189,6 +189,21 @@ test('an older edit does not replace a newer one, and a newer delete removes the
   assert.equal(editedAfter.forms.a.al[0].db,'99.5');
 });
 
+test('archiving does not drop a photo that is still stored for that job',function(){
+  const localForm=form('2026-11-09T01:00:00.000Z','90','RWY');
+  localForm.al[0].photos=['alarm-shot'];
+  const remoteForm=form('2026-11-09T03:00:00.000Z','90','RWY');
+  const localJob=job('a','1 Circle St, Yamba NSW 2464','2026-11-09T04:00:00.000Z','RWY');
+  localJob.arch='2026-11-09T04:00:00.000Z';
+  const out=sync.reconcile(
+    {jobs:[localJob],forms:{a:localForm},photos:[{id:'alarm-shot',job:'a',slot:'al0',ts:'2026-11-09T01:00:00.000Z'}],tombstones:[]},
+    {jobs:[job('a','1 Circle St, Yamba NSW 2464','2026-11-09T03:00:00.000Z','RWY')],forms:{a:remoteForm},photos:[{id:'alarm-shot',job:'a',slot:'al0',ts:'2026-11-09T01:00:00.000Z',b64:'abc'}],tombstones:[]}
+  );
+  assert.deepEqual(out.forms.a.al[0].photos,['alarm-shot']);
+  assert.equal(out.dropPhotos.length,0);
+  assert.equal(out.jobs[0].arch,'2026-11-09T04:00:00.000Z');
+});
+
 test('offline edits stay queued until the device is online',function(){
   let box=[];
   box=sync.queueOp(box,{op:'job',id:'a'});

@@ -42,6 +42,20 @@ test('a newer phone worksheet replaces an older desktop copy and keeps the other
   assert.equal(out.report.newer.length,1);
 });
 
+test('a newer worksheet keeps photo ids that only the older copy listed',function(){
+  const older=form('2026-11-01T00:00:00.000Z','80','RWY');
+  older.al[0].photos=['alarm-shot'];
+  older.photos=['house-shot'];
+  const newer=form('2026-11-09T01:00:00.000Z','99.5','RWY');
+  const out=xfer.mergeWorksheets(
+    {jobs:[job('a','1 Circle St, Yamba NSW 2464')],forms:{a:older},photos:[],pdfs:[]},
+    {jobs:[job('a','1 Circle St, Yamba NSW 2464',{arch:'2026-11-09T02:00:00.000Z'})],forms:{a:newer},photos:[],pdfs:[]}
+  );
+  assert.equal(out.forms.a.al[0].db,'99.5');
+  assert.deepEqual(out.forms.a.al[0].photos,['alarm-shot']);
+  assert.deepEqual(out.forms.a.photos,['house-shot']);
+});
+
 test('an older import does not replace a newer worksheet, photo, or PDF',function(){
   const local={
     jobs:[job('a','1 Circle St, Yamba NSW 2464',{agent:'RWY'})],
