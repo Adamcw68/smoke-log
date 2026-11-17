@@ -256,6 +256,14 @@
       const remoteForm=other?remoteForms[String(other.id)]||null:null;
       if(needsPush(j,merged.forms[j.id]||null,other,remoteForm))pushJobs.push(j.id);
     });
+    const alivePhotos=localPhotos.concat(remotePhotos);
+    merged.jobs.forEach(function(j){
+      const form=merged.forms[j.id];
+      if(!form)return;
+      alivePhotos.forEach(function(p){
+        if(p&&String(p.job)===String(j.id))transfer().placePhoto(form,p);
+      });
+    });
     const dropJobs=(local.jobs||[]).filter(function(j){return j&&j.id&&killed(tombs,'job',j.id,jobTime(j,local.forms))}).map(function(j){return j.id});
     const dropPhotos=(local.photos||[]).filter(function(p){return p&&p.id&&killed(tombs,'photo',p.id,timeOf(p.ts))}).map(function(p){return p.id});
     return {jobs:merged.jobs,forms:merged.forms,pullPhotos:pullPhotos,pushJobs:pushJobs,pushPhotos:pushPhotos,dropJobs:dropJobs,dropPhotos:dropPhotos,tombstones:Array.from(tombs.values())};

@@ -18,6 +18,34 @@
     });
     if(!local.svc&&incoming.svc)local.svc=incoming.svc;
   }
+  /* Keep every photo id from both worksheets. A newer form must not drop pictures already saved. */
+  function placePhoto(form,photo){
+    if(!form||!photo||!photo.id)return false;
+    const slot=photo.slot||'job';
+    if(slot==='job'){
+      form.photos=form.photos||[];
+      if(form.photos.indexOf(photo.id)>=0)return false;
+      form.photos.push(photo.id);
+      return true;
+    }
+    const m=/^al(\d+)$/.exec(String(slot));
+    if(!m)return false;
+    const i=+m[1];
+    form.al=form.al||[];
+    while(form.al.length<=i)form.al.push({photos:[]});
+    form.al[i].photos=form.al[i].photos||[];
+    if(form.al[i].photos.indexOf(photo.id)>=0)return false;
+    form.al[i].photos.push(photo.id);
+    return true;
+  }
+  function unionPhotoRefs(winner,donor){
+    if(!winner||!donor)return winner;
+    (donor.photos||[]).forEach(function(id){placePhoto(winner,{id:id,slot:'job'})});
+    (donor.al||[]).forEach(function(alarm,i){
+      (alarm&&alarm.photos||[]).forEach(function(id){placePhoto(winner,{id:id,slot:'al'+i})});
+    });
+    return winner;
+  }
   /* local and incoming are {jobs, forms, photos, pdfs}. Photos and PDFs already here are not removed. */
   function mergeWorksheets(local,incoming){
     local=local||{};incoming=incoming||{};
@@ -50,11 +78,14 @@
       const incT=timeOf(incForm&&incForm.updated);
       if(incForm&&incT>localT){
         forms[cur.id]=incForm;
+        unionPhotoRefs(forms[cur.id],localForm);
         if(clean(incForm.agent))cur.agent=incForm.agent;
         if(clean(incForm.tenancy))cur.section=incForm.tenancy;
         fillBlanks(cur,inc);
         report.newer.push(cur.addr||cur.id);
       }else{
+        if(!forms[cur.id]&&incForm)forms[cur.id]=incForm;
+        else unionPhotoRefs(forms[cur.id],incForm);
         fillBlanks(cur,inc);
         report.kept.push(cur.addr||cur.id);
       }
@@ -126,5 +157,5 @@
     if(Array.isArray(data.events)||Array.isArray(data.items))return false;
     return !!(data.forms||data.photos||data.pdfs||data.version>=4);
   }
-  return {mergeWorksheets:mergeWorksheets,mergeMessage:mergeMessage,sheetRows:sheetRows,isWorksheetPack:isWorksheetPack,dupKey:dupKey};
+  return {mergeWorksheets:mergeWorksheets,mergeMessage:mergeMessage,sheetRows:sheetRows,isWorksheetPack:isWorksheetPack,dupKey:dupKey,placePhoto:placePhoto,unionPhotoRefs:unionPhotoRefs};
 });

@@ -409,7 +409,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script><script src="addressfind.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="pdflib.js"></script><script src="transfer.js"></script><script src="firebase-config.js"></script><script src="livesync.js"></script><script src="portaldata.js"></script><script src="certificate.js"></script><script src="invoice.js"></script><script src="requests.js"></script><script src="portaladmin.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.47.0 (20261116)';
+const APP_VERSION='2.48.0 (20261117)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -1198,8 +1198,31 @@ function quickHTML(j,f){const cur=quickSlot(j,f),slots=[...f.al.slice(0,f.alarms
   <div class="row"><label class="btn pri pbtn">📷 Take photo<input class="vh" type="file" accept="image/*" capture="environment" data-photo="${cur}" data-quick="1"></label><label class="btn pbtn">🖼️ Gallery<input class="vh" type="file" accept="image/*" multiple data-photo="${cur}" data-quick="1"></label></div>
   ${cur!=='job'&&SET.ocr!==false?'<p class="note">Alarm photos are read automatically – check the suggested label details at the top of that alarm.</p>':''}</section>`}
 function paintQuick(f){const q=$('#quick');if(!q||!CURJOB||FORMS[CURJOB]!==f)return;const j=JOBS.find(x=>x.id===CURJOB);if(j)q.outerHTML=quickHTML(j,f)}
-function photoBox(slot,title){const lead=/^al\d+$/.test(slot);return`<div class="photos${lead?' lead':''}" data-slot="${slot}"><label class="l">${title} <span class="pc" id="pc-${slot}"></span></label><div class="thumbs" id="th-${slot}"></div>
-  <div class="row"><label class="btn pri pbtn">📷 ${lead?'Take photo':'Add photo'}<input class="vh" type="file" accept="image/*" capture="environment" data-photo="${slot}"></label><label class="btn pbtn">🖼️ Gallery<input class="vh" type="file" accept="image/*" multiple data-photo="${slot}"></label></div></div>`}
+function photoBox(slot,title,locked){const lead=/^al\d+$/.test(slot);const add=locked?'':`<div class="row"><label class="btn pri pbtn">📷 ${lead?'Take photo':'Add photo'}<input class="vh" type="file" accept="image/*" capture="environment" data-photo="${slot}"></label><label class="btn pbtn">🖼️ Gallery<input class="vh" type="file" accept="image/*" multiple data-photo="${slot}"></label></div>`;return`<div class="photos${lead?' lead':''}" data-slot="${slot}"><label class="l">${title} <span class="pc" id="pc-${slot}"></span></label><div class="thumbs" id="th-${slot}"></div>
+  ${add}</div>`}
+async function reattachJobPhotos(j,f){
+  if(!j||!f)return false;
+  let rows=[];try{rows=await photoAll()}catch(e){rows=[]}
+  let changed=false;
+  (rows||[]).forEach(p=>{
+    if(!p||!p.id||String(p.job)!==String(j.id))return;
+    const slot=p.slot||'job';
+    if(slot!=='job'&&!/^al\d+$/.test(slot))return;
+    if(/^al(\d+)$/.test(slot)){const i=+RegExp.$1;while(f.al.length<=i)f.al.push(blankAlarm())}
+    const list=refsOf(f,slot);
+    if(list.indexOf(p.id)<0){list.push(p.id);changed=true}
+  });
+  if(changed)save(LS.forms,FORMS);
+  return changed}
+function archivedPhotoGallery(f){
+  const items=[];
+  (f.al||[]).slice(0,f.alarms||0).forEach((a,i)=>((a&&a.photos)||[]).forEach(id=>items.push({id,slot:'al'+i,label:'Alarm '+(i+1)})));
+  (f.photos||[]).forEach(id=>items.push({id,slot:'job',label:'Property'}));
+  if(!items.length)return `<section class="f" id="archphotos"><h2>Photos</h2><p class="note" id="archphotonote">No photos were saved for this visit. Archiving does not delete photos.</p></section>`;
+  return `<section class="f" id="archphotos"><h2>Photos</h2><p class="note">Saved with this job. Archiving does not delete them.</p><div class="thumbs" id="th-arch">${items.map((item,k)=>`<button type="button" class="th" data-ph="${esc(item.id)}" data-slot="${item.slot}" aria-label="${esc(item.label)} photo ${k+1}"><img alt="${esc(item.label)}"></button>`).join('')}</div></section>`}
+async function paintArchPhotos(f){const box=document.getElementById('th-arch');if(!box)return;
+  const buttons=[...box.querySelectorAll('.th')];
+  for(const b of buttons){const u=await photoURL(b.dataset.ph).catch(()=>null);if(u&&b.firstChild)b.firstChild.src=u;else b.classList.add('missing')}}
 async function paintThumbs(f,slot){paintQuick(f);const box=document.getElementById('th-'+slot);if(!box)return;const ids=refsOf(f,slot).slice();
   const pc=document.getElementById('pc-'+slot);if(pc)pc.textContent=ids.length?'('+ids.length+')':'';
   box.innerHTML=ids.map((id,k)=>`<button type="button" class="th" data-ph="${esc(id)}" data-slot="${slot}" aria-label="${slotName(slot)} photo ${k+1}"><img alt=""></button>`).join('');
@@ -1210,7 +1233,7 @@ async function openPhoto(j,f,slot,id){const ids=refsOf(f,slot),k=ids.indexOf(id)
   const lb=document.createElement('div');lb.className='lb';lb.innerHTML=`<div class="lbtop"><b>${slotName(slot)} – photo ${k+1} of ${ids.length}</b><button type="button" class="lbx" aria-label="Close">✕</button></div><img src="${u||''}" alt="">${slot!=='job'?'<button type="button" class="lbocr">🔍 Read label from this photo</button>':''}<div class="row"><button type="button" class="lbdel">🗑️ Delete photo</button><button type="button" class="dark lbclose">Close</button></div>`;
   document.body.appendChild(lb);const close=()=>lb.remove();lb.querySelector('.lbx').onclick=close;lb.querySelector('.lbclose').onclick=close;
   const lo=lb.querySelector('.lbocr');if(lo)lo.onclick=async()=>{const p=await photoGet(id);close();if(!p)return;const i=+slot.slice(2);runOCR(j,f,i,new Blob([p.data],{type:p.type}));const el=document.getElementById('ocr-al'+i);if(el)el.scrollIntoView({block:'center'})};
-  lb.querySelector('.lbdel').onclick=async()=>{if(!confirm('Delete this photo? This cannot be undone.'))return;
+  const del=lb.querySelector('.lbdel');if(isArch(j))del.hidden=true;else del.onclick=async()=>{if(!confirm('Delete this photo? This cannot be undone.'))return;
     const i=ids.indexOf(id);if(i>=0)ids.splice(i,1);await photoDel(id).catch(()=>{});if(window.CCSASync&&CCSASync.afterPhotoDelete)CCSASync.afterPhotoDelete(id);if(PURL.has(id)){URL.revokeObjectURL(PURL.get(id));PURL.delete(id)}
     touch(j.id);save(LS.forms,FORMS);close();paintThumbs(f,slot);syncAsPhotos(f);toast('Photo deleted')}}
 function ab2b64(buf){const b=new Uint8Array(buf);let s='';for(let i=0;i<b.length;i+=0x8000)s+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000));return btoa(s)}
@@ -1218,7 +1241,7 @@ function b642ab(s){const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.le
 
 
 /* ---------- label OCR: Tesseract.js v5, lazy-loaded from ./ocr/ (precached by the service worker) ---------- */
-const OCR={w:null,q:Promise.resolve(),res:new Map(),psm:'11'};let CURJOB=null;
+const OCR={w:null,q:Promise.resolve(),res:new Map(),psm:'11'};let CURJOB=null,ARCH_VIEW=false;
 function hasSimd(){try{return WebAssembly.validate(new Uint8Array([0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,10,10,1,8,0,65,0,253,15,253,98,11]))}catch(e){return false}}
 function loadScript(src){return new Promise((res,rej)=>{if(window.Tesseract)return res();const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('OCR engine not available offline yet – open the app once with internet'));document.head.appendChild(s)})}
 function ocrWorker(){if(OCR.w)return OCR.w;const U=p=>new URL(p,location.href).href;
@@ -1356,7 +1379,7 @@ function ocrApply(j,f,i,k){const st=OCR.res.get(j.id+'|'+i),inp=document.getElem
 const isArch=j=>!!(j&&j.arch), isDone=j=>!!(FORMS[j.id]&&FORMS[j.id].done);
 const onList=()=>!location.hash||location.hash==='#';
 function hhmm(iso){const d=new Date(iso);return pad2(d.getHours())+':'+pad2(d.getMinutes())}
-function setArch(ids,on){const t=new Date().toISOString(),prev=[];
+function setArch(ids,on){const t=new Date().toISOString(),prev=[]; // archive only sets j.arch. Photos, worksheets and PDFs stay.
   ids.forEach(id=>{const j=JOBS.find(x=>x.id===id);if(j){prev.push([id,j.arch||null]);j.arch=on?t:null}});save(LS.jobs,JOBS);return prev}
 function undoArch(prev,msg){prev.forEach(([id,a])=>{const j=JOBS.find(x=>x.id===id);if(j)j.arch=a});save(LS.jobs,JOBS);if(onList())renderList();toast(msg);portalNudge()}
 function archiveJobs(ids,msg){const prev=setArch(ids,true);if(!prev.length)return;
@@ -1536,7 +1559,7 @@ function ncHTML(a,i){const nv=a.newAns||'',c=a.yn.cleaned||'',isN=nv==='Yes';
 function alarmHTML(a,i){
   return`<div class="alarm ${a.isNew?'isnew':''}" id="al${i}"><h3>Smoke alarm #${i+1}<span class="badge newb" id="newb${i}" ${a.isNew?'':'hidden'}>🆕 NEW</span>${i>=3?' <span class="note">(goes in Notes)</span>':''}<button type="button" data-allyes="${i}">All Yes</button></h3>
   ${a.calRef?`<p class="note">Calendar text kept for review: ${esc(a.calRef)}</p>`:''}
-  ${photoBox('al'+i,'Photos – alarm '+(i+1))}<div id="ocr-al${i}"></div>
+  ${photoBox('al'+i,'Photos – alarm '+(i+1),ARCH_VIEW)}<div id="ocr-al${i}"></div>
   <div class="yn nc" id="nc${i}">${ncHTML(a,i)}</div>
   <label class="l">Mounted on</label>${chips('al.'+i+'.mount',['Ceiling','Wall'],a.mount)}
   <label class="l">Location</label>${chips('al.'+i+'.room',ROOMS,a.room)}
@@ -1605,11 +1628,11 @@ function renderCompliance(id){
   if($('#ccpdf'))$('#ccpdf').onclick=()=>downloadComplianceCert(offer.cert)}
 function renderJob(id){
   const j=JOBS.find(x=>x.id===id);if(!j){location.hash='';return}
-  const f=formFor(j);touch(id);
+  const f=formFor(j);ARCH_VIEW=isArch(j);touch(id);
   paintHead(j);$('#hbtn').textContent='‹ Jobs';$('#hbtn').className='back';$('#hbtn').onclick=()=>{location.hash=''};
   const tel=[j.p1,j.p2].filter(Boolean);
   $('main').innerHTML=`
-  ${isArch(j)?`<div class="archban"><span>📥 Archived ${hhmm(j.arch)} – hidden from the job list</span><button type="button" class="unarch big" id="jrest">↩️ Unarchive</button></div>`:''}
+  ${isArch(j)?`<div class="archban"><span>📥 Archived ${hhmm(j.arch)} – hidden from the job list</span><button type="button" class="unarch big" id="jrest">↩️ Unarchive</button></div>${archivedPhotoGallery(f)}`:''}
   <div class="joblead" id="joblead">${jobAddressInner(j)}</div>
   <section class="f"><h2>Job</h2>
    <div class="meta">${j.section?`<span class="badge ${j.section==='Holiday'?'hol':'perm'}">${esc(j.section)}</span>`:''}👤 ${esc(j.contact||'—')} ${j.directions?'· '+esc(j.directions):''}</div>
@@ -1639,7 +1662,7 @@ function renderJob(id){
    <label class="tog">As per photos<input type="checkbox" data-path="asPhotos" ${effAsPhotos(f)?'checked':''}></label><p class="note" id="asph-auto" style="display:none;margin:-6px 0 4px">Ticked automatically because photos are attached – untick to leave it off the worksheet.</p>
    <div id="alarms">${f.al.slice(0,f.alarms).map(alarmHTML).join('')}</div>
   </section>
-  <section class="f"><h2>Job photos</h2>${photoBox('job','Property / overall photos')}<p class="note">Photos are compressed on the phone and added as extra pages after the worksheet.</p></section>
+  <section class="f"><h2>Job photos</h2>${photoBox('job','Property / overall photos',ARCH_VIEW)}<p class="note">Photos are compressed on the phone and added as extra pages after the worksheet. Archiving keeps them.</p></section>
   <section class="f"><h2>Notes / comments</h2><textarea class="t" data-path="comments" placeholder="Printed in the Notes area on page 2">${esc(f.comments)}</textarea>
    <p class="note">Alarms 4 and up are printed in Notes automatically (the template has 3 alarm boxes).</p>
    <label class="tog">Job done<input type="checkbox" data-path="done" ${f.done?'checked':''}></label>
@@ -1657,7 +1680,8 @@ function renderJob(id){
   if($('#ccopen'))$('#ccopen').onclick=()=>{location.hash='#compliance/'+encodeURIComponent(id)};
   bindCalReview(id,f);
   $('#dpa').onclick=()=>{save(LS.forms,FORMS);archiveJobs([id])};$('#dpn').onclick=()=>{$('#donepr').hidden=true};
-  CURJOB=j.id;paintHead(j);bindForm(j,f);paintAllThumbs(f);syncAsPhotos(f);
+  CURJOB=j.id;paintHead(j);bindForm(j,f);paintAllThumbs(f);paintArchPhotos(f);syncAsPhotos(f);
+  reattachJobPhotos(j,f).then(changed=>{if(!changed||CURJOB!==j.id)return;if(isArch(j)){const box=document.getElementById('archphotos');if(box)box.outerHTML=archivedPhotoGallery(f)}paintAllThumbs(f);paintArchPhotos(f)});
   if(FIXTO&&FIXTO.id===id){const i=FIXTO.i;FIXTO=null;setTimeout(()=>flashFix(i),60)}
 }
 function paintYn(i,a){const y=document.getElementById('yn'+i);if(y)y.innerHTML=QS.map(([k,q])=>ynRow(i,k,q,a.yn[k],a)).join('')}
