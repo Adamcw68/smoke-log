@@ -15,6 +15,10 @@ test('a job header puts the unit and street above the suburb',function(){
   assert.deepEqual(find.addressLines('1 Sample St','1 Sample St',''),{line1:'1 Sample St',line2:''});
   const html=fs.readFileSync('index.html','utf8');
   assert.match(html,/header \.jobst,\.joblead \.jobst\{[^}]*font-size:1\.5rem/);
+  assert.match(html,/@media \(max-width:430px\)\{[\s\S]*header\{[^}]*padding:4px 8px/);
+  assert.match(html,/@media \(max-width:430px\)\{[\s\S]*header img\{height:26px\}/);
+  assert.match(html,/@media \(max-width:430px\)\{[\s\S]*header \.jobst\{[^}]*font-size:1\.15rem;font-weight:800[^}]*text-overflow:ellipsis/);
+  assert.match(html,/@media \(max-width:430px\)\{[\s\S]*\.joblead \.jobst\{[^}]*font-size:1\.35rem;font-weight:800/);
   assert.match(html,/CCSAAddress\.addressLines/);
   const sync=html.slice(html.indexOf('function paintSync'),html.indexOf('async function backupForSync'));
   const applied=html.slice(html.indexOf('async function applySyncResult'),html.indexOf('function syncHooks'));

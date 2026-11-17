@@ -231,6 +231,22 @@ header.st-prog{border-bottom-color:#E69500;background:var(--amberbg)}
 header.st-done{border-bottom-color:var(--ok);background:var(--okbg)}
 header.st-arch{border-bottom-color:#8E8A8B;background:var(--greybg)}
 header[class^=st-] img{background:#fff;border-radius:8px;padding:2px 4px}
+@media (max-width:430px){
+  header{padding:4px 8px;gap:6px;border-bottom-width:3px}
+  header img{height:26px}
+  header[class^=st-] img{padding:1px 2px}
+  header button{min-height:32px;padding:0 8px;font-size:14px;border-radius:8px}
+  header .ttl{font-size:15px}
+  header.job,header:has(.jobst){align-items:center}
+  header.job img,header:has(.jobst) img,header.job button,header:has(.jobst) button{margin-top:0}
+  header .jobaddr{display:block;min-width:0;max-width:100%}
+  header .jobst{font-size:1.15rem;font-weight:800;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  header .jobsub{margin-top:0;font-size:1rem;font-weight:700;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  header .ttl .hst{margin:1px 0 0;font-size:11px;padding:0 6px}
+  .joblead{padding:8px 10px;margin:0 0 8px}
+  .joblead .jobst{font-size:1.35rem;font-weight:800;line-height:1.15}
+  .joblead .jobsub{font-size:1.08rem;font-weight:700;line-height:1.2}
+}
 /* v2.4 technician control */
 .tech{margin:2px 0 6px}
 .tseg{display:flex;gap:8px}
@@ -416,7 +432,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script><script src="addressfind.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="pdflib.js"></script><script src="transfer.js"></script><script src="firebase-config.js"></script><script src="livesync.js"></script><script src="portaldata.js"></script><script src="certificate.js"></script><script src="invoice.js"></script><script src="requests.js"></script><script src="portaladmin.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.49.0 (20261117)';
+const APP_VERSION='2.50.0 (20261117)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
