@@ -21,6 +21,12 @@ main{padding:10px 10px 130px;max-width:720px;margin:0 auto}
 .tools{display:flex;gap:8px;margin-bottom:8px}
 .tools input,.tools select{min-height:46px;border:2px solid var(--line);border-radius:10px;padding:0 10px;font-size:16px;background:#fff;color:var(--ink)}
 .tools input{flex:1;min-width:0}
+.daygate h2{color:var(--ink)}
+.daygate .gbox{max-height:92vh;overflow:auto}
+.daygate label{display:block;margin:10px 0 4px;font-weight:700}
+.daygate .t{width:100%}
+.dayskip{margin:8px 0 12px;padding-left:18px}
+.dayskip li{margin:2px 0}
 .seg{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
 .seg button{flex:1 1 auto;min-height:44px;border:2px solid var(--line);background:#fff;border-radius:20px;font-size:15px;font-weight:700;color:var(--ink);padding:0 12px;white-space:nowrap}
 .seg button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
@@ -275,6 +281,7 @@ body.modal{overflow:hidden}
 .gate{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center}
 .gate .gbox{background:#fff;width:100%;max-width:520px;border-radius:16px 16px 0 0;padding:18px 16px max(18px,env(safe-area-inset-bottom));box-shadow:0 -4px 20px rgba(0,0,0,.3)}
 .gate h2{margin:0 0 8px;font-size:20px;color:var(--bad)}
+.daygate h2{color:var(--ink)}
 .gate p{margin:0 0 14px;font-size:16px;line-height:1.35}
 .btn.ghost{border-color:transparent;background:transparent;color:var(--ink);text-decoration:underline}
 .cwarn{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px;padding:10px 12px;border-radius:12px;background:#FFF4DC;border:2px solid #E69500;color:#4A2C00;font-size:15px;text-align:left}
@@ -409,7 +416,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script><script src="addressfind.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="pdflib.js"></script><script src="transfer.js"></script><script src="firebase-config.js"></script><script src="livesync.js"></script><script src="portaldata.js"></script><script src="certificate.js"></script><script src="invoice.js"></script><script src="requests.js"></script><script src="portaladmin.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.48.0 (20261117)';
+const APP_VERSION='2.49.0 (20261117)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -1433,6 +1440,36 @@ function listEmptyCopy(){
   if(UI.filter==='arch')return 'No archived jobs yet – archive finished jobs to clear them off the list.';
   return 'No matching jobs';
 }
+function dayPdfOptions(){
+  const date=($('#daydate')&&$('#daydate').value)||todayISO();
+  const agency=($('#dayagency')&&$('#dayagency').value)||'';
+  const parts=($('#dayparts')&&$('#dayparts').value)||'both';
+  return {date,agency,parts}}
+function paintDayPdf(){
+  if(!window.CCSACertificate||!CCSACertificate.dayPlan)return;
+  const plan=CCSACertificate.dayPlan(JOBS,FORMS,dayPdfOptions());
+  const count=$('#daycount'),skip=$('#dayskip'),down=$('#daydown');
+  if(count)count.textContent=plan.count?(plan.count+' finished job'+(plan.count===1?'':'s')+' in this PDF.'):'No finished jobs for this PDF.';
+  if(skip)skip.innerHTML=plan.skipped.map(item=>`<li>${esc(item.address)} — ${esc(item.reason)}</li>`).join('')||'<li>None</li>';
+  if(down){down.disabled=!plan.count;down.textContent=plan.count?'Download '+plan.fileName:'Download PDF'}}
+function openDayPdf(){
+  const old=document.getElementById('daygate');if(old)old.remove();
+  const agencies=window.CCSAPortalData&&CCSAPortalData.agencies?CCSAPortalData.agencies():[];
+  const opts=agencies.map(a=>`<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('');
+  const g=document.createElement('div');g.id='daygate';g.className='gate daygate';g.setAttribute('role','dialog');g.setAttribute('aria-modal','true');g.setAttribute('aria-labelledby','daytitle');
+  g.innerHTML=`<div class="gbox"><h2 id="daytitle">Day PDF</h2><p>One PDF for the finished jobs on a day, in route order. A passing job adds its compliance certificate, then its service report. Each one starts on a new page.</p><label for="daydate">Date</label><input class="t" id="daydate" type="date" value="${todayISO()}"><label for="dayagency">Agency</label><select class="t" id="dayagency"><option value="">All agencies</option>${opts}<option value="private">Private Owner</option></select><label for="dayparts">Include</label><select class="t" id="dayparts"><option value="both">Certificates and service reports</option><option value="certificates">Certificates only</option><option value="reports">Service reports only</option></select><p id="daycount"></p><p class="note">Not in this PDF</p><ul class="dayskip" id="dayskip"></ul><div class="row"><button type="button" class="btn" id="dayclose">Close</button><button type="button" class="btn pri" id="daydown">Download PDF</button></div></div>`;
+  document.body.appendChild(g);
+  ['daydate','dayagency','dayparts'].forEach(id=>{const el=$('#'+id);if(el)el.oninput=el.onchange=paintDayPdf});
+  $('#dayclose').onclick=()=>g.remove();
+  g.onclick=e=>{if(e.target===g)g.remove()};
+  $('#daydown').onclick=()=>{
+    const plan=CCSACertificate.buildDayPdf(JOBS,FORMS,dayPdfOptions());
+    if(!plan.bytes)return;
+    const blob=new Blob([plan.bytes],{type:'application/pdf'});
+    const a=document.createElement('a');const url=URL.createObjectURL(blob);
+    a.href=url;a.download=plan.fileName;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),4000)};
+  paintDayPdf()}
 function renderList(){
   clearHead();$('#ttl').textContent='Jobs';$('#hbtn').textContent='Load sheet';$('#hbtn').className='';$('#hbtn').onclick=()=>{IMPMODE='add';$('#file').click()};
   const m=$('main');m.onclick=m.oninput=m.onchange=null; // drop job-form delegates
@@ -1449,6 +1486,7 @@ function renderList(){
   list=sortJobs(list);const nd=act.filter(done).length,hasRoute=JOBS.some(j=>j.order!=null||(j.svc&&!isNaN(Date.parse(j.svc)))),pg=dayProgress();
   m.innerHTML=`${hostingBannerHTML()}${syncHTML()}${portalHTML()}${libEntry()}<div class="prog" id="prog"><div class="pt"><b>${pg.label}: ${pg.n} of ${pg.of}</b> archived/done</div><div class="pbar" role="progressbar" aria-valuemin="0" aria-valuemax="${pg.of}" aria-valuenow="${pg.n}"><i style="width:${pg.of?Math.round(100*pg.n/pg.of):0}%"></i></div></div>
   <div class="tools"><input id="q" type="search" placeholder="Search address, agent, contact…" value="${esc(UI.q)}"><select id="sort" aria-label="Sort"><option value="route">${calSort?'Calendar order':hasRoute?'Route order':'Sheet order'}</option>${calSort?'':`<option value="date">Date</option><option value="town">Town</option><option value="source">Source sheet</option>`}</select></div>
+  <div class="row" style="margin-top:0"><button type="button" class="btn" id="dayopen">Day PDF</button></div>
   ${searching?'<p class="note" id="qnote">Search includes to-do, completed and archived jobs. Each card keeps its Archived or Done label.</p>':''}
   <div class="jobfilt"><div class="seg" role="tablist" aria-label="Show to-do or completed jobs">${[['all','All '+act.length],['todo','To do '+(act.length-nd)],['done','Done '+nd],['arch','Archived ('+na+')']].map(([k,t])=>`<button type="button" data-f="${k}" role="tab" aria-selected="${UI.filter===k}" class="t-${k} ${UI.filter===k?'on':''}">${t}</button>`).join('')}</div></div>
   ${calBarHTML()}
@@ -1461,6 +1499,7 @@ function renderList(){
   $('#sort').value=UI.sort;
   $('#q').oninput=e=>{UI.q=e.target.value;save(LS.ui,UI);const p=e.target.selectionStart;renderList();const i=$('#q');i.focus();i.setSelectionRange(p,p)};
   $('#sort').onchange=e=>{UI.sort=e.target.value;save(LS.ui,UI);renderList()};
+  if($('#dayopen'))$('#dayopen').onclick=openDayPdf;
   bindCalendarControls();
   bindCalEntries(m);bindLibEntry();
   if($('#srcf'))$('#srcf').onchange=e=>{UI.src=e.target.value==='*'?null:e.target.value;save(LS.ui,UI);renderList()};
