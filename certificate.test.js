@@ -289,4 +289,14 @@ test('the worksheet page circles the chosen answers and splits a long visit',fun
   assert.match(single,/Smoke Alarm # 4/);
   assert.match(single,/circle:Ceiling/);
   assert.equal(single.includes('circle:Wall'),false);
+  assert.equal((single.match(/strike:smoke/g)||[]).length,4);
+  assert.equal((single.match(/circle:insectNo/g)||[]).length,4);
+  assert.equal(single.includes('circle:insectYes'),false);
+  assert.equal(single.includes('circle:smokeYes'),false);
+  const forcedYn=Object.assign({},yn,{insect:'Yes',smoke:'Yes'});
+  const forced=certs.pdfText(certs.buildDayFiles([job],{form:Object.assign({},form,{alarms:1,al:[Object.assign({},alarm(1),{yn:forcedYn})]})},{date:'2026-08-12'}).worksheetBytes);
+  assert.equal((forced.match(/strike:smoke/g)||[]).length,4);
+  assert.equal((forced.match(/circle:insectNo/g)||[]).length,4);
+  assert.equal(forced.includes('circle:insectYes'),false);
+  assert.match(forced,/circle:smokeYes/);
 });
