@@ -472,118 +472,318 @@
     const day=isoDate(date)||'undated';
     return {worksheetFile:'CCSA-worksheets-'+day+'.pdf',certificateFile:'CCSA-certificates-'+day+'.pdf'};
   }
-  function powerLabel(power){
-    const list=Array.isArray(power)?power:String(power||'').split(/[,/]/);
-    const out=[];
-    list.forEach(function(raw){
-      const s=String(raw||'').replace(/\s+/g,' ').trim();
-      if(!s)return;
-      if(/^(hw|hard\s*wired|hardwired|mains)$/i.test(s)||/^240\s*v$/i.test(s))out.push('240V');
-      else if(/^9\s*v$/i.test(s))out.push('9V');
-      else out.push(s);
-    });
-    return out.join(', ');
-  }
   function expiryLabel(value){
     const s=String(value||'').trim();
     const my=/^(\d{1,2})\/(\d{4})$/.exec(s);
     if(my)return String(my[1]).padStart(2,'0')+'/'+my[2];
     return safeLine(s);
   }
-  function tenancyLabel(job,form){
-    const raw=String((form&&form.tenancy)||(job&&job.section)||'').trim();
-    if(/^hol/i.test(raw))return 'Holiday';
-    if(/^perm/i.test(raw))return 'Permanent';
-    return '';
+  const FORM_INK=[0,0,0];
+  const FORM_LEFT=30;
+  const FORM_RIGHT=PAGE_W-30;
+  const FORM_LIMIT=776;
+  const FORM_ABN='7063 0700 875';
+  Doc.prototype.rule=function(x,fromTop,w){
+    const y=PAGE_H-fromTop;
+    this.cmd(rgb(FORM_INK)+' RG\n0.6 w\n'+num(x)+' '+num(y)+' m '+num(x+w)+' '+num(y)+' l S\n');
+  };
+  Doc.prototype.frame=function(x,fromTop,w,h){
+    const y=PAGE_H-fromTop-h;
+    this.cmd(rgb(FORM_INK)+' RG\n0.8 w\n'+num(x)+' '+num(y)+' '+num(w)+' '+num(h)+' re S\n');
+  };
+  Doc.prototype.tick=function(x,fromTop,s){
+    const y=PAGE_H-fromTop-s;
+    this.cmd(rgb(FORM_INK)+' RG\n0.7 w\n'+num(x)+' '+num(y)+' '+num(s)+' '+num(s)+' re S\n');
+  };
+  Doc.prototype.ring=function(x,fromTop,w,h,tag){
+    const name=ascii(tag||'').replace(/[^A-Za-z0-9]+/g,'');
+    if(name)this.cmd('% circle:'+name+'\n');
+    const rx=w/2,ry=h/2,cx=x+rx,cy=PAGE_H-fromTop-ry,k=0.5522847498;
+    const c=function(x1,y1,x2,y2,x3,y3){return num(x1)+' '+num(y1)+' '+num(x2)+' '+num(y2)+' '+num(x3)+' '+num(y3)+' c\n'};
+    this.cmd(rgb(FORM_INK)+' RG\n0.9 w\n'+num(cx)+' '+num(cy+ry)+' m\n'
+      +c(cx+k*rx,cy+ry,cx+rx,cy+k*ry,cx+rx,cy)
+      +c(cx+rx,cy-k*ry,cx+k*rx,cy-ry,cx,cy-ry)
+      +c(cx-k*rx,cy-ry,cx-rx,cy-k*ry,cx-rx,cy)
+      +c(cx-rx,cy+k*ry,cx-k*rx,cy+ry,cx,cy+ry)
+      +'S\n');
+  };
+  function formLogo(doc,x,fromTop,size){
+    const inset=1;
+    const y=PAGE_H-(fromTop+inset)-(size-inset*2);
+    doc.cmd('q\n'+num(size-inset*2)+' 0 0 '+num(size-inset*2)+' '+num(x+inset)+' '+num(y)+' cm\n/Im1 Do\nQ\n');
   }
-  function alarmPlace(a){
-    a=a||{};
-    let room='';
-    if(a.room==='Bedroom'&&safeLine(a.bedno))room='Bedroom '+safeLine(a.bedno);
-    else if(a.room==='Other')room=safeLine(a.other)||'Other';
-    else room=safeLine(a.room);
-    const parts=[];
-    if(safeLine(a.mount))parts.push(safeLine(a.mount));
-    if(room)parts.push(room);
-    if(safeLine(a.adjacent))parts.push('near '+safeLine(a.adjacent));
-    return parts.join(', ');
+  function chosenPower(power){
+    const on={};
+    (Array.isArray(power)?power:String(power||'').split(/[,/]/)).forEach(function(raw){
+      const s=String(raw||'').trim();
+      if(!s)return;
+      if(/^(hw|hard\s*wired|hardwired|mains)$/i.test(s)||/^240/i.test(s))on['240v']=true;
+      else if(/^9/i.test(s))on['9v']=true;
+      else if(/ni/i.test(s))on['Ni-Mh']=true;
+      else if(/lith/i.test(s))on.Lithium=true;
+    });
+    return on;
   }
-  function worksheetAlarms(job,form){
-    const data=dataApi();
-    const n=+(form&&form.alarms)||((form&&form.al)||[]).length||0;
-    return ((form&&form.al)||[]).slice(0,n||((form&&form.al)||[]).length).map(function(a){
-      const result=data&&data.alarmResult?data.alarmResult(a):'';
-      return {
-        location:alarmPlace(a),
-        model:safeLine([a.manufacturer,a.model].filter(Boolean).join(' ')),
-        power:powerLabel(a.power),
-        expiry:expiryLabel(a.expiry),
-        result:actionFor(result)
-      };
+  function chosenSensor(sensor){
+    const on={};
+    (Array.isArray(sensor)?sensor:String(sensor||'').split(/[,/]/)).forEach(function(raw){
+      const s=String(raw||'').trim();
+      if(/ion/i.test(s))on.Ionization=true;
+      else if(/photo/i.test(s))on['Photo-Electric']=true;
+      else if(/heat/i.test(s))on.Heat=true;
+    });
+    return on;
+  }
+  function ynAnswer(alarm,key){
+    alarm=alarm||{};
+    if(key==='battery'&&[].concat(alarm.power||[]).some(function(p){return /lith/i.test(String(p))}))return 'No';
+    if(key==='cleaned'&&(alarm.isNew||alarm.newAns==='Yes'))return '';
+    const v=alarm.yn&&alarm.yn[key];
+    return v==='Yes'||v==='No'?v:'';
+  }
+  function flowWords(doc,x,y,items,size){
+    let cx=x,cy=y;
+    items.forEach(function(item){
+      const text=item.text;
+      const w=widthOf(text,size,!!item.bold);
+      const fill=item.fill?widthOf(item.fill,size,true)+6:0;
+      const blank=item.blank?40:0;
+      const need=w+fill+blank+8;
+      if(cx>x&&cx+need>FORM_RIGHT){cx=x;cy+=13}
+      doc.text(item.bold?'F2':'F1',size,cx,cy,text,FORM_INK);
+      if(item.on)doc.ring(cx-2,cy-2,w+4,size+5,item.tag||text);
+      cx+=w+2;
+      if(item.fill){
+        doc.text('F2',size,cx+2,cy,item.fill,FORM_INK);
+        doc.rule(cx,cy+size+1,Math.max(widthOf(item.fill,size,true)+4,36));
+        cx+=Math.max(widthOf(item.fill,size,true)+4,36)+4;
+      }else if(item.blank){
+        doc.rule(cx,cy+size+1,36);
+        cx+=40;
+      }
+      cx+=6;
+    });
+    return cy+size+6;
+  }
+  function ynCell(doc,x,y,label,answer,tag){
+    doc.text('F1',7.5,x,y,label,FORM_INK);
+    const yesX=x+168,noX=yesX+28;
+    doc.text('F1',7.5,yesX,y,'Yes',FORM_INK);
+    doc.text('F1',7.5,noX,y,'No',FORM_INK);
+    if(answer==='Yes')doc.ring(yesX-2,y-2,18,11,tag+'Yes');
+    if(answer==='No')doc.ring(noX-2,y-2,16,11,tag+'No');
+  }
+  function formFooter(doc){
+    doc.text('F1',7,FORM_LEFT,790,'*1 Australian Standards AS3786 - 1993',FORM_INK);
+    wrap('*2 According to the Section 186A of the Environmental Planning and Assessment (Smoke Alarm) Regulation 2006 and Building Code of Australia',7,FORM_RIGHT-FORM_LEFT,false).forEach(function(line,i){
+      doc.text('F1',7,FORM_LEFT,802+i*9,line,FORM_INK);
     });
   }
-  function freshPage(doc,title){
-    if(doc.top>750){
-      doc.breakPage();
-      doc.header(true,title);
+  function formBanner(doc,view,continued){
+    let y=16;
+    if(!continued){
+      formLogo(doc,FORM_LEFT,y,30);
+      doc.text('F2',12,FORM_LEFT+36,y+2,'Clarence Coast Smoke Alarms',FORM_INK);
+      doc.text('F1',7,FORM_LEFT+36,y+16,'ABN '+(view.abn||FORM_ABN),FORM_INK);
+      const boxX=392,boxW=FORM_RIGHT-boxX,boxH=78;
+      doc.frame(boxX,y,boxW,boxH);
+      doc.text('F2',8,boxX+6,y+4,'Office Use Only',FORM_INK);
+      ['Initial Compliance','Certificate','Invoice','Database'].forEach(function(label,i){
+        const row=y+18+i*14;
+        doc.text('F1',7.5,boxX+6,row,label,FORM_INK);
+        doc.tick(boxX+boxW-16,row,8);
+      });
+      y=102;
+      const title='Smoke Alarm Testing & Maintenance Log';
+      doc.text('F2',12,(PAGE_W-widthOf(title,12,true))/2,y,title,FORM_INK);
+      y+=20;
+      doc.text('F2',8,FORM_LEFT,y,'Property Identifier',FORM_INK);
+      doc.text('F1',8,FORM_LEFT+92,y,view.ident,FORM_INK);
+      doc.rule(FORM_LEFT+90,y+10,150);
+      doc.text('F2',8,300,y,'Agent',FORM_INK);
+      doc.text('F1',8,336,y,view.agent,FORM_INK);
+      doc.rule(334,y+10,FORM_RIGHT-334);
+      y+=16;
+      doc.text('F2',8,FORM_LEFT,y,'Property Address',FORM_INK);
+      doc.text('F1',8,FORM_LEFT+88,y,view.address,FORM_INK);
+      doc.rule(FORM_LEFT+86,y+10,FORM_RIGHT-FORM_LEFT-86);
+      y+=16;
+      doc.text('F2',8,FORM_LEFT,y,'Technicians Name',FORM_INK);
+      doc.text('F1',8,FORM_LEFT+88,y,view.tech,FORM_INK);
+      doc.rule(FORM_LEFT+86,y+10,170);
+      doc.text('F2',8,310,y,'Date of Service:',FORM_INK);
+      doc.text('F1',8,392,y,view.date,FORM_INK);
+      doc.rule(390,y+10,70);
+      y+=18;
+      doc.text('F2',8,FORM_LEFT,y,'Property Type:',FORM_INK);
+      y=flowWords(doc,FORM_LEFT+78,y,[
+        {text:'House',on:view.ptype==='House',tag:'House'},
+        {text:'Unit',on:view.ptype==='Unit',tag:'Unit'},
+        {text:'Townhouse',on:view.ptype==='Townhouse',tag:'Townhouse'},
+        {text:'Duplex',on:view.ptype==='Duplex',tag:'Duplex'},
+        {text:'Villa',on:view.ptype==='Villa',tag:'Villa'},
+        {text:'Other',on:view.ptype==='Other',tag:'Other',fill:view.ptype==='Other'?view.ptypeOther:''}
+      ],8);
+      doc.text('F2',8,FORM_LEFT,y,'No. of Levels',FORM_INK);
+      let x=FORM_LEFT+72;
+      [1,2,3].forEach(function(n){
+        const label=String(n);
+        doc.text('F1',8,x,y,label,FORM_INK);
+        if(String(view.levels)===label)doc.ring(x-2,y-2,12,12,'L'+label);
+        x+=16;
+      });
+      doc.text('F2',8,x+8,y,'No. of Bedrooms',FORM_INK);
+      x+=98;
+      [1,2,3,4,5].forEach(function(n){
+        const label=String(n);
+        doc.text('F1',8,x,y,label,FORM_INK);
+        if(String(view.beds)===label)doc.ring(x-2,y-2,12,12,'B'+label);
+        x+=16;
+      });
+      y+=16;
+      doc.text('F2',8,FORM_LEFT,y,'No. of Smoke Alarms',FORM_INK);
+      x=FORM_LEFT+108;
+      const count=+view.alarms||0;
+      [1,2,3,4].forEach(function(n){
+        const label=String(n);
+        doc.text('F1',8,x,y,label,FORM_INK);
+        if(count===n)doc.ring(x-2,y-2,12,12,'A'+label);
+        x+=16;
+      });
+      if(count>4){
+        doc.text('F2',9,x+4,y,String(count),FORM_INK);
+        x+=22;
+      }
+      doc.text('F2',8,x+10,y,'Ladder Required',FORM_INK);
+      x+=100;
+      ['Sm','Med','Lg','XL'].forEach(function(label){
+        const w=widthOf(label,8,false);
+        doc.text('F1',8,x,y,label,FORM_INK);
+        if(view.ladder===label)doc.ring(x-2,y-2,w+4,12,'Ladder'+label);
+        x+=w+8;
+      });
+      y+=16;
+      const rowH=16;
+      doc.frame(FORM_LEFT,y,FORM_RIGHT-FORM_LEFT,rowH);
+      doc.text('F2',8,FORM_LEFT+4,y+3,'Smoke Alarm Locations',FORM_INK);
+      doc.cmd(rgb(FORM_INK)+' RG\n0.6 w\n220 '+num(PAGE_H-y)+' m 220 '+num(PAGE_H-y-rowH)+' l S\n');
+      doc.cmd(rgb(FORM_INK)+' RG\n0.6 w\n390 '+num(PAGE_H-y)+' m 390 '+num(PAGE_H-y-rowH)+' l S\n');
+      doc.text('F1',7.5,226,y+4,'As Per Previous',FORM_INK);
+      if(view.asPrev)doc.ring(224,y+2,72,12,'AsPerPrevious');
+      doc.text('F1',7.5,396,y+4,'As Per Photos',FORM_INK);
+      if(view.asPhotos)doc.ring(394,y+2,64,12,'AsPerPhotos');
+      return y+rowH+8;
     }
+    doc.text('F2',9,FORM_LEFT,y,'Smoke Alarm Testing & Maintenance Log',FORM_INK);
+    doc.text('F1',8,FORM_LEFT,y+14,view.address,FORM_INK);
+    return y+30;
   }
-  function drawWorksheet(job,form){
+  function drawAlarmBlock(doc,alarm,n,y){
+    const h=148;
+    doc.frame(FORM_LEFT,y,FORM_RIGHT-FORM_LEFT,h);
+    const title='Smoke Alarm # '+n+(alarm.isNew||alarm.newAns==='Yes'?'  NEW':'');
+    doc.text('F2',10,FORM_LEFT+6,y+4,title,FORM_INK);
+    doc.text('F1',7,FORM_LEFT+6,y+16,'Please circle correct answer or provide details',FORM_INK);
+    let row=flowWords(doc,FORM_LEFT+6,y+28,[
+      {text:'Location:',bold:true},
+      {text:'Ceiling',on:alarm.mount==='Ceiling',tag:'Ceiling'},
+      {text:'Wall',on:alarm.mount==='Wall',tag:'Wall'},
+      {text:'Hallway',on:alarm.room==='Hallway',tag:'Hallway'},
+      {text:'Entryway',on:alarm.room==='Entryway',tag:'Entryway'},
+      {text:'Bedroom No.',on:alarm.room==='Bedroom',tag:'Bedroom',fill:alarm.room==='Bedroom'?safeLine(alarm.bedno):'',blank:alarm.room!=='Bedroom'},
+      {text:'Lounge',on:alarm.room==='Lounge',tag:'Lounge'},
+      {text:'Dining',on:alarm.room==='Dining',tag:'Dining'},
+      {text:'Laundry',on:alarm.room==='Laundry',tag:'Laundry'},
+      {text:'Other:',on:alarm.room==='Other',tag:'OtherRoom',fill:alarm.room==='Other'?safeLine(alarm.other):'',blank:alarm.room!=='Other'}
+    ],7.5);
+    doc.text('F2',7.5,FORM_LEFT+6,row,'Adjacent:',FORM_INK);
+    doc.text('F1',7.5,FORM_LEFT+52,row,safeLine(alarm.adjacent),FORM_INK);
+    doc.rule(FORM_LEFT+50,row+9,180);
+    row+=14;
+    const powers=chosenPower(alarm.power);
+    const sensors=chosenSensor(alarm.sensor);
+    row=flowWords(doc,FORM_LEFT+6,row,[
+      {text:'Type:',bold:true},
+      {text:'9v',on:!!powers['9v'],tag:'9v'},
+      {text:'240v',on:!!powers['240v'],tag:'240v'},
+      {text:'Ni-Mh',on:!!powers['Ni-Mh'],tag:'NiMh'},
+      {text:'Lithium',on:!!powers.Lithium,tag:'Lithium'},
+      {text:'Ionization',on:!!sensors.Ionization,tag:'Ionization'},
+      {text:'Photo-Electric',on:!!sensors['Photo-Electric'],tag:'PhotoElectric'},
+      {text:'Heat',on:!!sensors.Heat,tag:'Heat'}
+    ],7.5);
+    doc.text('F2',7.5,FORM_LEFT+6,row,'Manufacturer',FORM_INK);
+    doc.text('F1',7.5,FORM_LEFT+62,row,safeLine(alarm.manufacturer),FORM_INK);
+    doc.rule(FORM_LEFT+60,row+9,120);
+    doc.text('F2',7.5,240,row,'Model',FORM_INK);
+    doc.text('F1',7.5,272,row,safeLine(alarm.model),FORM_INK);
+    doc.rule(270,row+9,120);
+    row+=14;
+    doc.text('F2',7.5,FORM_LEFT+6,row,'Decibel output reading',FORM_INK);
+    doc.text('F1',7.5,FORM_LEFT+100,row,safeLine(alarm.db),FORM_INK);
+    doc.rule(FORM_LEFT+98,row+9,36);
+    doc.text('F1',7.5,FORM_LEFT+140,row,'Db @ 3m',FORM_INK);
+    doc.text('F2',7.5,360,row,'Expiry Date',FORM_INK);
+    doc.frame(430,row-1,70,12);
+    doc.text('F1',7.5,434,row,expiryLabel(alarm.expiry),FORM_INK);
+    row+=16;
+    const left=[
+      ['Does it comply with AS3786 *1','comply'],
+      ['Is it located correctly *2','located'],
+      ['Is it firmly affixed','affixed'],
+      ['Has it been cleaned','cleaned']
+    ];
+    const right=[
+      ['New battery installed','battery'],
+      ['Does the test button work','button'],
+      ['Responds to synthetic smoke','smoke'],
+      ['Insect surface spray','insect']
+    ];
+    left.forEach(function(pair,i){
+      ynCell(doc,FORM_LEFT+6,row+i*12,pair[0],ynAnswer(alarm,pair[1]),pair[1]);
+      ynCell(doc,310,row+i*12,right[i][0],ynAnswer(alarm,right[i][1]),right[i][1]);
+    });
+    return y+h+6;
+  }
+  function worksheetView(job,form,abn){
     job=job||{};
     form=form||{};
+    const who=party(form.agent||job.agent||'');
+    const n=+(form.alarms)||((form.al)||[]).length||0;
+    return {
+      abn:safeLine(abn)||FORM_ABN,
+      ident:safeLine(form.ident||job.ident||''),
+      agent:who.privateOwner?'Private Owner':(who.agency||safeLine(form.agent||job.agent||'')),
+      address:safeLine(form.addr||job.addr||job.street||''),
+      tech:safeLine(form.tech||job.tech||''),
+      date:dmy(form.date),
+      ptype:safeLine(form.ptype),
+      ptypeOther:safeLine(form.ptypeOther),
+      levels:form.levels||'',
+      beds:form.beds||'',
+      alarms:n,
+      ladder:safeLine(form.ladder),
+      asPrev:!!form.asPrev,
+      asPhotos:!!form.asPhotos,
+      list:(form.al||[]).slice(0,n)
+    };
+  }
+  function drawWorksheet(job,form,abn){
+    const view=worksheetView(job,form,abn);
     const doc=new Doc();
-    doc.header(false,'WORKSHEET');
-    const who=party((form.agent)||job.agent||'');
-    const agent=who.privateOwner?'Private Owner':(who.agency||safeLine(form.agent||job.agent||''));
-    const address=safeLine(form.addr||job.addr||job.street||'');
-    wrap(address,12,520,true).forEach(function(line){
-      doc.text('F2',12,36,doc.top,line,INK);
-      doc.top+=16;
-    });
-    doc.top+=4;
-    [['Agent',agent],['Tenancy',tenancyLabel(job,form)],['Date',dmy(form.date)],['Technician',safeLine(form.tech||job.tech||'')]].forEach(function(pair){
-      if(!pair[1])return;
-      doc.text('F1',9,36,doc.top,pair[0],MUTED);
-      doc.text('F2',10,120,doc.top,pair[1],INK);
-      doc.top+=16;
-    });
-    doc.top+=6;
-    const cols=[{label:'Location',x:36},{label:'Model',x:170},{label:'Power',x:310},{label:'Expiry',x:390},{label:'Result',x:470}];
-    function head(){
-      freshPage(doc,'WORKSHEET');
-      cols.forEach(function(col){doc.text('F2',8,col.x,doc.top,col.label,INK)});
-      doc.cmd(rgb(RED)+' RG\n1.2 w\n36 '+num(PAGE_H-doc.top-11)+' m '+num(PAGE_W-36)+' '+num(PAGE_H-doc.top-11)+' l S\n');
-      doc.top+=16;
+    let y=formBanner(doc,view,false);
+    if(!view.list.length){
+      doc.text('F1',8,FORM_LEFT,y,'No alarms were recorded.',FORM_INK);
     }
-    head();
-    const alarms=worksheetAlarms(job,form);
-    if(!alarms.length){
-      doc.text('F1',9,36,doc.top,'No alarms were recorded.',MUTED);
-      doc.top+=14;
-    }
-    alarms.forEach(function(alarm){
-      freshPage(doc,'WORKSHEET');
-      const loc=wrap(alarm.location,8,120,false);
-      const model=wrap(alarm.model,8,120,false);
-      const lines=Math.max(loc.length,model.length,1);
-      loc.forEach(function(line,i){doc.text('F1',8,cols[0].x,doc.top+i*11,line,INK)});
-      model.forEach(function(line,i){doc.text('F1',8,cols[1].x,doc.top+i*11,line,INK)});
-      doc.text('F1',8,cols[2].x,doc.top,alarm.power,INK);
-      doc.text('F1',8,cols[3].x,doc.top,alarm.expiry,INK);
-      doc.text('F1',8,cols[4].x,doc.top,alarm.result,INK);
-      doc.top+=lines*11+6;
+    view.list.forEach(function(alarm,i){
+      if(y+154>FORM_LIMIT){
+        formFooter(doc);
+        doc.breakPage();
+        y=formBanner(doc,view,true);
+      }
+      y=drawAlarmBlock(doc,alarm,i+1,y);
     });
-    String(form.comments||'').split(/\n/).forEach(function(line){
-      const clean=safeLine(line);
-      if(!clean)return;
-      freshPage(doc,'WORKSHEET');
-      wrap(clean,8,520,false).forEach(function(part){
-        doc.text('F1',8,36,doc.top,part,INK);
-        doc.top+=11;
-      });
-    });
-    doc.top+=8;
-    doc.text('F1',8,36,doc.top,'Tenant names, phone numbers and email addresses are not on this worksheet.',MUTED);
+    formFooter(doc);
     return doc.finish();
   }
   function dayPlan(jobs,forms,options){
@@ -638,7 +838,7 @@
     const plan=dayPlan(jobs,forms,options);
     const pages=[];
     plan.worksheets.forEach(function(item){
-      drawWorksheet(item.job,item.form).forEach(function(page){pages.push(page)});
+      drawWorksheet(item.job,item.form,options.abn).forEach(function(page){pages.push(page)});
     });
     plan.worksheetBytes=pages.length?buildPdf(pages):null;
     const certPages=[];
