@@ -432,7 +432,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script><script src="addressfind.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="pdflib.js"></script><script src="transfer.js"></script><script src="firebase-config.js"></script><script src="livesync.js"></script><script src="portaldata.js"></script><script src="certificate.js"></script><script src="invoice.js"></script><script src="requests.js"></script><script src="portaladmin.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.50.0 (20261117)';
+const APP_VERSION='2.51.0 (20261117)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -1459,32 +1459,57 @@ function listEmptyCopy(){
 function dayPdfOptions(){
   const date=($('#daydate')&&$('#daydate').value)||todayISO();
   const agency=($('#dayagency')&&$('#dayagency').value)||'';
-  const parts=($('#dayparts')&&$('#dayparts').value)||'both';
-  return {date,agency,parts}}
+  return {date,agency}}
+async function dayWorksheetPhotos(plan){
+  const photos={};
+  for(const item of (plan&&plan.worksheets)||[]){
+    const f=FORMS[item.id];if(!f)continue;
+    const slots=[];
+    (f.al||[]).slice(0,f.alarms||0).forEach((a,i)=>{(a.photos||[]).forEach((id,k)=>slots.push({id,caption:'Alarm '+(i+1)+' photo '+(k+1)}))});
+    (f.photos||[]).forEach((id,k)=>slots.push({id,caption:'Property photo '+(k+1)}));
+    const list=[];
+    for(const slot of slots){
+      let p=null;try{p=await photoGet(slot.id)}catch(e){}
+      if(!p||!p.data)continue;
+      let bytes=p.data instanceof Uint8Array?p.data:new Uint8Array(p.data);
+      const jpeg=bytes.length>2&&bytes[0]===0xFF&&bytes[1]===0xD8;
+      if(!jpeg){try{const im=await decodeImage(new Blob([bytes],{type:p.type||'image/jpeg'}));const enc=await toJPEG(im,900,0.7);if(im.close)im.close();bytes=new Uint8Array(await enc.blob.arrayBuffer())}catch(e){continue}}
+      list.push({caption:slot.caption,bytes:bytes})}
+    if(list.length)photos[item.id]=list}
+  return photos}
+function saveDayFile(bytes,name){
+  if(!bytes||!name)return;
+  const blob=new Blob([bytes],{type:'application/pdf'});
+  const a=document.createElement('a');const url=URL.createObjectURL(blob);
+  a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),4000)}
 function paintDayPdf(){
   if(!window.CCSACertificate||!CCSACertificate.dayPlan)return;
   const plan=CCSACertificate.dayPlan(JOBS,FORMS,dayPdfOptions());
-  const count=$('#daycount'),skip=$('#dayskip'),down=$('#daydown');
-  if(count)count.textContent=plan.count?(plan.count+' finished job'+(plan.count===1?'':'s')+' in this PDF.'):'No finished jobs for this PDF.';
-  if(skip)skip.innerHTML=plan.skipped.map(item=>`<li>${esc(item.address)} — ${esc(item.reason)}</li>`).join('')||'<li>None</li>';
-  if(down){down.disabled=!plan.count;down.textContent=plan.count?'Download '+plan.fileName:'Download PDF'}}
+  const count=$('#daycount'),skip=$('#dayskip'),ws=$('#dayws'),cc=$('#daycc');
+  if(count)count.textContent=plan.worksheetCount+' worksheet'+(plan.worksheetCount===1?'':'s')+' · '+plan.certificateCount+' compliance certificate'+(plan.certificateCount===1?'':'s')+'.';
+  const lines=(plan.skipped||[]).concat(plan.notes||[]);
+  if(skip)skip.innerHTML=lines.map(item=>`<li>${esc(item.address)} — ${esc(item.reason)}</li>`).join('')||'<li>None</li>';
+  if(ws){ws.disabled=!plan.worksheetCount;ws.textContent=plan.worksheetCount?'Download '+plan.worksheetFile:'Download worksheets PDF'}
+  if(cc){cc.disabled=!plan.certificateCount;cc.textContent=plan.certificateCount?'Download '+plan.certificateFile:'Download certificates PDF'}}
 function openDayPdf(){
   const old=document.getElementById('daygate');if(old)old.remove();
   const agencies=window.CCSAPortalData&&CCSAPortalData.agencies?CCSAPortalData.agencies():[];
   const opts=agencies.map(a=>`<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('');
   const g=document.createElement('div');g.id='daygate';g.className='gate daygate';g.setAttribute('role','dialog');g.setAttribute('aria-modal','true');g.setAttribute('aria-labelledby','daytitle');
-  g.innerHTML=`<div class="gbox"><h2 id="daytitle">Day PDF</h2><p>One PDF for the finished jobs on a day, in route order. A passing job adds its compliance certificate, then its service report. Each one starts on a new page.</p><label for="daydate">Date</label><input class="t" id="daydate" type="date" value="${todayISO()}"><label for="dayagency">Agency</label><select class="t" id="dayagency"><option value="">All agencies</option>${opts}<option value="private">Private Owner</option></select><label for="dayparts">Include</label><select class="t" id="dayparts"><option value="both">Certificates and service reports</option><option value="certificates">Certificates only</option><option value="reports">Service reports only</option></select><p id="daycount"></p><p class="note">Not in this PDF</p><ul class="dayskip" id="dayskip"></ul><div class="row"><button type="button" class="btn" id="dayclose">Close</button><button type="button" class="btn pri" id="daydown">Download PDF</button></div></div>`;
+  g.innerHTML=`<div class="gbox"><h2 id="daytitle">Day PDF</h2><p>Two files for the finished jobs on a day, in route order. Worksheets are one PDF. Compliance certificates for passing jobs are a separate PDF. Each job starts on a new page. Service reports are not included.</p><label for="daydate">Date</label><input class="t" id="daydate" type="date" value="${todayISO()}"><label for="dayagency">Agency</label><select class="t" id="dayagency"><option value="">All agencies</option>${opts}<option value="private">Private Owner</option></select><p id="daycount"></p><p class="note">Not in this PDF</p><ul class="dayskip" id="dayskip"></ul><div class="stack"><button type="button" class="btn pri" id="dayws">Download worksheets PDF</button><button type="button" class="btn pri" id="daycc">Download certificates PDF</button><button type="button" class="btn" id="dayclose">Close</button></div></div>`;
   document.body.appendChild(g);
-  ['daydate','dayagency','dayparts'].forEach(id=>{const el=$('#'+id);if(el)el.oninput=el.onchange=paintDayPdf});
+  ['daydate','dayagency'].forEach(id=>{const el=$('#'+id);if(el)el.oninput=el.onchange=paintDayPdf});
   $('#dayclose').onclick=()=>g.remove();
   g.onclick=e=>{if(e.target===g)g.remove()};
-  $('#daydown').onclick=()=>{
-    const plan=CCSACertificate.buildDayPdf(JOBS,FORMS,dayPdfOptions());
-    if(!plan.bytes)return;
-    const blob=new Blob([plan.bytes],{type:'application/pdf'});
-    const a=document.createElement('a');const url=URL.createObjectURL(blob);
-    a.href=url;a.download=plan.fileName;document.body.appendChild(a);a.click();a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url),4000)};
+  async function download(kind){
+    const base=dayPdfOptions();
+    const preview=CCSACertificate.dayPlan(JOBS,FORMS,base);
+    const photos=kind==='worksheets'?await dayWorksheetPhotos(preview):{};
+    const plan=CCSACertificate.buildDayFiles(JOBS,FORMS,Object.assign({},base,{photos:photos}));
+    saveDayFile(kind==='worksheets'?plan.worksheetBytes:plan.certificateBytes,kind==='worksheets'?plan.worksheetFile:plan.certificateFile)}
+  $('#dayws').onclick=()=>download('worksheets');
+  $('#daycc').onclick=()=>download('certificates');
   paintDayPdf()}
 function renderList(){
   clearHead();$('#ttl').textContent='Jobs';$('#hbtn').textContent='Load sheet';$('#hbtn').className='';$('#hbtn').onclick=()=>{IMPMODE='add';$('#file').click()};
