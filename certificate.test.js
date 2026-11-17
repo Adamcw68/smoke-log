@@ -186,7 +186,7 @@ test('a day export is a worksheets PDF and a separate certificates PDF',function
   const files=certs.buildDayFiles(jobs,forms,{date:'2026-08-12',photos:{early:[{caption:'Hallway photo',bytes:Buffer.from([0xff,0xd8])}]}});
   const sheets=certs.pdfText(files.worksheetBytes);
   const certText=certs.pdfText(files.certificateBytes);
-  assert.match(sheets,/\/Count 4/);
+  assert.match(sheets,/\/Count 8/);
   assert.match(sheets,/Smoke Alarm Testing & Maintenance Log/);
   assert.match(sheets,/Office Use Only/);
   assert.match(sheets,/ABN 7063 0700 875/);
@@ -237,7 +237,9 @@ test('the worksheet page circles the chosen answers and splits a long visit',fun
   const one=certs.buildDayFiles([job],{form:form},{date:'2026-08-12',abn:'12 345 678 901'});
   const text=certs.pdfText(one.worksheetBytes);
   assert.equal(one.worksheetFile,'CCSA-worksheets-2026-08-12.pdf');
-  assert.match(text,/\/Count 1/);
+  assert.match(text,/\/Count 2/);
+  assert.match(text,/Smoke Alarm # 3/);
+  assert.match(text,/Smoke Alarm # 4/);
   assert.match(text,/ABN 12 345 678 901/);
   assert.match(text,/Property Identifier/);
   assert.match(text,/River/);
@@ -278,7 +280,13 @@ test('the worksheet page circles the chosen answers and splits a long visit',fun
   for(let i=0;i<8;i++)manyAl.push(alarm(i+1));
   const many=certs.pdfText(certs.buildDayFiles([job],{form:Object.assign({},form,{alarms:8,al:manyAl})},{date:'2026-08-12'}).worksheetBytes);
   const pages=many.match(/\/Count (\d+)/);
-  assert.ok(+pages[1]>=2);
+  assert.equal(+pages[1],4);
   assert.match(many,/Smoke Alarm # 8/);
   assert.match(many,/ABN 7063 0700 875/);
+  const single=certs.pdfText(certs.buildDayFiles([job],{form:Object.assign({},form,{alarms:1,al:[alarm(1)]})},{date:'2026-08-12'}).worksheetBytes);
+  assert.match(single,/\/Count 2/);
+  assert.match(single,/Smoke Alarm # 1/);
+  assert.match(single,/Smoke Alarm # 4/);
+  assert.match(single,/circle:Ceiling/);
+  assert.equal(single.includes('circle:Wall'),false);
 });
