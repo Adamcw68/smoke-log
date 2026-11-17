@@ -371,56 +371,22 @@
     logoStream.cache=s;
     return s;
   }
-  function bytesToLatin1(bytes){
-    const list=bytes instanceof Uint8Array?bytes:new Uint8Array(bytes||[]);
-    let s='';
-    for(let i=0;i<list.length;i+=0x8000)s+=String.fromCharCode.apply(null,list.subarray(i,i+0x8000));
-    return s;
-  }
-  function jpegSize(bytes){
-    const u=bytes instanceof Uint8Array?bytes:new Uint8Array(bytes||[]);
-    if(u.length<4||u[0]!==0xFF||u[1]!==0xD8)return null;
-    let i=2;
-    while(i+9<u.length){
-      if(u[i]!==0xFF){i++;continue}
-      const marker=u[i+1];
-      if(marker===0xD8||marker===0xD9||marker===0x01||(marker>=0xD0&&marker<=0xD7)){i+=2;continue}
-      const len=(u[i+2]<<8)+u[i+3];
-      if(marker===0xC0||marker===0xC1||marker===0xC2){
-        const h=(u[i+5]<<8)+u[i+6];
-        const w=(u[i+7]<<8)+u[i+8];
-        if(w&&h)return {w:w,h:h};
-      }
-      if(!len)break;
-      i+=2+len;
-    }
-    return null;
-  }
-  function buildPdf(pages,images){
-    images=images||[];
+  function buildPdf(pages){
     const n=pages.length||1;
     const contents=pages.length?pages:['BT\n/F1 12 Tf\n36 800 Td\n(Empty certificate) Tj\nET\n'];
     const objs=[];
     objs[1]='<< /Type /Catalog /Pages 2 0 R >>';
-    const firstPage=6+images.length;
     const kids=[];
-    for(let i=0;i<n;i++)kids.push((firstPage+i*2)+' 0 R');
+    for(let i=0;i<n;i++)kids.push((6+i*2)+' 0 R');
     objs[2]='<< /Type /Pages /Kids ['+kids.join(' ')+'] /Count '+n+' >>';
     objs[3]='<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
     objs[4]='<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>';
     const logo=logoStream();
     objs[5]={stream:logo,dict:'<< /Type /XObject /Subtype /Image /Width '+LOGO_W+' /Height '+LOGO_H+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length '+logo.length+' >>'};
-    let xobj='/Im1 5 0 R';
-    images.forEach(function(img,i){
-      const num=6+i;
-      const raw=img.bytes instanceof Uint8Array?img.bytes:new Uint8Array(img.bytes||[]);
-      objs[num]={stream:bytesToLatin1(raw),dict:'<< /Type /XObject /Subtype /Image /Width '+img.w+' /Height '+img.h+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+raw.length+' >>'};
-      xobj+=' /Im'+(i+2)+' '+num+' 0 R';
-    });
     contents.forEach(function(stream,i){
-      const pageNum=firstPage+i*2;
+      const pageNum=6+i*2;
       const contentNum=pageNum+1;
-      objs[pageNum]='<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Contents '+contentNum+' 0 R /Resources << /Font << /F1 3 0 R /F2 4 0 R >> /XObject << '+xobj+' >> >> >>';
+      objs[pageNum]='<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Contents '+contentNum+' 0 R /Resources << /Font << /F1 3 0 R /F2 4 0 R >> /XObject << /Im1 5 0 R >> >> >>';
       objs[contentNum]={stream:stream};
     });
     let body='%PDF-1.4\n';
@@ -562,10 +528,9 @@
       doc.header(true,title);
     }
   }
-  function drawWorksheet(job,form,photos,images){
+  function drawWorksheet(job,form){
     job=job||{};
     form=form||{};
-    photos=photos||[];
     const doc=new Doc();
     doc.header(false,'WORKSHEET');
     const who=party((form.agent)||job.agent||'');
@@ -619,26 +584,6 @@
     });
     doc.top+=8;
     doc.text('F1',8,36,doc.top,'Tenant names, phone numbers and email addresses are not on this worksheet.',MUTED);
-    photos.forEach(function(photo){
-      const size=jpegSize(photo&&photo.bytes);
-      if(!size)return;
-      const name='Im'+(images.length+2);
-      images.push({bytes:photo.bytes,w:size.w,h:size.h});
-      doc.breakPage();
-      doc.header(false,'WORKSHEET');
-      doc.text('F2',12,36,doc.top,'Photo',INK);
-      doc.top+=16;
-      wrap(photo.caption||'Worksheet photo',9,520,false).forEach(function(line){
-        doc.text('F1',9,36,doc.top,line,INK);
-        doc.top+=12;
-      });
-      doc.top+=8;
-      const maxW=520,maxH=620;
-      const scale=Math.min(maxW/size.w,maxH/size.h);
-      const dw=size.w*scale,dh=size.h*scale;
-      const y=PAGE_H-doc.top-dh;
-      doc.cmd('q\n'+num(dw)+' 0 0 '+num(dh)+' 36 '+num(y)+' cm\n/'+name+' Do\nQ\n');
-    });
     return doc.finish();
   }
   function dayPlan(jobs,forms,options){
@@ -691,13 +636,11 @@
   function buildDayFiles(jobs,forms,options){
     options=options||{};
     const plan=dayPlan(jobs,forms,options);
-    const photos=options.photos||{};
-    const images=[];
     const pages=[];
     plan.worksheets.forEach(function(item){
-      drawWorksheet(item.job,item.form,photos[item.id]||[],images).forEach(function(page){pages.push(page)});
+      drawWorksheet(item.job,item.form).forEach(function(page){pages.push(page)});
     });
-    plan.worksheetBytes=pages.length?buildPdf(pages,images):null;
+    plan.worksheetBytes=pages.length?buildPdf(pages):null;
     const certPages=[];
     plan.certificates.forEach(function(item){
       drawCompliance(item.cert).forEach(function(page){certPages.push(page)});

@@ -176,7 +176,6 @@ test('a day export is a worksheets PDF and a separate certificates PDF',function
     other:{done:true,agent:'Ray White Maclean/Yamba',addr:jobs[4].addr,date:'2026-08-13',tech:'Adam Westerman',alarms:1,al:[alarm()]},
     fail:{done:true,agent:'Ray White Maclean/Yamba',addr:jobs[5].addr,date:'2026-08-12',tech:'Adam Westerman',alarms:1,al:[alarm({yn:{comply:'No',located:'Yes',button:'Yes',affixed:'Yes'}})]}
   };
-  const jpeg=Buffer.from('/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCwAA//2Q==','base64');
   const plan=certs.dayPlan(jobs,forms,{date:'2026-08-12',agency:''});
   assert.equal(plan.worksheetFile,'CCSA-worksheets-2026-08-12.pdf');
   assert.equal(plan.certificateFile,'CCSA-certificates-2026-08-12.pdf');
@@ -184,10 +183,10 @@ test('a day export is a worksheets PDF and a separate certificates PDF',function
   assert.deepEqual(plan.certificates.map(function(item){return item.id}),['early','own','late']);
   assert.deepEqual(plan.notes.map(function(item){return item.id+':'+item.reason}),['fail:No compliance certificate']);
   assert.deepEqual(plan.skipped.map(function(item){return item.id+':'+item.reason}),['open:Not finished']);
-  const files=certs.buildDayFiles(jobs,forms,{date:'2026-08-12',photos:{early:[{caption:'Hallway photo',bytes:jpeg}]}});
+  const files=certs.buildDayFiles(jobs,forms,{date:'2026-08-12',photos:{early:[{caption:'Hallway photo',bytes:Buffer.from([0xff,0xd8])}]}});
   const sheets=certs.pdfText(files.worksheetBytes);
   const certText=certs.pdfText(files.certificateBytes);
-  assert.match(sheets,/\/Count 5/);
+  assert.match(sheets,/\/Count 4/);
   assert.match(sheets,/WORKSHEET/);
   assert.equal(sheets.includes('SERVICE REPORT'),false);
   assert.equal(sheets.includes('COMPLIANCE CERTIFICATE'),false);
@@ -201,8 +200,8 @@ test('a day export is a worksheets PDF and a separate certificates PDF',function
   assert.match(sheets,/08\/2031/);
   assert.match(sheets,/Serviced/);
   assert.match(sheets,/Failed/);
-  assert.match(sheets,/Hallway photo/);
-  assert.match(sheets,/DCTDecode/);
+  assert.equal(sheets.includes('Hallway photo'),false);
+  assert.equal(sheets.includes('DCTDecode'),false);
   assert.equal(/\bHW\b/.test(sheets),false);
   assert.equal(sheets.includes('Jane Tenant'),false);
   assert.equal(sheets.includes('0400 111 222'),false);
@@ -225,5 +224,6 @@ test('a day export is a worksheets PDF and a separate certificates PDF',function
   assert.match(html,/id="dayws">Download worksheets PDF/);
   assert.match(html,/id="daycc">Download certificates PDF/);
   assert.match(html,/CCSACertificate\.buildDayFiles/);
+  assert.equal(html.includes('dayWorksheetPhotos'),false);
   assert.equal(html.includes('Service reports only'),false);
 });

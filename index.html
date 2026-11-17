@@ -432,7 +432,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="labelread.js"></script><script src="addressfind.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="pdflib.js"></script><script src="transfer.js"></script><script src="firebase-config.js"></script><script src="livesync.js"></script><script src="portaldata.js"></script><script src="certificate.js"></script><script src="invoice.js"></script><script src="requests.js"></script><script src="portaladmin.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.51.0 (20261117)';
+const APP_VERSION='2.52.0 (20261117)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -1460,23 +1460,6 @@ function dayPdfOptions(){
   const date=($('#daydate')&&$('#daydate').value)||todayISO();
   const agency=($('#dayagency')&&$('#dayagency').value)||'';
   return {date,agency}}
-async function dayWorksheetPhotos(plan){
-  const photos={};
-  for(const item of (plan&&plan.worksheets)||[]){
-    const f=FORMS[item.id];if(!f)continue;
-    const slots=[];
-    (f.al||[]).slice(0,f.alarms||0).forEach((a,i)=>{(a.photos||[]).forEach((id,k)=>slots.push({id,caption:'Alarm '+(i+1)+' photo '+(k+1)}))});
-    (f.photos||[]).forEach((id,k)=>slots.push({id,caption:'Property photo '+(k+1)}));
-    const list=[];
-    for(const slot of slots){
-      let p=null;try{p=await photoGet(slot.id)}catch(e){}
-      if(!p||!p.data)continue;
-      let bytes=p.data instanceof Uint8Array?p.data:new Uint8Array(p.data);
-      const jpeg=bytes.length>2&&bytes[0]===0xFF&&bytes[1]===0xD8;
-      if(!jpeg){try{const im=await decodeImage(new Blob([bytes],{type:p.type||'image/jpeg'}));const enc=await toJPEG(im,900,0.7);if(im.close)im.close();bytes=new Uint8Array(await enc.blob.arrayBuffer())}catch(e){continue}}
-      list.push({caption:slot.caption,bytes:bytes})}
-    if(list.length)photos[item.id]=list}
-  return photos}
 function saveDayFile(bytes,name){
   if(!bytes||!name)return;
   const blob=new Blob([bytes],{type:'application/pdf'});
@@ -1502,11 +1485,8 @@ function openDayPdf(){
   ['daydate','dayagency'].forEach(id=>{const el=$('#'+id);if(el)el.oninput=el.onchange=paintDayPdf});
   $('#dayclose').onclick=()=>g.remove();
   g.onclick=e=>{if(e.target===g)g.remove()};
-  async function download(kind){
-    const base=dayPdfOptions();
-    const preview=CCSACertificate.dayPlan(JOBS,FORMS,base);
-    const photos=kind==='worksheets'?await dayWorksheetPhotos(preview):{};
-    const plan=CCSACertificate.buildDayFiles(JOBS,FORMS,Object.assign({},base,{photos:photos}));
+  function download(kind){
+    const plan=CCSACertificate.buildDayFiles(JOBS,FORMS,dayPdfOptions());
     saveDayFile(kind==='worksheets'?plan.worksheetBytes:plan.certificateBytes,kind==='worksheets'?plan.worksheetFile:plan.certificateFile)}
   $('#dayws').onclick=()=>download('worksheets');
   $('#daycc').onclick=()=>download('certificates');
