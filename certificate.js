@@ -469,13 +469,128 @@
     return !!(found&&(found.id===agencyId||found.code===agencyId));
   }
   function dayFileName(date){
-    return 'CCSA-jobs-'+(isoDate(date)||'undated')+'.pdf';
+    const day=isoDate(date)||'undated';
+    return {worksheetFile:'CCSA-worksheets-'+day+'.pdf',certificateFile:'CCSA-certificates-'+day+'.pdf'};
+  }
+  function powerLabel(power){
+    const list=Array.isArray(power)?power:String(power||'').split(/[,/]/);
+    const out=[];
+    list.forEach(function(raw){
+      const s=String(raw||'').replace(/\s+/g,' ').trim();
+      if(!s)return;
+      if(/^(hw|hard\s*wired|hardwired|mains)$/i.test(s)||/^240\s*v$/i.test(s))out.push('240V');
+      else if(/^9\s*v$/i.test(s))out.push('9V');
+      else out.push(s);
+    });
+    return out.join(', ');
+  }
+  function expiryLabel(value){
+    const s=String(value||'').trim();
+    const my=/^(\d{1,2})\/(\d{4})$/.exec(s);
+    if(my)return String(my[1]).padStart(2,'0')+'/'+my[2];
+    return safeLine(s);
+  }
+  function tenancyLabel(job,form){
+    const raw=String((form&&form.tenancy)||(job&&job.section)||'').trim();
+    if(/^hol/i.test(raw))return 'Holiday';
+    if(/^perm/i.test(raw))return 'Permanent';
+    return '';
+  }
+  function alarmPlace(a){
+    a=a||{};
+    let room='';
+    if(a.room==='Bedroom'&&safeLine(a.bedno))room='Bedroom '+safeLine(a.bedno);
+    else if(a.room==='Other')room=safeLine(a.other)||'Other';
+    else room=safeLine(a.room);
+    const parts=[];
+    if(safeLine(a.mount))parts.push(safeLine(a.mount));
+    if(room)parts.push(room);
+    if(safeLine(a.adjacent))parts.push('near '+safeLine(a.adjacent));
+    return parts.join(', ');
+  }
+  function worksheetAlarms(job,form){
+    const data=dataApi();
+    const n=+(form&&form.alarms)||((form&&form.al)||[]).length||0;
+    return ((form&&form.al)||[]).slice(0,n||((form&&form.al)||[]).length).map(function(a){
+      const result=data&&data.alarmResult?data.alarmResult(a):'';
+      return {
+        location:alarmPlace(a),
+        model:safeLine([a.manufacturer,a.model].filter(Boolean).join(' ')),
+        power:powerLabel(a.power),
+        expiry:expiryLabel(a.expiry),
+        result:actionFor(result)
+      };
+    });
+  }
+  function freshPage(doc,title){
+    if(doc.top>750){
+      doc.breakPage();
+      doc.header(true,title);
+    }
+  }
+  function drawWorksheet(job,form){
+    job=job||{};
+    form=form||{};
+    const doc=new Doc();
+    doc.header(false,'WORKSHEET');
+    const who=party((form.agent)||job.agent||'');
+    const agent=who.privateOwner?'Private Owner':(who.agency||safeLine(form.agent||job.agent||''));
+    const address=safeLine(form.addr||job.addr||job.street||'');
+    wrap(address,12,520,true).forEach(function(line){
+      doc.text('F2',12,36,doc.top,line,INK);
+      doc.top+=16;
+    });
+    doc.top+=4;
+    [['Agent',agent],['Tenancy',tenancyLabel(job,form)],['Date',dmy(form.date)],['Technician',safeLine(form.tech||job.tech||'')]].forEach(function(pair){
+      if(!pair[1])return;
+      doc.text('F1',9,36,doc.top,pair[0],MUTED);
+      doc.text('F2',10,120,doc.top,pair[1],INK);
+      doc.top+=16;
+    });
+    doc.top+=6;
+    const cols=[{label:'Location',x:36},{label:'Model',x:170},{label:'Power',x:310},{label:'Expiry',x:390},{label:'Result',x:470}];
+    function head(){
+      freshPage(doc,'WORKSHEET');
+      cols.forEach(function(col){doc.text('F2',8,col.x,doc.top,col.label,INK)});
+      doc.cmd(rgb(RED)+' RG\n1.2 w\n36 '+num(PAGE_H-doc.top-11)+' m '+num(PAGE_W-36)+' '+num(PAGE_H-doc.top-11)+' l S\n');
+      doc.top+=16;
+    }
+    head();
+    const alarms=worksheetAlarms(job,form);
+    if(!alarms.length){
+      doc.text('F1',9,36,doc.top,'No alarms were recorded.',MUTED);
+      doc.top+=14;
+    }
+    alarms.forEach(function(alarm){
+      freshPage(doc,'WORKSHEET');
+      const loc=wrap(alarm.location,8,120,false);
+      const model=wrap(alarm.model,8,120,false);
+      const lines=Math.max(loc.length,model.length,1);
+      loc.forEach(function(line,i){doc.text('F1',8,cols[0].x,doc.top+i*11,line,INK)});
+      model.forEach(function(line,i){doc.text('F1',8,cols[1].x,doc.top+i*11,line,INK)});
+      doc.text('F1',8,cols[2].x,doc.top,alarm.power,INK);
+      doc.text('F1',8,cols[3].x,doc.top,alarm.expiry,INK);
+      doc.text('F1',8,cols[4].x,doc.top,alarm.result,INK);
+      doc.top+=lines*11+6;
+    });
+    String(form.comments||'').split(/\n/).forEach(function(line){
+      const clean=safeLine(line);
+      if(!clean)return;
+      freshPage(doc,'WORKSHEET');
+      wrap(clean,8,520,false).forEach(function(part){
+        doc.text('F1',8,36,doc.top,part,INK);
+        doc.top+=11;
+      });
+    });
+    doc.top+=8;
+    doc.text('F1',8,36,doc.top,'Tenant names, phone numbers and email addresses are not on this worksheet.',MUTED);
+    return doc.finish();
   }
   function dayPlan(jobs,forms,options){
     options=options||{};
     forms=forms||{};
     const date=isoDate(options.date);
-    const parts=options.parts==='certificates'||options.parts==='reports'?options.parts:'both';
+    const names=dayFileName(date);
     const agency=options.agency||'';
     const data=dataApi();
     const rows=(jobs||[]).filter(function(job){
@@ -484,7 +599,8 @@
       const ka=routeKey(a),kb=routeKey(b);
       return ka<kb?-1:ka>kb?1:0;
     });
-    const included=[];
+    const worksheets=[];
+    const notes=[];
     const skipped=[];
     rows.forEach(function(job){
       const form=forms[job.id]||null;
@@ -499,24 +615,37 @@
         return;
       }
       const passing=!!complianceModel(cert).validUntil;
-      const certificate=parts!=='reports'&&passing;
-      const report=parts!=='certificates';
-      if(!certificate&&!report){
-        skipped.push({id:String(job.id||''),address:address,reason:'Visit did not pass, so there is no compliance certificate'});
-        return;
-      }
-      included.push({id:String(job.id||''),address:cert.address||address,certificate:certificate,report:report,cert:cert});
+      const item={id:String(job.id||''),address:cert.address||address,worksheet:true,certificate:passing,job:job,form:form,cert:cert};
+      worksheets.push(item);
+      if(!passing)notes.push({id:item.id,address:item.address,reason:'No compliance certificate'});
     });
-    return {date:date,fileName:dayFileName(date),parts:parts,agency:agency,count:included.length,included:included,skipped:skipped};
+    const certificates=worksheets.filter(function(item){return item.certificate});
+    return {
+      date:date,
+      agency:agency,
+      worksheetFile:names.worksheetFile,
+      certificateFile:names.certificateFile,
+      worksheetCount:worksheets.length,
+      certificateCount:certificates.length,
+      worksheets:worksheets,
+      certificates:certificates,
+      notes:notes,
+      skipped:skipped
+    };
   }
-  function buildDayPdf(jobs,forms,options){
+  function buildDayFiles(jobs,forms,options){
+    options=options||{};
     const plan=dayPlan(jobs,forms,options);
     const pages=[];
-    plan.included.forEach(function(item){
-      if(item.certificate)drawCompliance(item.cert).forEach(function(page){pages.push(page)});
-      if(item.report)drawCertificate(item.cert).forEach(function(page){pages.push(page)});
+    plan.worksheets.forEach(function(item){
+      drawWorksheet(item.job,item.form).forEach(function(page){pages.push(page)});
     });
-    plan.bytes=pages.length?buildPdf(pages):null;
+    plan.worksheetBytes=pages.length?buildPdf(pages):null;
+    const certPages=[];
+    plan.certificates.forEach(function(item){
+      drawCompliance(item.cert).forEach(function(page){certPages.push(page)});
+    });
+    plan.certificateBytes=certPages.length?buildPdf(certPages):null;
     return plan;
   }
   function pdfText(bytes){
@@ -526,5 +655,5 @@
     return s;
   }
 
-  return {viewModel:viewModel,complianceModel:complianceModel,fileName:fileName,complianceFileName:complianceFileName,dayFileName:dayFileName,dayPlan:dayPlan,buildDayPdf:buildDayPdf,buildCertificatePdf:buildCertificatePdf,buildCompliancePdf:buildCompliancePdf,buildPdf:buildPdf,pdfText:pdfText};
+  return {viewModel:viewModel,complianceModel:complianceModel,fileName:fileName,complianceFileName:complianceFileName,dayFileName:dayFileName,dayPlan:dayPlan,buildDayFiles:buildDayFiles,buildCertificatePdf:buildCertificatePdf,buildCompliancePdf:buildCompliancePdf,buildPdf:buildPdf,pdfText:pdfText};
 });

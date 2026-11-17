@@ -157,65 +157,73 @@ test('replace and fail are printed and a long visit stays a valid PDF',function(
   assert.equal((manyText.match(/endobj/g)||[]).length>=6,true);
 });
 
-test('a day PDF prints finished jobs in route order and leaves unfinished jobs out',function(){
+test('a day export is a worksheets PDF and a separate certificates PDF',function(){
   const passYn={comply:'Yes',located:'Yes',button:'Yes',affixed:'Yes'};
-  const alarm=function(power){return {room:'Hallway',power:power||['240v'],sensor:['Photo-Electric'],expiry:'08/2031',yn:passYn}};
+  const alarm=function(extra){return Object.assign({room:'Hallway',power:['240v'],sensor:['Photo-Electric'],manufacturer:'Brooks',model:'PE123',expiry:'8/2031',yn:passYn},extra||{})};
   const jobs=[
-    {id:'late',agent:'Ray White Maclean/Yamba',addr:'4 Afternoon Street, Yamba NSW 2464',svc:'2026-08-12T14:00:00',order:2,row:2,contact:'Jane Tenant',p1:'0400 111 222'},
-    {id:'early',agent:'Lifestyle Maclean/Yamba',addr:'1 Morning Street, Maclean NSW 2463',svc:'2026-08-12T09:00:00',order:1,row:1,contact:'Jane Tenant',p1:'0400 111 222',tech:'Adam Westerman'},
-    {id:'own',agent:'Private Owner',addr:'7 Owner Street, Yamba NSW 2464',svc:'2026-08-12T11:00:00',order:3,row:3,contact:'Jane Tenant',p1:'0400 111 222'},
+    {id:'late',agent:'Ray White Maclean/Yamba',addr:'4 Afternoon Street, Yamba NSW 2464',section:'Permanent',svc:'2026-08-12T14:00:00',order:2,row:2,contact:'Jane Tenant',p1:'0400 111 222'},
+    {id:'early',agent:'Lifestyle Maclean/Yamba',addr:'1 Morning Street, Maclean NSW 2463',section:'Holiday',svc:'2026-08-12T09:00:00',order:1,row:1,contact:'Jane Tenant',p1:'0400 111 222',tech:'Adam Westerman'},
+    {id:'own',agent:'Private Owner',addr:'7 Owner Street, Yamba NSW 2464',section:'Permanent',svc:'2026-08-12T11:00:00',order:3,row:3,contact:'Jane Tenant',p1:'0400 111 222'},
     {id:'open',agent:'Ray White Maclean/Yamba',addr:'8 Unfinished Street, Yamba NSW 2464',svc:'2026-08-12T10:00:00',order:4,row:4},
     {id:'other',agent:'Ray White Maclean/Yamba',addr:'2 Other Day Street, Yamba NSW 2464',svc:'2026-08-13T09:00:00',order:1,row:1},
-    {id:'fail',agent:'Ray White Maclean/Yamba',addr:'9 Church Street, Maclean NSW 2463',svc:'2026-08-12T15:30:00',order:5,row:5,tech:'Adam Westerman'}
+    {id:'fail',agent:'Ray White Maclean/Yamba',addr:'9 Church Street, Maclean NSW 2463',section:'Permanent',svc:'2026-08-12T15:30:00',order:5,row:5,tech:'Adam Westerman'}
   ];
   const forms={
-    late:{done:true,agent:'Ray White Maclean/Yamba',agentSet:true,addr:jobs[0].addr,date:'2026-08-12',tech:'Adam Westerman',alarms:1,al:[alarm()]},
-    early:{done:true,agent:'Lifestyle Maclean/Yamba',agentSet:true,addr:jobs[1].addr,date:'2026-08-12',tech:'Adam Westerman',alarms:1,al:[alarm()]},
-    own:{done:true,agent:'Private Owner',agentSet:true,addr:jobs[2].addr,date:'2026-08-12',tech:'Adam Westerman',owner:'Pat Owner',alarms:1,al:[alarm()]},
+    late:{done:true,agent:'Ray White Maclean/Yamba',agentSet:true,tenancy:'Permanent',addr:jobs[0].addr,date:'2026-08-12',tech:'Adam Westerman',alarms:1,comments:'0400 111 222\nBattery changed',al:[alarm()]},
+    early:{done:true,agent:'Lifestyle Maclean/Yamba',agentSet:true,tenancy:'Holiday',addr:jobs[1].addr,date:'2026-08-12',tech:'Adam Westerman',alarms:1,al:[alarm({power:['HW']})]},
+    own:{done:true,agent:'Private Owner',agentSet:true,tenancy:'Permanent',addr:jobs[2].addr,date:'2026-08-12',tech:'Adam Westerman',alarms:1,al:[alarm()]},
     open:{done:false,agent:'Ray White Maclean/Yamba',addr:jobs[3].addr,date:'2026-08-12',tech:'Adam Westerman',alarms:1,al:[alarm()]},
     other:{done:true,agent:'Ray White Maclean/Yamba',addr:jobs[4].addr,date:'2026-08-13',tech:'Adam Westerman',alarms:1,al:[alarm()]},
-    fail:{done:true,agent:'Ray White Maclean/Yamba',addr:jobs[5].addr,date:'2026-08-12',tech:'Adam Westerman',alarms:1,al:[alarm()].map(function(a){return Object.assign({},a,{yn:{comply:'No',located:'Yes',button:'Yes',affixed:'Yes'}})})}
+    fail:{done:true,agent:'Ray White Maclean/Yamba',addr:jobs[5].addr,date:'2026-08-12',tech:'Adam Westerman',alarms:1,al:[alarm({yn:{comply:'No',located:'Yes',button:'Yes',affixed:'Yes'}})]}
   };
-  const plan=certs.dayPlan(jobs,forms,{date:'2026-08-12',parts:'both',agency:''});
-  assert.equal(plan.fileName,'CCSA-jobs-2026-08-12.pdf');
-  assert.deepEqual(plan.included.map(function(item){return item.id}),['early','own','late','fail']);
-  assert.equal(plan.included[0].certificate,true);
-  assert.equal(plan.included[0].report,true);
-  assert.equal(plan.included[3].certificate,false);
-  assert.equal(plan.included[3].report,true);
+  const plan=certs.dayPlan(jobs,forms,{date:'2026-08-12',agency:''});
+  assert.equal(plan.worksheetFile,'CCSA-worksheets-2026-08-12.pdf');
+  assert.equal(plan.certificateFile,'CCSA-certificates-2026-08-12.pdf');
+  assert.deepEqual(plan.worksheets.map(function(item){return item.id}),['early','own','late','fail']);
+  assert.deepEqual(plan.certificates.map(function(item){return item.id}),['early','own','late']);
+  assert.deepEqual(plan.notes.map(function(item){return item.id+':'+item.reason}),['fail:No compliance certificate']);
   assert.deepEqual(plan.skipped.map(function(item){return item.id+':'+item.reason}),['open:Not finished']);
-  assert.equal(plan.count,4);
-  const both=certs.buildDayPdf(jobs,forms,{date:'2026-08-12'});
-  const text=certs.pdfText(both.bytes);
-  assert.match(text,/\/Count 7/);
-  assert.ok(text.indexOf('COMPLIANCE CERTIFICATE')<text.indexOf('SERVICE REPORT'));
-  assert.ok(text.indexOf('1 Morning Street')<text.indexOf('7 Owner Street'));
-  assert.ok(text.indexOf('7 Owner Street')<text.indexOf('4 Afternoon Street'));
-  assert.ok(text.indexOf('4 Afternoon Street')<text.indexOf('9 Church Street'));
-  assert.match(text,/240V Photoelectric Alarm/);
-  assert.match(text,/Valid until: 12\/08\/2027/);
-  assert.match(text,/Attention: The owner/);
-  assert.equal(text.includes('c/- Private'),false);
-  assert.equal(text.includes('Jane Tenant'),false);
-  assert.equal(text.includes('0400 111 222'),false);
-  assert.equal(text.includes('2 Other Day Street'),false);
-  assert.equal(text.includes('8 Unfinished Street'),false);
-  const certsOnly=certs.buildDayPdf(jobs,forms,{date:'2026-08-12',parts:'certificates'});
-  const certText=certs.pdfText(certsOnly.bytes);
-  assert.equal(certsOnly.count,3);
+  const files=certs.buildDayFiles(jobs,forms,{date:'2026-08-12',photos:{early:[{caption:'Hallway photo',bytes:Buffer.from([0xff,0xd8])}]}});
+  const sheets=certs.pdfText(files.worksheetBytes);
+  const certText=certs.pdfText(files.certificateBytes);
+  assert.match(sheets,/\/Count 4/);
+  assert.match(sheets,/WORKSHEET/);
+  assert.equal(sheets.includes('SERVICE REPORT'),false);
+  assert.equal(sheets.includes('COMPLIANCE CERTIFICATE'),false);
+  assert.ok(sheets.indexOf('1 Morning Street')<sheets.indexOf('7 Owner Street'));
+  assert.ok(sheets.indexOf('7 Owner Street')<sheets.indexOf('4 Afternoon Street'));
+  assert.ok(sheets.indexOf('4 Afternoon Street')<sheets.indexOf('9 Church Street'));
+  assert.match(sheets,/Holiday/);
+  assert.match(sheets,/Permanent/);
+  assert.match(sheets,/Brooks PE123/);
+  assert.match(sheets,/240V/);
+  assert.match(sheets,/08\/2031/);
+  assert.match(sheets,/Serviced/);
+  assert.match(sheets,/Failed/);
+  assert.equal(sheets.includes('Hallway photo'),false);
+  assert.equal(sheets.includes('DCTDecode'),false);
+  assert.equal(/\bHW\b/.test(sheets),false);
+  assert.equal(sheets.includes('Jane Tenant'),false);
+  assert.equal(sheets.includes('0400 111 222'),false);
+  assert.equal(sheets.includes('2 Other Day Street'),false);
+  assert.equal(sheets.includes('8 Unfinished Street'),false);
+  assert.match(certText,/\/Count 3/);
+  assert.match(certText,/COMPLIANCE CERTIFICATE/);
   assert.equal(certText.includes('SERVICE REPORT'),false);
+  assert.equal(certText.includes('WORKSHEET'),false);
   assert.equal(certText.includes('Inspected by'),false);
   assert.equal(certText.includes('Adam Westerman'),false);
   assert.equal(certText.includes('9 Church Street'),false);
-  assert.deepEqual(certsOnly.skipped.map(function(item){return item.id}),['open','fail']);
-  const reports=certs.buildDayPdf(jobs,forms,{date:'2026-08-12',parts:'reports',agency:'rwm'});
-  assert.deepEqual(reports.included.map(function(item){return item.id}),['late','fail']);
-  const reportText=certs.pdfText(reports.bytes);
-  assert.match(reportText,/Inspected by/);
-  assert.match(reportText,/Adam Westerman/);
-  assert.equal(reportText.includes('COMPLIANCE CERTIFICATE'),false);
-  assert.equal(reportText.includes('1 Morning Street'),false);
+  assert.match(certText,/Valid until: 12\/08\/2027/);
+  assert.match(certText,/Attention: The owner/);
+  assert.match(certText,/240V Photoelectric Alarm/);
+  assert.equal(certText.includes('Jane Tenant'),false);
+  assert.equal(certText.includes('0400 111 222'),false);
   const html=require('fs').readFileSync('index.html','utf8');
   assert.match(html,/id="dayopen">Day PDF/);
-  assert.match(html,/CCSACertificate\.buildDayPdf/);
+  assert.match(html,/id="dayws">Download worksheets PDF/);
+  assert.match(html,/id="daycc">Download certificates PDF/);
+  assert.match(html,/CCSACertificate\.buildDayFiles/);
+  assert.equal(html.includes('dayWorksheetPhotos'),false);
+  assert.equal(html.includes('Service reports only'),false);
 });
