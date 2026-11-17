@@ -770,20 +770,20 @@
   }
   function drawWorksheet(job,form,abn){
     const view=worksheetView(job,form,abn);
+    const slots=view.list.slice();
+    const pairs=Math.max(2,Math.ceil(slots.length/2));
+    while(slots.length<pairs*2)slots.push({});
     const doc=new Doc();
     let y=formBanner(doc,view,false);
-    if(!view.list.length){
-      doc.text('F1',8,FORM_LEFT,y,'No alarms were recorded.',FORM_INK);
-    }
-    view.list.forEach(function(alarm,i){
-      if(y+154>FORM_LIMIT){
-        formFooter(doc);
+    slots.forEach(function(alarm,i){
+      const n=i+1;
+      if(n>1&&n%2===1){
         doc.breakPage();
         y=formBanner(doc,view,true);
       }
-      y=drawAlarmBlock(doc,alarm,i+1,y);
+      y=drawAlarmBlock(doc,alarm||{},n,y);
+      if(n%2===0&&n>=4)formFooter(doc);
     });
-    formFooter(doc);
     return doc.finish();
   }
   function dayPlan(jobs,forms,options){
