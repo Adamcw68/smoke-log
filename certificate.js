@@ -565,13 +565,21 @@
     });
     return cy+size+6;
   }
-  function ynCell(doc,x,y,label,answer,tag){
+  function ynCell(doc,x,y,label,answer,tag,opts){
+    opts=opts||{};
     doc.text('F1',7.5,x,y,label,FORM_INK);
     const yesX=x+168,noX=yesX+28;
     doc.text('F1',7.5,yesX,y,'Yes',FORM_INK);
     doc.text('F1',7.5,noX,y,'No',FORM_INK);
     if(answer==='Yes')doc.ring(yesX-2,y-2,18,11,tag+'Yes');
     if(answer==='No')doc.ring(noX-2,y-2,16,11,tag+'No');
+    if(opts.strike){
+      const name=ascii(tag||'').replace(/[^A-Za-z0-9]+/g,'');
+      if(name)doc.cmd('% strike:'+name+'\n');
+      const lineY=y+5;
+      const lineW=noX+widthOf('No',7.5,false)+2-x;
+      doc.cmd(rgb(FORM_INK)+' RG\n0.9 w\n'+num(x)+' '+num(PAGE_H-lineY)+' m '+num(x+lineW)+' '+num(PAGE_H-lineY)+' l S\n');
+    }
   }
   function formFooter(doc){
     doc.text('F1',7,FORM_LEFT,790,'*1 Australian Standards AS3786 - 1993',FORM_INK);
@@ -741,7 +749,9 @@
     ];
     left.forEach(function(pair,i){
       ynCell(doc,FORM_LEFT+6,row+i*12,pair[0],ynAnswer(alarm,pair[1]),pair[1]);
-      ynCell(doc,310,row+i*12,right[i][0],ynAnswer(alarm,right[i][1]),right[i][1]);
+      const key=right[i][1];
+      const answer=key==='insect'?'No':ynAnswer(alarm,key);
+      ynCell(doc,310,row+i*12,right[i][0],answer,key,key==='smoke'?{strike:true}:null);
     });
     return y+h+6;
   }
