@@ -441,6 +441,84 @@
   function complianceFileName(cert){
     return 'CCSA-compliance-'+fileName(cert||{});
   }
+  function isoDate(value){
+    const s=String(value||'').slice(0,10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(s)?s:'';
+  }
+  function jobDay(job,form){
+    const service=isoDate(form&&form.date);
+    if(service)return service;
+    return isoDate(job&&job.svc);
+  }
+  function jobFinished(job,form){
+    return !!(form&&(form.done||(job&&job.arch)));
+  }
+  function routeKey(job){
+    job=job||{};
+    const when=job.svc?Date.parse(job.svc):NaN;
+    if(!isNaN(when))return '0|'+String(when).padStart(14,'0')+'|'+String(job.row||0).padStart(5,'0')+'|'+String(job.addr||'');
+    const order=job.order!=null?String(job.order).padStart(5,'0'):'z';
+    return '1|'+order+'|'+String(job.row||0).padStart(5,'0')+'|'+String(job.addr||'');
+  }
+  function agencyMatch(job,form,agencyId){
+    if(!agencyId)return true;
+    const data=dataApi();
+    const code=(form&&form.agent)||(job&&job.agent)||'';
+    const found=data&&data.agencyFromCode?data.agencyFromCode(code):null;
+    if(agencyId==='private')return !!(found&&found.privateOwner);
+    return !!(found&&(found.id===agencyId||found.code===agencyId));
+  }
+  function dayFileName(date){
+    return 'CCSA-jobs-'+(isoDate(date)||'undated')+'.pdf';
+  }
+  function dayPlan(jobs,forms,options){
+    options=options||{};
+    forms=forms||{};
+    const date=isoDate(options.date);
+    const parts=options.parts==='certificates'||options.parts==='reports'?options.parts:'both';
+    const agency=options.agency||'';
+    const data=dataApi();
+    const rows=(jobs||[]).filter(function(job){
+      return job&&jobDay(job,forms[job.id])===date&&agencyMatch(job,forms[job.id],agency);
+    }).sort(function(a,b){
+      const ka=routeKey(a),kb=routeKey(b);
+      return ka<kb?-1:ka>kb?1:0;
+    });
+    const included=[];
+    const skipped=[];
+    rows.forEach(function(job){
+      const form=forms[job.id]||null;
+      const address=String((form&&form.addr)||job.addr||job.street||'Untitled job');
+      if(!jobFinished(job,form)){
+        skipped.push({id:String(job.id||''),address:address,reason:'Not finished'});
+        return;
+      }
+      const cert=data&&data.localCertificate?data.localCertificate(job,form):null;
+      if(!cert){
+        skipped.push({id:String(job.id||''),address:address,reason:'No worksheet to print'});
+        return;
+      }
+      const passing=!!complianceModel(cert).validUntil;
+      const certificate=parts!=='reports'&&passing;
+      const report=parts!=='certificates';
+      if(!certificate&&!report){
+        skipped.push({id:String(job.id||''),address:address,reason:'Visit did not pass, so there is no compliance certificate'});
+        return;
+      }
+      included.push({id:String(job.id||''),address:cert.address||address,certificate:certificate,report:report,cert:cert});
+    });
+    return {date:date,fileName:dayFileName(date),parts:parts,agency:agency,count:included.length,included:included,skipped:skipped};
+  }
+  function buildDayPdf(jobs,forms,options){
+    const plan=dayPlan(jobs,forms,options);
+    const pages=[];
+    plan.included.forEach(function(item){
+      if(item.certificate)drawCompliance(item.cert).forEach(function(page){pages.push(page)});
+      if(item.report)drawCertificate(item.cert).forEach(function(page){pages.push(page)});
+    });
+    plan.bytes=pages.length?buildPdf(pages):null;
+    return plan;
+  }
   function pdfText(bytes){
     const list=bytes instanceof Uint8Array?bytes:new Uint8Array(bytes||[]);
     let s='';
@@ -448,5 +526,5 @@
     return s;
   }
 
-  return {viewModel:viewModel,complianceModel:complianceModel,fileName:fileName,complianceFileName:complianceFileName,buildCertificatePdf:buildCertificatePdf,buildCompliancePdf:buildCompliancePdf,buildPdf:buildPdf,pdfText:pdfText};
+  return {viewModel:viewModel,complianceModel:complianceModel,fileName:fileName,complianceFileName:complianceFileName,dayFileName:dayFileName,dayPlan:dayPlan,buildDayPdf:buildDayPdf,buildCertificatePdf:buildCertificatePdf,buildCompliancePdf:buildCompliancePdf,buildPdf:buildPdf,pdfText:pdfText};
 });
