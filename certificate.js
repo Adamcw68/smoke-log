@@ -474,16 +474,49 @@
     const m=/^(\d{4}-\d{2}-\d{2})/.exec(String(value||'').trim());
     return m?m[1]:'';
   }
+  function anchorDay(job,form){
+    const stamps=[form&&form.updated,form&&form.doneAt,job&&job.updated,job&&job.arch].map(calendarDay).filter(Boolean);
+    return stamps.sort().slice(-1)[0]||'';
+  }
+  /* Finished work uses the day it was completed. A legacy worksheet keeps a date the
+     technician typed. A stale date yields to a later appointment only when that
+     appointment is not still in the future. */
   function jobDay(job,form){
     const svcDay=calendarDay(job&&job.svc);
     const raw=String(form&&form.date!=null?form.date:'').trim();
     const written=calendarDay(raw);
+    if(jobFinished(job,form)){
+      const doneDay=calendarDay(form&&form.doneAt);
+      if(doneDay)return doneDay;
+      const anchor=anchorDay(job,form);
+      const slice=slicedDay(job&&job.svc);
+      const utc=/Z$/i.test(String(job&&job.svc||'').trim());
+      if(svcDay&&written&&svcDay>written){
+        const future=!!(anchor&&svcDay>anchor);
+        if(!future&&(anchor||(utc&&written===slice)))return svcDay;
+      }
+      if(written)return written;
+      return svcDay;
+    }
     if(!written)return svcDay;
     const dateOnly=/^\d{4}-\d{2}-\d{2}$/.test(raw)||/^\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}$/.test(raw);
     const slice=slicedDay(job&&job.svc);
     const utc=/Z$/i.test(String(job&&job.svc||'').trim());
     if(dateOnly&&utc&&svcDay&&slice&&written===slice&&written!==svcDay)return svcDay;
     return written;
+  }
+  function completionPatch(form,on,when){
+    const next=Object.assign({},form||{});
+    const stamp=when||new Date().toISOString();
+    if(on){
+      next.done=true;
+      if(!next.doneAt)next.doneAt=stamp;
+      if(!next.dateSet)next.date=calendarDay(stamp)||next.date||'';
+    }else{
+      next.done=false;
+      next.doneAt='';
+    }
+    return next;
   }
   function jobFinished(job,form){
     return !!((form&&form.done)||(job&&job.arch));
@@ -911,5 +944,5 @@
     return s;
   }
 
-  return {viewModel:viewModel,complianceModel:complianceModel,fileName:fileName,complianceFileName:complianceFileName,calendarDay:calendarDay,jobDay:jobDay,jobFinished:jobFinished,dayFileName:dayFileName,dayPlan:dayPlan,buildDayFiles:buildDayFiles,buildCertificatePdf:buildCertificatePdf,buildCompliancePdf:buildCompliancePdf,buildPdf:buildPdf,pdfText:pdfText};
+  return {viewModel:viewModel,complianceModel:complianceModel,fileName:fileName,complianceFileName:complianceFileName,calendarDay:calendarDay,jobDay:jobDay,jobFinished:jobFinished,completionPatch:completionPatch,dayFileName:dayFileName,dayPlan:dayPlan,buildDayFiles:buildDayFiles,buildCertificatePdf:buildCertificatePdf,buildCompliancePdf:buildCompliancePdf,buildPdf:buildPdf,pdfText:pdfText};
 });

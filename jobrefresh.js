@@ -55,7 +55,12 @@
     const formPatch={};
     const changes=[];
     const oldAuto=[dayOf(j.svc),slicedDay(j.svc)];
-    if(event.iso&&event.iso!==j.svc){j.svc=event.iso;changes.push('time');if(!f.date||oldAuto.indexOf(f.date)>=0)formPatch.date=dayOf(event.iso)}
+    if(event.iso&&event.iso!==j.svc){
+      j.svc=event.iso;changes.push('time');
+      const unfinished=!f.done&&!j.arch;
+      const auto=!f.date||oldAuto.indexOf(f.date)>=0;
+      if(auto||(unfinished&&!f.dateSet))formPatch.date=dayOf(event.iso);
+    }
     if(event.id)j.calEventId=String(event.id);
     if(opts.calendarId)j.calCalendarId=opts.calendarId;
     const loc=clean(event.location);
