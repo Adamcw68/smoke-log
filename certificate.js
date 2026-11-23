@@ -445,13 +445,48 @@
     const s=String(value||'').slice(0,10);
     return /^\d{4}-\d{2}-\d{2}$/.test(s)?s:'';
   }
+  function pad2(n){return String(n).padStart(2,'0')}
+  /* A date-only value is that day. A clock time is the Australia/Sydney day, not the UTC date. */
+  function calendarDay(value){
+    if(value==null||value==='')return '';
+    if(typeof value==='number')return isNaN(value)?'':sydneyDate(value);
+    const s=String(value).trim();
+    if(!s)return '';
+    let m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+    if(m)return m[1]+'-'+m[2]+'-'+m[3];
+    m=/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/.exec(s);
+    if(m){
+      let y=+m[3];if(y<100)y+=2000;
+      const d=+m[1],mo=+m[2];
+      if(d>=1&&d<=31&&mo>=1&&mo<=12)return String(y)+'-'+pad2(mo)+'-'+pad2(d);
+    }
+    const t=Date.parse(s);
+    if(!isNaN(t))return sydneyDate(t);
+    m=/^(\d{4}-\d{2}-\d{2})/.exec(s);
+    return m?m[1]:'';
+  }
+  function sydneyDate(ms){
+    const fmt=new Intl.DateTimeFormat('en-AU',{timeZone:'Australia/Sydney',year:'numeric',month:'2-digit',day:'2-digit'});
+    const p=Object.fromEntries(fmt.formatToParts(new Date(ms)).map(function(x){return [x.type,x.value]}));
+    return p.year+'-'+p.month+'-'+p.day;
+  }
+  function slicedDay(value){
+    const m=/^(\d{4}-\d{2}-\d{2})/.exec(String(value||'').trim());
+    return m?m[1]:'';
+  }
   function jobDay(job,form){
-    const service=isoDate(form&&form.date);
-    if(service)return service;
-    return isoDate(job&&job.svc);
+    const svcDay=calendarDay(job&&job.svc);
+    const raw=String(form&&form.date!=null?form.date:'').trim();
+    const written=calendarDay(raw);
+    if(!written)return svcDay;
+    const dateOnly=/^\d{4}-\d{2}-\d{2}$/.test(raw)||/^\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}$/.test(raw);
+    const slice=slicedDay(job&&job.svc);
+    const utc=/Z$/i.test(String(job&&job.svc||'').trim());
+    if(dateOnly&&utc&&svcDay&&slice&&written===slice&&written!==svcDay)return svcDay;
+    return written;
   }
   function jobFinished(job,form){
-    return !!(form&&(form.done||(job&&job.arch)));
+    return !!((form&&form.done)||(job&&job.arch));
   }
   function routeKey(job){
     job=job||{};
@@ -804,7 +839,7 @@
     const agency=options.agency||'';
     const data=dataApi();
     const rows=(jobs||[]).filter(function(job){
-      return job&&jobDay(job,forms[job.id])===date&&agencyMatch(job,forms[job.id],agency);
+      return job&&jobDay(job,forms[job.id])===date;
     }).sort(function(a,b){
       const ka=routeKey(a),kb=routeKey(b);
       return ka<kb?-1:ka>kb?1:0;
@@ -815,17 +850,28 @@
     rows.forEach(function(job){
       const form=forms[job.id]||null;
       const address=String((form&&form.addr)||job.addr||job.street||'Untitled job');
+      const id=String(job.id||'');
+      if(!agencyMatch(job,form,agency)){
+        if(jobFinished(job,form))skipped.push({id:id,address:address,reason:'Different agency'});
+        return;
+      }
       if(!jobFinished(job,form)){
-        skipped.push({id:String(job.id||''),address:address,reason:'Not finished'});
+        skipped.push({id:id,address:address,reason:'Not finished'});
         return;
       }
-      const cert=data&&data.localCertificate?data.localCertificate(job,form):null;
+      const sheet=Object.assign({alarms:(job.alarms||1),al:[],agent:job.agent||'',tech:job.tech||'',done:true},form||{},{
+        date:date,
+        addr:(form&&form.addr)||job.addr||job.street||'',
+        agent:(form&&form.agent)||job.agent||''
+      });
+      if(job.arch)sheet.done=true;
+      const cert=data&&data.localCertificate?data.localCertificate(job,sheet):null;
       if(!cert){
-        skipped.push({id:String(job.id||''),address:address,reason:'No worksheet to print'});
+        skipped.push({id:id,address:address,reason:'No worksheet to print'});
         return;
       }
-      const passing=!!complianceModel(cert).validUntil;
-      const item={id:String(job.id||''),address:cert.address||address,worksheet:true,certificate:passing,job:job,form:form,cert:cert};
+      const passing=(cert.result==='pass'||cert.result==='replace')&&!!complianceModel(cert).validUntil;
+      const item={id:id,address:cert.address||address,worksheet:true,certificate:passing,job:job,form:sheet,cert:cert};
       worksheets.push(item);
       if(!passing)notes.push({id:item.id,address:item.address,reason:'No compliance certificate'});
     });
@@ -865,5 +911,5 @@
     return s;
   }
 
-  return {viewModel:viewModel,complianceModel:complianceModel,fileName:fileName,complianceFileName:complianceFileName,dayFileName:dayFileName,dayPlan:dayPlan,buildDayFiles:buildDayFiles,buildCertificatePdf:buildCertificatePdf,buildCompliancePdf:buildCompliancePdf,buildPdf:buildPdf,pdfText:pdfText};
+  return {viewModel:viewModel,complianceModel:complianceModel,fileName:fileName,complianceFileName:complianceFileName,calendarDay:calendarDay,jobDay:jobDay,jobFinished:jobFinished,dayFileName:dayFileName,dayPlan:dayPlan,buildDayFiles:buildDayFiles,buildCertificatePdf:buildCertificatePdf,buildCompliancePdf:buildCompliancePdf,buildPdf:buildPdf,pdfText:pdfText};
 });

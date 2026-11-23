@@ -8,7 +8,20 @@
   root.JobRefresh=api;
 })(typeof globalThis!=='undefined'?globalThis:this,function(){
   function clean(v){return v==null?'':String(v).replace(/\s+/g,' ').trim()}
-  function dayOf(iso){const m=String(iso||'').match(/^(\d{4}-\d{2}-\d{2})/);return m?m[1]:''}
+  function sydneyDate(ms){
+    const fmt=new Intl.DateTimeFormat('en-AU',{timeZone:'Australia/Sydney',year:'numeric',month:'2-digit',day:'2-digit'});
+    const p=Object.fromEntries(fmt.formatToParts(new Date(ms)).map(function(x){return [x.type,x.value]}));
+    return p.year+'-'+p.month+'-'+p.day;
+  }
+  function dayOf(iso){
+    const s=String(iso||'').trim();
+    if(!s)return '';
+    if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;
+    const t=Date.parse(s);
+    if(isNaN(t)){const m=s.match(/^(\d{4}-\d{2}-\d{2})/);return m?m[1]:''}
+    return sydneyDate(t);
+  }
+  function slicedDay(iso){const m=String(iso||'').trim().match(/^(\d{4}-\d{2}-\d{2})/);return m?m[1]:''}
   function labeled(description,name){
     const re=new RegExp('^'+name+'\\s*:\\s*(.+)$','im');
     const m=String(description||'').match(re);
@@ -41,8 +54,8 @@
     const f=form||{};
     const formPatch={};
     const changes=[];
-    const oldDay=dayOf(j.svc);
-    if(event.iso&&event.iso!==j.svc){j.svc=event.iso;changes.push('time');if(!f.date||f.date===oldDay)formPatch.date=dayOf(event.iso)}
+    const oldAuto=[dayOf(j.svc),slicedDay(j.svc)];
+    if(event.iso&&event.iso!==j.svc){j.svc=event.iso;changes.push('time');if(!f.date||oldAuto.indexOf(f.date)>=0)formPatch.date=dayOf(event.iso)}
     if(event.id)j.calEventId=String(event.id);
     if(opts.calendarId)j.calCalendarId=opts.calendarId;
     const loc=clean(event.location);

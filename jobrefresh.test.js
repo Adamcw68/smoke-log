@@ -47,6 +47,17 @@ test('stored event id is used and a moved time keeps the inspection',function(){
   assert.equal(j.svc,'2026-11-04T09:00:00+11:00');
 });
 
+test('a morning UTC time stays on the Sydney day and a chosen date stays put',function(){
+  const morning=job({svc:'2026-11-22T21:00:00Z'});
+  const sliced=jr.appointmentPatch(morning,form({date:'2026-11-22',done:true}),event({iso:'2026-11-22T21:40:00Z'}));
+  assert.equal(sliced.formPatch.date,'2026-11-23');
+  assert.equal(sliced.preserved.done,true);
+  assert.equal(sliced.writes,false);
+  const chosen=jr.appointmentPatch(morning,form({date:'2026-11-21',done:true}),event({iso:'2026-11-22T21:40:00Z'}));
+  assert.equal(chosen.formPatch.date,undefined);
+  assert.equal(chosen.preserved.done,true);
+});
+
 test('a service date the user changed is not replaced when the appointment moves',function(){
   const moved=jr.appointmentPatch(job(),form({date:'2026-11-06'}),event({iso:'2026-11-05T10:30:00+11:00'}));
   assert.equal(moved.formPatch.date,undefined);
