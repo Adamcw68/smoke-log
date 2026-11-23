@@ -32,35 +32,42 @@ test('finished jobs on the Sydney day are listed on the Day PDF screen',{timeout
   await page.waitForFunction(()=>typeof openDayPdf==='function'&&window.CCSACertificate,{timeout:60000});
   const shown=await page.evaluate(()=>{
     const alarm={room:'Hallway',power:['240v'],yn:{comply:'Yes',located:'Yes',button:'Yes',affixed:'Yes'}};
-    const morning='2026-11-22T21:00:00.000Z';
+    const today='2026-11-23T06:00:00.000Z';
+    function job(id,addr,street,svc,order){
+      return {id:id,row:order,section:'Holiday',agent:'Ray White Maclean/Yamba',tech:'',last:'',due:'',ident:'',street:street,town:'Yamba',addr:addr,directions:'',contact:'',p1:'',p2:'',ptype:'',beds:null,alarms:1,ladder:'',exp:[],ic:'',notes:'',extra:[],svc:svc,order:order,arch:null,src:'Calendar'};
+    }
     JOBS=[
-      {id:'river',row:1,section:'Holiday',agent:'Ray White Maclean/Yamba',tech:'',last:'',due:'2026-11-23',ident:'',street:'12 River St',town:'Yamba',addr:'12 River St, Yamba NSW 2464',directions:'',contact:'',p1:'',p2:'',ptype:'',beds:null,alarms:1,ladder:'',exp:[],ic:'',notes:'',extra:[],svc:morning,order:1,arch:null,src:'Calendar'},
-      {id:'loose',row:2,section:'Permanent',agent:'Lifestyle Maclean/Yamba',tech:'',last:'',due:'',ident:'',street:'9 Loose St',town:'Yamba',addr:'9 Loose St, Yamba NSW 2464',directions:'',contact:'',p1:'',p2:'',ptype:'',beds:null,alarms:1,ladder:'',exp:[],ic:'',notes:'',extra:[],svc:'',order:2,arch:null,src:'Sheet'},
-      {id:'arch',row:3,section:'Holiday',agent:'Ray White Maclean/Yamba',tech:'',last:'',due:'',ident:'',street:'3 Archived St',town:'Maclean',addr:'3 Archived St, Maclean NSW 2463',directions:'',contact:'',p1:'',p2:'',ptype:'',beds:null,alarms:1,ladder:'',exp:[],ic:'',notes:'',extra:[],svc:'2026-11-23T09:30:00+11:00',order:3,arch:'2026-11-23T00:30:00.000Z',src:'Calendar'},
-      {id:'open',row:4,section:'Permanent',agent:'Ray White Maclean/Yamba',tech:'',last:'',due:'',ident:'',street:'8 Unfinished St',town:'Yamba',addr:'8 Unfinished St, Yamba NSW 2464',directions:'',contact:'',p1:'',p2:'',ptype:'',beds:null,alarms:1,ladder:'',exp:[],ic:'',notes:'',extra:[],svc:'2026-11-23T10:00:00+11:00',order:4,arch:null,src:'Calendar'}
+      job('afternoon','12 River St, Yamba NSW 2464','12 River St','2026-11-23T16:15:00+11:00',1),
+      job('later','14 Beach Pde, Iluka NSW 2466','14 Beach Pde','2026-11-23T16:30:00+11:00',2),
+      job('morning','7 Early St, Yamba NSW 2464','7 Early St','2026-11-23T08:30:00+11:00',3),
+      job('early','4 Early Visit St, Maclean NSW 2463','4 Early Visit St','2026-11-28T09:00:00+11:00',4),
+      job('open','8 Unfinished St, Yamba NSW 2464','8 Unfinished St','2026-11-23T10:00:00+11:00',5)
     ];
-    const card=formFor(JOBS[0]);
-    card.done=true;
-    FORMS.loose={done:true,date:'23/11/2026',agent:'Lifestyle Maclean/Yamba',agentSet:true,addr:JOBS[1].addr,tech:'Craig Robinson',alarms:1,al:[alarm]};
-    FORMS.open={done:false,date:'2026-11-23',agent:'Ray White Maclean/Yamba',addr:JOBS[3].addr,alarms:1,al:[alarm]};
+    JOBS[3].arch='2026-11-23T05:00:00.000Z';
+    function done(addr,date){return {done:true,date:date,agent:'Ray White Maclean/Yamba',agentSet:true,addr:addr,tech:'Craig Robinson',alarms:1,al:[alarm],updated:today}}
+    FORMS.afternoon=done(JOBS[0].addr,'2026-11-19');
+    FORMS.later=done(JOBS[1].addr,'2026-11-09');
+    FORMS.morning=done(JOBS[2].addr,'2026-11-07');
+    FORMS.early=done(JOBS[3].addr,'2026-11-23');
+    FORMS.open={done:false,date:'2026-11-23',agent:'Ray White Maclean/Yamba',addr:JOBS[4].addr,alarms:1,al:[alarm],updated:today};
     save(LS.jobs,JOBS);save(LS.forms,FORMS);
     renderList();
     openDayPdf();
     document.querySelector('#daydate').value='2026-11-23';
     paintDayPdf();
     return {
-      cardDate:FORMS.river.date,
       count:document.querySelector('#daycount').textContent,
       included:document.querySelector('#dayin').innerText,
-      skipped:document.querySelector('#dayskip').innerText
+      skipped:document.querySelector('#dayskip').innerText,
+      hint:document.querySelector('#dayhint').textContent
     };
   });
-  assert.equal(shown.cardDate,'2026-11-23');
-  assert.match(shown.count,/3 worksheets/);
+  assert.match(shown.count,/4 worksheets/);
   assert.match(shown.included,/12 River St/);
-  assert.match(shown.included,/9 Loose St/);
-  assert.match(shown.included,/3 Archived St/);
+  assert.match(shown.included,/14 Beach Pde/);
+  assert.match(shown.included,/7 Early St/);
+  assert.match(shown.included,/4 Early Visit St/);
   assert.match(shown.skipped,/8 Unfinished St, Yamba NSW 2464 — Not finished/);
-  assert.doesNotMatch(shown.included,/8 Unfinished/);
+  assert.match(shown.hint,/Check its worksheet date/);
   await page.screenshot({path:path.join(ART,'day_pdf_phone.png')});
 });

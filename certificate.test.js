@@ -270,6 +270,48 @@ test('a finished morning job stays on the Sydney day and a left-out job is named
   assert.equal(sheets.includes('5 Chosen St'),false);
 });
 
+test('a stale worksheet date follows a later appointment and keeps an earlier or future visit',function(){
+  const alarm={room:'Hallway',power:['240v'],yn:{comply:'Yes',located:'Yes',button:'Yes',affixed:'Yes'}};
+  const today='2026-11-23T06:00:00.000Z';
+  function row(id,addr,svc,date,jobOver,formOver){
+    return {
+      job:Object.assign({id:id,agent:'Ray White Maclean/Yamba',addr:addr,svc:svc,order:1,row:1},jobOver||{}),
+      form:Object.assign({done:true,date:date,agent:'Ray White Maclean/Yamba',agentSet:true,addr:addr,tech:'Craig Robinson',alarms:1,al:[alarm],updated:today},formOver||{})
+    };
+  }
+  const afternoon=row('afternoon','12 River St, Yamba NSW 2464','2026-11-23T16:15:00+11:00','2026-11-19');
+  const later=row('later','14 Beach Pde, Iluka NSW 2466','2026-11-23T16:30:00+11:00','2026-11-09');
+  const morning=row('morning','7 Early St, Yamba NSW 2464','2026-11-23T08:30:00+11:00','2026-11-07');
+  const early=row('early','4 Early Visit St, Maclean NSW 2463','2026-11-28T09:00:00+11:00','2026-11-23',{arch:'2026-11-23T05:00:00.000Z'});
+  const typed=row('typed','5 Chosen St, Yamba NSW 2464','2026-11-13T09:00:00+11:00','2026-11-16',{},{dateSet:true});
+  const agreed=row('agreed','2 Old St, Yamba NSW 2464','2026-11-02T09:00:00+11:00','2026-11-02',{arch:today});
+  assert.equal(certs.jobDay(afternoon.job,afternoon.form),'2026-11-23');
+  assert.equal(certs.jobDay(later.job,later.form),'2026-11-23');
+  assert.equal(certs.jobDay(morning.job,morning.form),'2026-11-23');
+  assert.equal(certs.jobDay(early.job,early.form),'2026-11-23');
+  assert.equal(certs.jobDay(typed.job,typed.form),'2026-11-16');
+  assert.equal(certs.jobDay(agreed.job,agreed.form),'2026-11-02');
+  const stamped=certs.completionPatch({date:'2026-11-19'},true,today);
+  assert.equal(stamped.doneAt,today);
+  assert.equal(stamped.date,'2026-11-23');
+  assert.equal(certs.jobDay({id:'new',svc:'2026-11-23T16:15:00+11:00',addr:'1 New St'},stamped),'2026-11-23');
+  const kept=certs.completionPatch({date:'2026-11-16',dateSet:true},true,today);
+  assert.equal(kept.date,'2026-11-16');
+  const cleared=certs.completionPatch(stamped,false);
+  assert.equal(cleared.done,false);
+  assert.equal(cleared.doneAt,'');
+  const again=certs.completionPatch(stamped,true,'2026-11-24T00:00:00.000Z');
+  assert.equal(again.doneAt,today);
+  const jobs=[afternoon,later,morning,early,typed,agreed].map(function(row){return row.job});
+  const forms={};
+  [afternoon,later,morning,early,typed,agreed].forEach(function(row){forms[row.job.id]=row.form});
+  const plan=certs.dayPlan(jobs,forms,{date:'2026-11-23',agency:''});
+  assert.deepEqual(plan.worksheets.map(function(item){return item.id}).sort(),['afternoon','early','later','morning']);
+  assert.equal(plan.worksheets.some(function(item){return item.id==='typed'||item.id==='agreed'}),false);
+  assert.equal(certs.dayPlan(jobs,forms,{date:'2026-11-02'}).worksheets.map(function(item){return item.id}).join(','),'agreed');
+  assert.equal(certs.dayPlan(jobs,forms,{date:'2026-11-16'}).worksheets.map(function(item){return item.id}).join(','),'typed');
+});
+
 test('the worksheet page circles the chosen answers and splits a long visit',function(){
   const yn={comply:'Yes',located:'Yes',button:'Yes',affixed:'No',cleaned:'Yes',battery:'Yes'};
   function alarm(n){

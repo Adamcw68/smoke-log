@@ -434,7 +434,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="alarmedit.js"></script><script src="labelread.js"></script><script src="addressfind.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="calpick.js"></script><script src="pdflib.js"></script><script src="transfer.js"></script><script src="firebase-config.js"></script><script src="livesync.js"></script><script src="portaldata.js"></script><script src="certificate.js"></script><script src="invoice.js"></script><script src="requests.js"></script><script src="portaladmin.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.58.0 (20261123)';
+const APP_VERSION='2.59.0 (20261123)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -1523,10 +1523,23 @@ function ocrApply(j,f,i,k){const st=OCR.res.get(j.id+'|'+i),inp=document.getElem
 const isArch=j=>!!(j&&j.arch), isDone=j=>!!(FORMS[j.id]&&FORMS[j.id].done);
 const onList=()=>!location.hash||location.hash==='#';
 function hhmm(iso){const d=new Date(iso);return pad2(d.getHours())+':'+pad2(d.getMinutes())}
+function applyDone(f,on,when){
+  if(!f)return;
+  if(window.CCSACertificate&&CCSACertificate.completionPatch){
+    const next=CCSACertificate.completionPatch(f,on,when);
+    f.done=next.done;f.doneAt=next.doneAt||'';if(next.date)f.date=next.date;
+    return}
+  f.done=!!on;if(!f.done)f.doneAt='';
+}
+function finishOnArchive(ids){
+  let changed=false;
+  (ids||[]).forEach(id=>{const j=JOBS.find(x=>x.id===id);if(!j)return;const f=formFor(j);if(f.done)return;applyDone(f,true);changed=true});
+  if(changed)save(LS.forms,FORMS);
+}
 function setArch(ids,on){const t=new Date().toISOString(),prev=[]; // archive only sets j.arch. Photos, worksheets and PDFs stay.
   ids.forEach(id=>{const j=JOBS.find(x=>x.id===id);if(j){prev.push([id,j.arch||null]);j.arch=on?t:null}});save(LS.jobs,JOBS);return prev}
 function undoArch(prev,msg){prev.forEach(([id,a])=>{const j=JOBS.find(x=>x.id===id);if(j)j.arch=a});save(LS.jobs,JOBS);if(onList())renderList();toast(msg);portalNudge()}
-function archiveJobs(ids,msg){const prev=setArch(ids,true);if(!prev.length)return;
+function archiveJobs(ids,msg){const prev=setArch(ids,true);if(!prev.length)return;finishOnArchive(ids);
   if(onList())renderList();else location.hash='';
   snack(msg||(prev.length>1?'Archived '+prev.length+' jobs':'Job archived'),'Undo',()=>undoArch(prev,'Archive undone'));
   if(gcalLive())pushArchivedIds(ids).then(r=>{if(r&&r.summary)toast(r.summary);if(onList())renderList()}).catch(e=>{console.warn(e);toast('Archived on this phone. Calendar was not changed.')});
@@ -1610,7 +1623,7 @@ function openDayPdf(){
   const agencies=window.CCSAPortalData&&CCSAPortalData.agencies?CCSAPortalData.agencies():[];
   const opts=agencies.map(a=>`<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('');
   const g=document.createElement('div');g.id='daygate';g.className='gate daygate';g.setAttribute('role','dialog');g.setAttribute('aria-modal','true');g.setAttribute('aria-labelledby','daytitle');
-  g.innerHTML=`<div class="gbox"><h2 id="daytitle">Day PDF</h2><p>Two files for the finished jobs on a day, in route order. The day is the Australia/Sydney date. Worksheets are one PDF. Compliance certificates for passing jobs are a separate PDF. Each job starts on a new page. Service reports are not included.</p><label for="daydate">Date</label><input class="t" id="daydate" type="date" value="${todayISO()}"><label for="dayagency">Agency</label><select class="t" id="dayagency"><option value="">All agencies</option>${opts}<option value="private">Private Owner</option></select><p id="daycount"></p><p class="note">In this PDF</p><ul class="dayskip" id="dayin"></ul><p class="note">Not in this PDF</p><ul class="dayskip" id="dayskip"></ul><div class="stack"><button type="button" class="btn pri" id="dayws">Download worksheets PDF</button><button type="button" class="btn pri" id="daycc">Download certificates PDF</button><button type="button" class="btn" id="dayclose">Close</button></div></div>`;
+  g.innerHTML=`<div class="gbox"><h2 id="daytitle">Day PDF</h2><p>Two files for the finished jobs on a day, in route order. The day is the Australia/Sydney date. Worksheets are one PDF. Compliance certificates for passing jobs are a separate PDF. Each job starts on a new page. Service reports are not included.</p><label for="daydate">Date</label><input class="t" id="daydate" type="date" value="${todayISO()}"><label for="dayagency">Agency</label><select class="t" id="dayagency"><option value="">All agencies</option>${opts}<option value="private">Private Owner</option></select><p id="daycount"></p><p class="note">In this PDF</p><ul class="dayskip" id="dayin"></ul><p class="note">Not in this PDF</p><ul class="dayskip" id="dayskip"></ul><p class="note" id="dayhint">Job done on another date? Check its worksheet date.</p><div class="stack"><button type="button" class="btn pri" id="dayws">Download worksheets PDF</button><button type="button" class="btn pri" id="daycc">Download certificates PDF</button><button type="button" class="btn" id="dayclose">Close</button></div></div>`;
   document.body.appendChild(g);
   ['daydate','dayagency'].forEach(id=>{const el=$('#'+id);if(el)el.oninput=el.onchange=paintDayPdf});
   $('#dayclose').onclick=()=>g.remove();
@@ -1656,7 +1669,7 @@ function renderList(){
   if($('#srcf'))$('#srcf').onchange=e=>{UI.src=e.target.value==='*'?null:e.target.value;save(LS.ui,UI);renderList()};
   if($('#impx'))$('#impx').onclick=()=>{LASTIMP=null;$('#impsum').remove()};
   m.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{UI.filter=b.dataset.f;save(LS.ui,UI);renderList()});
-  m.querySelectorAll('[data-done]').forEach(b=>b.onclick=()=>{const j=JOBS.find(x=>x.id===b.dataset.done);const f=formFor(j);const go=()=>{f.done=!f.done;touch(j.id);save(LS.forms,FORMS);renderList();portalNudge();if(f.done){offerArchive(j);noteMarkedDone(j)}else hideSnack()};if(f.done)go();else cleanGate(j,f,'mark done',go)});
+  m.querySelectorAll('[data-done]').forEach(b=>b.onclick=()=>{const j=JOBS.find(x=>x.id===b.dataset.done);const f=formFor(j);const go=()=>{applyDone(f,!f.done);touch(j.id);save(LS.forms,FORMS);renderList();portalNudge();if(f.done){offerArchive(j);noteMarkedDone(j)}else hideSnack()};if(f.done)go();else cleanGate(j,f,'mark done',go)});
   m.querySelectorAll('[data-arch]').forEach(b=>b.onclick=()=>archiveJobs([b.dataset.arch]));
   m.querySelectorAll('[data-restore]').forEach(b=>b.onclick=()=>restoreJobs([b.dataset.restore]));
   m.querySelectorAll('.swp>.card[data-id]').forEach(c=>bindSwipe(c,c.dataset.id,c.parentElement.classList.contains('r')?'right':'left'));
@@ -1894,12 +1907,14 @@ function setPath(f,path,v){const p=path.split('.');let o=f;for(let k=0;k<p.lengt
 function getPath(f,path){return path.split('.').reduce((o,k)=>o==null?o:o[k],f)}
 function bindForm(j,f){
   const m=$('main');
-  m.oninput=e=>{const t=e.target;if(t.dataset.path==='done'&&t.checked&&!f.done&&missingClean(f).length){t.checked=false;cleanGate(j,f,'mark done',()=>{f.done=true;t.checked=true;touch(j.id);save(LS.forms,FORMS);portalNudge();noteMarkedDone(j);const pr=$('#donepr');if(pr&&!isArch(j)){pr.hidden=false;pr.scrollIntoView({block:'nearest'})}});return}
+  m.oninput=e=>{const t=e.target;if(t.dataset.path==='done'&&t.checked&&!f.done&&missingClean(f).length){t.checked=false;cleanGate(j,f,'mark done',()=>{applyDone(f,true);t.checked=true;const dateEl=m.querySelector('[data-path="date"]');if(dateEl)dateEl.value=f.date||'';touch(j.id);save(LS.forms,FORMS);portalNudge();noteMarkedDone(j);const pr=$('#donepr');if(pr&&!isArch(j)){pr.hidden=false;pr.scrollIntoView({block:'nearest'})}});return}
     if(t.dataset.tother){techSet(f,'other',t.value);const tp=$('#tprint b');if(tp)tp.textContent=f.tech;m.querySelectorAll('[data-tpick]').forEach(b=>b.classList.toggle('on',b.dataset.tpick===f.techOther));touch(j.id);return}if(!t.dataset.path)return;let v=t.type==='checkbox'?t.checked:t.value;if(t.dataset.path==='asPhotos'){f.asPhotosSet=true;syncAsPhotos(f)}
     if(/expiry$/.test(t.dataset.path)){v=window.LabelRead?LabelRead.formatExpiryTyping(v,(e.inputType||'').startsWith('delete')):v.replace(/[^\d\/]/g,'');t.value=v}
     if(/\.db$/.test(t.dataset.path)&&window.SheetFill){const prev=getPath(f,t.dataset.path)||'';const typed=String(t.value);const partial=/^\d+\.$/.test(typed);
       if(partial){v=typed}
       else{const fin=SheetFill.soundFinal(typed);if(!fin.ok){t.value=prev;toast(fin.message);return}v=fin.value;t.value=v}}
+    if(t.dataset.path==='date')f.dateSet=true;
+    if(t.dataset.path==='done'){applyDone(f,!!t.checked);const dateEl=m.querySelector('[data-path="date"]');if(dateEl)dateEl.value=f.date||'';touch(j.id);return}
     setPath(f,t.dataset.path,v);touch(j.id)};
   m.onchange=e=>{const t=e.target;if(t.dataset.path==='done'&&t.checked!==!!f.done)return;if(t.dataset.tother){addRecent(f.techOther);save(LS.forms,FORMS);return}
     if(t.dataset.path==='agent'&&window.SheetFill){const ag=SheetFill.agencyFields(t.value);t.value=ag.agent;setPath(f,'agent',ag.agent);f.agentSet=true;j.agent=ag.agent;if(ag.tenancy){f.tenancy=ag.tenancy;f.tenancySet=true;j.section=ag.tenancy;const box=m.querySelector('[data-tenancy]');if(box)box.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.v===ag.tenancy))}save(LS.jobs,JOBS);touch(j.id)}
@@ -2087,7 +2102,7 @@ async function renderPDF(id){
   previewPDF(r.bytes);
   if(canShare)$('#share').onclick=async()=>{try{const data=await worksheetOnlyBytes(bytes);const shareFile=new File([data],name,{type:'application/pdf'});await navigator.share({files:[shareFile],title:name,text:'Smoke alarm worksheet – '+j.addr})}catch(e){if(e.name!=='AbortError')toast(e.message&&/worksheet pages/.test(e.message)?e.message:'Share failed – use Download')}};
   $('#dl').onclick=async()=>{try{downloadBytes(await worksheetOnlyBytes(bytes),name,'application/pdf')}catch(e){toast(e.message||'Download failed. Nothing was sent.')}};
-  $('#mark').onclick=()=>{const go=()=>{f.done=!f.done;touch(id);save(LS.forms,FORMS);portalNudge();renderPDF(id);if(f.done){offerArchive(j);noteMarkedDone(j)}else hideSnack()};if(f.done)go();else cleanGate(j,f,'mark done',go)};
+  $('#mark').onclick=()=>{const go=()=>{applyDone(f,!f.done);touch(id);save(LS.forms,FORMS);portalNudge();renderPDF(id);if(f.done){offerArchive(j);noteMarkedDone(j)}else hideSnack()};if(f.done)go();else cleanGate(j,f,'mark done',go)};
   {const miss=missingClean(f);if(miss.length){const w=document.createElement('div');w.className='cwarn';w.id='cwarn';w.innerHTML=`⚠️ Cleaning not recorded: <b>${alNames(miss)}</b> <button type="button" class="btn" id="cwfix">🧽 Fix</button>`;$('.pdfbox').prepend(w);$('#cwfix').onclick=()=>gotoFix(id,miss[0])}
    const un=unansNew(f);if(un.length){const w=document.createElement('div');w.className='cwarn info';w.id='nwarn';w.innerHTML=`ℹ️ <b>New alarm?</b> not answered: <b>${alNames(un)}</b> – treated as No`;$('.pdfbox').prepend(w)}}
 }
