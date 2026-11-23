@@ -1,6 +1,6 @@
 /* Alarm editor helpers. Brand and model lists, power labels, and
-   "same as previous alarm". Location and photos are never copied.
-   Mains power is stored as 240v and shown as 240V, never HW. */
+   "same as previous alarm". Expiry, manufacture date, location and photos
+   are never copied. Mains power is stored as 240v and shown as 240V, never HW. */
 (function(root,factory){
   const api=factory();
   if(typeof module==='object'&&module.exports)module.exports=api;
@@ -80,17 +80,16 @@
   }
   function hasDetails(alarm){
     if(!alarm)return false;
-    if(clean(alarm.manufacturer)||clean(alarm.model)||clean(alarm.expiry))return true;
+    if(clean(alarm.manufacturer)||clean(alarm.model))return true;
     if(normalizePower(alarm.power).length)return true;
     return Object.keys(answerMap(alarm.yn)).length>0;
   }
-  /* Copy brand, model, power, expiry and Yes/No answers. Not location or photos. */
+  /* Copy brand, model, power and Yes/No answers. Expiry, manufacture date, location and photos stay. */
   function copyFromPrevious(prev,current){
     const fields={
       manufacturer:clean(prev&&prev.manufacturer),
       model:clean(prev&&prev.model),
       power:normalizePower(prev&&prev.power),
-      expiry:clean(prev&&prev.expiry),
       yn:answerMap(prev&&prev.yn)
     };
     return {fields:fields,empty:!hasDetails(prev),overwrite:hasDetails(current)};

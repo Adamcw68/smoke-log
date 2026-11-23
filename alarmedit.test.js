@@ -34,13 +34,13 @@ test('brand and model lists include the common alarms and keep a saved custom va
 
 test('same as previous copies details and power, and leaves location and photos alone',function(){
   const prev={
-    manufacturer:'Clipsal',model:'755LPSMA4',power:['HW','Lithium'],expiry:'08/2031',
+    manufacturer:'Clipsal',model:'755LPSMA4',power:['HW','Lithium'],expiry:'08/2031',mfd:'08/2021',
     mount:'Ceiling',room:'Hallway',bedno:'2',other:'Stairs',adjacent:'Bed 1',
     photos:['shot-a'],db:'90',sensor:['Photo-Electric'],isNew:true,
     yn:{comply:'Yes',located:'No',button:'Yes',cleaned:'Yes'}
   };
   const cur={
-    manufacturer:'Old',model:'X',power:['9v'],expiry:'01/2020',
+    manufacturer:'Old',model:'X',power:['9v'],expiry:'01/2020',mfd:'01/2010',
     mount:'Wall',room:'Lounge',bedno:'',other:'',adjacent:'Door',
     photos:['shot-b'],yn:{comply:'No'}
   };
@@ -50,7 +50,8 @@ test('same as previous copies details and power, and leaves location and photos 
   assert.equal(plan.fields.manufacturer,'Clipsal');
   assert.equal(plan.fields.model,'755LPSMA4');
   assert.deepEqual(plan.fields.power,['240v','Lithium']);
-  assert.equal(plan.fields.expiry,'08/2031');
+  assert.equal(plan.fields.expiry,undefined);
+  assert.equal(plan.fields.mfd,undefined);
   assert.deepEqual(plan.fields.yn,{comply:'Yes',located:'No',button:'Yes',cleaned:'Yes'});
   assert.equal(plan.fields.mount,undefined);
   assert.equal(plan.fields.room,undefined);
@@ -66,10 +67,14 @@ test('same as previous copies details and power, and leaves location and photos 
   assert.equal(alarm.powerLabel('9v'),'9V');
   assert.equal(alarm.powerLabel('Lithium'),'10yr lithium');
   assert.equal(/\bHW\b/.test(alarm.powerLabel('HW')+alarm.powerLabel('240v')),false);
-  const blank=alarm.copyFromPrevious({mount:'Ceiling',room:'Hallway',photos:['only']},{});
+  const blank=alarm.copyFromPrevious({mount:'Ceiling',room:'Hallway',photos:['only'],expiry:'08/2031',mfd:'08/2021'},{expiry:'01/2020',mfd:'01/2010'});
   assert.equal(blank.empty,true);
   assert.equal(blank.overwrite,false);
+  assert.equal(blank.fields.expiry,undefined);
+  assert.equal(blank.fields.mfd,undefined);
   assert.deepEqual(blank.fields.power,[]);
+  assert.equal(cur.expiry,'01/2020');
+  assert.equal(cur.mfd,'01/2010');
 });
 
 test('the worksheet uses dropdowns, copies the previous alarm, and patches Basil colour only',function(){
@@ -79,6 +84,9 @@ test('the worksheet uses dropdowns, copies the previous alarm, and patches Basil
   const end=html.indexOf('function serviceCert');
   const fn=html.slice(start,end);
   assert.match(fn,/Same as previous alarm/);
+  assert.match(fn,/keeps its own expiry and manufacture date/);
+  assert.match(html,/Expiry, manufacture date, location and photos stay/);
+  assert.equal(html.includes('power, expiry and Yes/No'),false);
   assert.match(fn,/data-sameprev/);
   assert.match(fn,/brandChoiceHTML/);
   assert.match(fn,/modelChoiceHTML/);

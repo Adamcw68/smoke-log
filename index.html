@@ -432,7 +432,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="alarmedit.js"></script><script src="labelread.js"></script><script src="addressfind.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="pdflib.js"></script><script src="transfer.js"></script><script src="firebase-config.js"></script><script src="livesync.js"></script><script src="portaldata.js"></script><script src="certificate.js"></script><script src="invoice.js"></script><script src="requests.js"></script><script src="portaladmin.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.56.0 (20261123)';
+const APP_VERSION='2.56.1 (20261123)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -1677,7 +1677,7 @@ function ncHTML(a,i){const nv=a.newAns||'',c=a.yn.cleaned||'',isN=nv==='Yes';
 function alarmHTML(a,i){
   if(window.CCSAAlarm){const p=CCSAAlarm.normalizePower(a.power);if(JSON.stringify(p)!==JSON.stringify(a.power||[]))a.power=p}
   return`<div class="alarm ${a.isNew?'isnew':''}" id="al${i}"><h3>Smoke alarm #${i+1}<span class="badge newb" id="newb${i}" ${a.isNew?'':'hidden'}>🆕 NEW</span>${i>=3?' <span class="note">(goes in Notes)</span>':''}<button type="button" data-allyes="${i}">All Yes</button></h3>
-  ${i>0?'<div class="row"><button type="button" data-sameprev="'+i+'">Same as previous alarm</button></div>':''}
+  ${i>0?'<div class="row"><button type="button" data-sameprev="'+i+'" title="Copies brand, model, power and Yes/No answers. This alarm keeps its own expiry and manufacture date. Location and photos stay.">Same as previous alarm</button></div>':''}
   ${a.calRef?`<p class="note">Calendar text kept for review: ${esc(a.calRef)}</p>`:''}
   ${photoBox('al'+i,'Photos – alarm '+(i+1),ARCH_VIEW)}<div id="ocr-al${i}"></div>
   <div class="yn nc" id="nc${i}">${ncHTML(a,i)}</div>
@@ -1853,12 +1853,12 @@ function bindForm(j,f){
     const yn=b.parentElement.dataset.yn;
     if(yn){const[i,k]=yn.split('.');const cur=f.al[i].yn[k];const nv=cur===b.dataset.v?'':b.dataset.v;f.al[i].yn[k]=nv;b.parentElement.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.v===nv));if(k==='cleaned')paintNew(+i,f.al[i],`[data-yn] [data-v="${b.dataset.v}"]`);touch(j.id);return}
     if(b.dataset.sameprev!=null){const i=+b.dataset.sameprev,prev=f.al[i-1],a=f.al[i];if(!prev||!a||!window.CCSAAlarm)return;const plan=CCSAAlarm.copyFromPrevious(prev,a);
-      if(plan.empty){toast('Alarm '+i+' has no brand, model, power, expiry or answers to copy.');return}
-      if(plan.overwrite&&!confirm('Alarm '+(i+1)+' already has details. Replace its brand, model, power, expiry and Yes/No answers with alarm '+i+'? Location and photos stay as they are.'))return;
-      const loc={mount:a.mount,room:a.room,bedno:a.bedno,other:a.other,adjacent:a.adjacent},photos=(a.photos||[]).slice();
-      a.manufacturer=plan.fields.manufacturer;a.model=plan.fields.model;a.power=plan.fields.power.slice();a.expiry=plan.fields.expiry;a.yn=Object.assign({},plan.fields.yn);
-      a.mount=loc.mount;a.room=loc.room;a.bedno=loc.bedno;a.other=loc.other;a.adjacent=loc.adjacent;a.photos=photos;
-      const box=$('#alarms');if(box)box.innerHTML=f.al.slice(0,f.alarms).map(alarmHTML).join('');paintAllThumbs(f);touch(j.id);save(LS.forms,FORMS);toast('Same as alarm '+i+'. Location and photos were not copied.');return}
+      if(plan.empty){toast('Alarm '+i+' has no brand, model, power or answers to copy.');return}
+      if(plan.overwrite&&!confirm('Alarm '+(i+1)+' already has details. Replace its brand, model, power and Yes/No answers with alarm '+i+'? Expiry, manufacture date, location and photos stay as they are.'))return;
+      const loc={mount:a.mount,room:a.room,bedno:a.bedno,other:a.other,adjacent:a.adjacent},photos=(a.photos||[]).slice(),expiry=a.expiry,made=a.mfd;
+      a.manufacturer=plan.fields.manufacturer;a.model=plan.fields.model;a.power=plan.fields.power.slice();a.yn=Object.assign({},plan.fields.yn);
+      a.expiry=expiry;a.mfd=made;a.mount=loc.mount;a.room=loc.room;a.bedno=loc.bedno;a.other=loc.other;a.adjacent=loc.adjacent;a.photos=photos;
+      const box=$('#alarms');if(box)box.innerHTML=f.al.slice(0,f.alarms).map(alarmHTML).join('');paintAllThumbs(f);touch(j.id);save(LS.forms,FORMS);toast('Same as alarm '+i+'. Expiry, manufacture date, location and photos were not copied.');return}
     if(b.dataset.allyes!=null){const a=f.al[b.dataset.allyes];qsFor(a).forEach(([k])=>a.yn[k]='Yes');paintNew(+b.dataset.allyes,a);$('#al'+b.dataset.allyes).querySelectorAll('[data-yn] button').forEach(x=>x.classList.toggle('on',x.dataset.v==='Yes'));touch(j.id);return}
     if(b.dataset.exp10!=null){const d=(f.date||todayISO()).split('-');const v=d[1]+'/'+(+d[0]+10);f.al[b.dataset.exp10].expiry=v;$(`[data-path="al.${b.dataset.exp10}.expiry"]`).value=v;touch(j.id);return}
     if(b.dataset.step){f.alarms=Math.min(20,Math.max(1,(f.alarms||1)+ +b.dataset.step));while(f.al.length<f.alarms)f.al.push(blankAlarm(j.exp[f.al.length]));$('#nal').textContent=f.alarms;$('#alarms').innerHTML=f.al.slice(0,f.alarms).map(alarmHTML).join('');paintAllThumbs(f);syncAsPhotos(f);touch(j.id)}
