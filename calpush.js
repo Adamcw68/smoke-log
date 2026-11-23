@@ -51,19 +51,18 @@
     const bg=ev&&String(ev.background||'').toLowerCase();
     return bg===BASIL_EVENT_BG?BASIL_EVENT_COLOR_ID:null;
   }
-  function matchVisitEvent(job,events,form,matches){
+  function matchOnDay(job,events,form,matches){
     matches=matches||function(){return false};
-    if(!job||!job.arch)return {status:'not-archived'};
     const day=visitDay(job,form);
     if(!day)return {status:'absent',reason:'no-visit-date'};
     const list=(events||[]).filter(function(ev){return ev&&matches(job,ev)&&eventDay(ev)===day});
     const withId=list.filter(function(ev){return ev.id});
     if(!list.length)return {status:'absent',reason:'no-event-that-day',day};
-    if(job.calEventId){
+    if(job&&job.calEventId){
       const bound=withId.filter(function(ev){return ev.id===job.calEventId});
       if(bound.length===1)return {status:'ok',event:bound[0],day};
     }
-    if(job.svc){
+    if(job&&job.svc){
       const exact=withId.filter(function(ev){return sameInstant(ev.iso||ev.dateTime,job.svc)});
       if(exact.length===1)return {status:'ok',event:exact[0],day};
       if(exact.length>1)return {status:'ambiguous',reason:'same-instant',day,count:exact.length};
@@ -71,6 +70,14 @@
     if(list.length>1)return {status:'ambiguous',reason:'same-day',day,count:list.length};
     if(withId.length===1)return {status:'ok',event:withId[0],day};
     return {status:'noid',reason:'no-event-id',day};
+  }
+  function matchVisitEvent(job,events,form,matches){
+    if(!job||!job.arch)return {status:'not-archived'};
+    return matchOnDay(job,events,form,matches);
+  }
+  function matchCompletedEvent(job,events,form,matches){
+    if(!form||form.done!==true)return {status:'not-complete'};
+    return matchOnDay(job,events,form,matches);
   }
   function worksheetTouched(form){
     if(!form)return false;
@@ -182,6 +189,9 @@
   function buildEventPatch(description){
     return {colorId:BASIL_EVENT_COLOR_ID,description:description};
   }
+  function buildColourPatch(){
+    return {colorId:BASIL_EVENT_COLOR_ID};
+  }
   function remoteDay(remote){
     if(!remote)return '';
     if(remote.iso)return eventDay(remote);
@@ -219,6 +229,32 @@
     catch(e){return {ok:false,pending:true,status:'error',eventId:match.event.id,day:match.day,error:String(e&&e.message||e),patch:patch}}
     return {ok:true,pending:false,status:'updated',eventId:match.event.id,day:match.day,patch:patch};
   }
+  /* Colour only. Used when Job done is ticked. Title, time and description are not sent. */
+  async function syncBasilColour(opts){
+    opts=opts||{};
+    const job=opts.job,form=opts.form,events=opts.events||[];
+    const colorId=basilColorIdFromPalette(opts.palette);
+    if(!colorId)return {ok:false,pending:true,status:'palette',error:'Basil colour id was not verified. Calendar was not changed.'};
+    const match=matchCompletedEvent(job,events,form,opts.matches);
+    if(match.status!=='ok')return {ok:false,pending:false,status:match.status,reason:match.reason,day:match.day};
+    if(opts.offline)return {ok:false,pending:true,status:'offline',eventId:match.event.id,day:match.day,error:'offline'};
+    const transport=opts.transport;
+    if(!transport)return {ok:false,pending:true,status:'error',eventId:match.event.id,error:'no transport'};
+    let remote;
+    try{remote=await transport.get(match.event.id)}
+    catch(e){return {ok:false,pending:true,status:'error',eventId:match.event.id,day:match.day,error:String(e&&e.message||e)}}
+    if(!remote||remote.id&&remote.id!==match.event.id)return {ok:false,pending:false,status:'absent',reason:'remote-id',eventId:match.event.id,day:match.day};
+    if(isSeriesMaster(remote))return {ok:false,pending:false,status:'ambiguous',reason:'series-master',eventId:match.event.id,day:match.day};
+    const gotDay=remoteDay(remote);
+    if(gotDay&&gotDay!==match.day)return {ok:false,pending:false,status:'absent',reason:'remote-day',eventId:match.event.id,day:match.day};
+    const patch=buildColourPatch();
+    if(String(remote.colorId||'')===colorId){
+      return {ok:true,pending:false,status:'current',eventId:match.event.id,day:match.day,patch:patch,skippedWrite:true};
+    }
+    try{await transport.patch(match.event.id,patch,{sendUpdates:'none'})}
+    catch(e){return {ok:false,pending:true,status:'error',eventId:match.event.id,day:match.day,error:String(e&&e.message||e),patch:patch}}
+    return {ok:true,pending:false,status:'updated',eventId:match.event.id,day:match.day,patch:patch};
+  }
   function summariseResults(results){
     results=results||[];
     const count=function(s){return results.filter(function(r){return r.status===s}).length};
@@ -230,6 +266,7 @@
     if(absent)bits.push(absent+' not matched to one event');
     if(count('ambiguous'))bits.push(count('ambiguous')+' ambiguous and left unchanged');
     if(count('not-archived'))bits.push(count('not-archived')+' not archived, left unchanged');
+    if(count('not-complete'))bits.push(count('not-complete')+' not completed, left unchanged');
     const held=results.filter(function(r){return r.pending}).length;
     if(held)bits.push(held+' not updated on the calendar');
     if(!bits.length)return 'Calendar was not changed.';
@@ -244,6 +281,9 @@
     mergeVisitDescription:mergeVisitDescription,
     stripTenantDetails:stripTenantDetails,
     buildEventPatch:buildEventPatch,
+    buildColourPatch:buildColourPatch,
+    matchCompletedEvent:matchCompletedEvent,
+    syncBasilColour:syncBasilColour,
     syncVisit:syncVisit,
     summariseResults:summariseResults,
     worksheetTouched:worksheetTouched,
