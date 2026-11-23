@@ -189,3 +189,33 @@ test('summary reports backfill without calling a failure a success',function(){
   assert.match(msg,/1 ambiguous and left unchanged/);
   assert.match(msg,/1 not updated on the calendar/);
 });
+
+test('ticking a job done sets Basil and does not send title, time or description',async function(){
+  const calls={};
+  const j=job({arch:null});
+  const remote=ev();
+  remote.body={id:'ev-2026',colorId:'2',description:remote.description,summary:remote.summary,location:remote.location,start:{dateTime:remote.iso}};
+  const res=await cal.syncBasilColour({job:j,form:form({done:true}),events:[ev()],matches:SAME,palette:PALETTE,transport:transport(remote,calls)});
+  assert.equal(res.ok,true);
+  assert.equal(res.status,'updated');
+  assert.deepEqual(Object.keys(res.patch),['colorId']);
+  assert.equal(res.patch.colorId,'10');
+  assert.equal(calls.patch.length,1);
+  assert.deepEqual(calls.patch[0].body,{colorId:'10'});
+  assert.equal(calls.patch[0].body.description,undefined);
+  assert.equal(calls.patch[0].body.summary,undefined);
+  assert.equal(calls.patch[0].body.start,undefined);
+  assert.deepEqual(calls.patch[0].q,{sendUpdates:'none'});
+  const again=await cal.syncBasilColour({job:j,form:form({done:true}),events:[ev()],matches:SAME,palette:PALETTE,transport:transport({body:{id:'ev-2026',colorId:'10',description:remote.description,start:{dateTime:remote.iso}}},{})});
+  assert.equal(again.status,'current');
+  assert.equal(again.skippedWrite,true);
+  const open=await cal.syncVisit({job:j,form:form({done:true}),events:[ev()],matches:SAME,palette:PALETTE,transport:transport(remote,{get:[],patch:[]})});
+  assert.equal(open.status,'not-archived');
+  const notDone=await cal.syncBasilColour({job:j,form:form({done:false}),events:[ev()],matches:SAME,palette:PALETTE,transport:transport(remote,{get:[],patch:[]})});
+  assert.equal(notDone.status,'not-complete');
+  const failed=await cal.syncBasilColour({job:j,form:form({done:true}),events:[ev()],matches:SAME,palette:PALETTE,transport:transport({body:remote.body,patchError:'network down'},{get:[],patch:[]})});
+  assert.equal(failed.ok,false);
+  assert.equal(failed.pending,true);
+  assert.deepEqual(failed.patch,{colorId:'10'});
+  assert.match(failed.error,/network down/);
+});
