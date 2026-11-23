@@ -267,6 +267,7 @@
     if(count('ambiguous'))bits.push(count('ambiguous')+' ambiguous and left unchanged');
     if(count('not-archived'))bits.push(count('not-archived')+' not archived, left unchanged');
     if(count('not-complete'))bits.push(count('not-complete')+' not completed, left unchanged');
+    if(count('other-calendar'))bits.push(count('other-calendar')+' left on their own calendar');
     const held=results.filter(function(r){return r.pending}).length;
     if(held)bits.push(held+' not updated on the calendar');
     if(!bits.length)return 'Calendar was not changed.';

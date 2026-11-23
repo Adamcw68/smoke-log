@@ -824,11 +824,27 @@
   function client(){
     return {auth:auth,db:db,fb:fb,ready:!!(auth&&db&&fb)};
   }
+  async function saveCalendarChoice(choice){
+    if(!state.user||!db||!fb||!choice||!choice.id)return;
+    await fb.setDoc(fb.doc(db,'users',state.user.uid,'settings','calendar'),plain({
+      calendarId:String(choice.id),summary:String(choice.summary||''),
+      email:String(state.user.email||'').trim().toLowerCase(),
+      updated:choice.updated||new Date().toISOString()
+    }));
+  }
+  async function loadCalendarChoice(){
+    if(!state.user||!db||!fb)return null;
+    const snap=await fb.getDoc(fb.doc(db,'users',state.user.uid,'settings','calendar'));
+    if(!snap.exists())return null;
+    const d=snap.data()||{};
+    if(!d.calendarId)return null;
+    return {id:String(d.calendarId),summary:String(d.summary||''),updated:d.updated||''};
+  }
   return {
     configReady:configReady,signInPlan:signInPlan,browserHelp:browserHelp,openingHelp:openingHelp,hostingNotice:hostingNotice,technicianFromAccount:technicianFromAccount,worksheetTech:worksheetTech,sameOriginAuth:sameOriginAuth,signInFailure:signInFailure,redirectFollowUp:redirectFollowUp,docId:docId,photoFits:photoFits,statusLabel:statusLabel,panelHTML:panelHTML,
     reconcile:reconcile,queueOp:queueOp,drainOps:drainOps,plain:plain,
     contentSig:contentSig,needsPush:needsPush,isQuotaError:isQuotaError,quotaMessage:quotaMessage,simulateSyncDay:simulateSyncDay,
     boot:boot,signIn:signIn,signOut:signOut,afterSave:afterSave,afterPhoto:afterPhoto,afterPhotoDelete:afterPhotoDelete,beforeClearAll:beforeClearAll,
-    client:client,state:current
+    client:client,state:current,saveCalendarChoice:saveCalendarChoice,loadCalendarChoice:loadCalendarChoice
   };
 });
