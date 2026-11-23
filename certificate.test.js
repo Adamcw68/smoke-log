@@ -227,6 +227,49 @@ test('a day export is a worksheets PDF and a separate certificates PDF',function
   assert.equal(html.includes('Service reports only'),false);
 });
 
+test('a finished morning job stays on the Sydney day and a left-out job is named',function(){
+  const morning='2026-11-22T21:00:00.000Z';
+  const alarm={room:'Hallway',power:['240v'],yn:{comply:'Yes',located:'Yes',button:'Yes',affixed:'Yes'}};
+  const jobs=[
+    {id:'utc',agent:'Ray White Maclean/Yamba',addr:'12 River St, Yamba NSW 2464',svc:morning,order:1,row:1},
+    {id:'sliced',agent:'Ray White Maclean/Yamba',addr:'14 Beach Pde, Iluka NSW 2466',svc:morning,order:2,row:2},
+    {id:'dmy',agent:'Lifestyle Maclean/Yamba',addr:'9 Loose St, Yamba NSW 2464',svc:'',order:3,row:3},
+    {id:'arch',agent:'Ray White Maclean/Yamba',addr:'3 Archived St, Maclean NSW 2463',svc:'2026-11-23T09:30:00+11:00',arch:'2026-11-23T00:30:00.000Z',order:4,row:4},
+    {id:'open',agent:'Ray White Maclean/Yamba',addr:'8 Unfinished Street, Yamba NSW 2464',svc:'2026-11-23T10:00:00+11:00',order:5,row:5},
+    {id:'craig',agent:'LJH Iluka',addr:'2 Craig Agency St, Iluka NSW 2466',svc:'2026-11-23T11:00:00+11:00',order:6,row:6},
+    {id:'chosen',agent:'Ray White Maclean/Yamba',addr:'5 Chosen St, Yamba NSW 2464',svc:'2026-11-23T08:00:00+11:00',order:7,row:7}
+  ];
+  const forms={
+    utc:{done:true,date:'',agent:'Ray White Maclean/Yamba',agentSet:true,addr:jobs[0].addr,tech:'Craig Robinson',alarms:1,al:[alarm]},
+    sliced:{done:true,date:'2026-11-22',agent:'Ray White Maclean/Yamba',agentSet:true,addr:jobs[1].addr,tech:'Craig Robinson',alarms:1,al:[alarm]},
+    dmy:{done:true,date:'23/11/2026',agent:'Lifestyle Maclean/Yamba',agentSet:true,addr:jobs[2].addr,tech:'Craig Robinson',alarms:1,al:[alarm]},
+    open:{done:false,date:'2026-11-23',agent:'Ray White Maclean/Yamba',addr:jobs[4].addr,alarms:1,al:[alarm]},
+    craig:{done:true,date:'2026-11-23',agent:'LJH Iluka',agentSet:true,addr:jobs[5].addr,tech:'Craig Robinson',alarms:1,al:[alarm]},
+    chosen:{done:true,date:'2026-11-21',agent:'Ray White Maclean/Yamba',agentSet:true,addr:jobs[6].addr,alarms:1,al:[alarm]}
+  };
+  assert.equal(certs.jobDay(jobs[0],forms.utc),'2026-11-23');
+  assert.equal(certs.jobDay(jobs[1],forms.sliced),'2026-11-23');
+  assert.equal(certs.jobDay(jobs[2],forms.dmy),'2026-11-23');
+  assert.equal(certs.jobDay(jobs[6],forms.chosen),'2026-11-21');
+  assert.equal(certs.jobFinished(jobs[3],null),true);
+  assert.equal(certs.jobFinished(jobs[4],forms.open),false);
+  const plan=certs.dayPlan(jobs,forms,{date:'2026-11-23',agency:''});
+  assert.deepEqual(plan.worksheets.map(function(item){return item.id}),['utc','sliced','arch','craig','dmy']);
+  assert.equal(plan.worksheets.some(function(item){return item.id==='chosen'||item.id==='open'}),false);
+  assert.deepEqual(plan.skipped.map(function(item){return item.id+':'+item.reason}),['open:Not finished']);
+  assert.equal(certs.dayPlan(jobs,forms,{date:'2026-11-22',agency:''}).worksheets.length,0);
+  const oneAgency=certs.dayPlan(jobs,forms,{date:'2026-11-23',agency:'rwm'});
+  assert.deepEqual(oneAgency.worksheets.map(function(item){return item.id}),['utc','sliced','arch']);
+  assert.deepEqual(oneAgency.skipped.map(function(item){return item.id+':'+item.reason}),['open:Not finished','craig:Different agency','dmy:Different agency']);
+  const files=certs.buildDayFiles(jobs,forms,{date:'2026-11-23',agency:''});
+  const sheets=certs.pdfText(files.worksheetBytes);
+  assert.match(sheets,/12 River St/);
+  assert.match(sheets,/9 Loose St/);
+  assert.match(sheets,/3 Archived St/);
+  assert.equal(sheets.includes('8 Unfinished Street'),false);
+  assert.equal(sheets.includes('5 Chosen St'),false);
+});
+
 test('the worksheet page circles the chosen answers and splits a long visit',function(){
   const yn={comply:'Yes',located:'Yes',button:'Yes',affixed:'No',cleaned:'Yes',battery:'Yes'};
   function alarm(n){

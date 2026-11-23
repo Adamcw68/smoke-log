@@ -271,12 +271,12 @@ test('password fields start hidden and the eye button does not submit the form',
 test('the service worker leaves the portal alone and does not clear site data',function(){
   const sw=fs.readFileSync('sw.js','utf8');
   const html=fs.readFileSync('index.html','utf8');
-  assert.match(sw,/ccsa-v2\.57\.0-20261123/);
+  assert.match(sw,/ccsa-v2\.58\.0-20261123/);
   assert.match(sw,/requests\.js/);
   assert.match(sw,/portaldata\.js/);
   assert.ok(sw.includes('if(/\\/portal(?:\\/|$)/.test(u.pathname))return;'));
   assert.doesNotMatch(sw,/indexedDB\.deleteDatabase|localStorage\.clear|caches\.keys\(\)\.then\(k=>Promise\.all\(k\.map/);
-  assert.match(html,/APP_VERSION='2\.57\.0 \(20261123\)'/);
+  assert.match(html,/APP_VERSION='2\.58\.0 \(20261123\)'/);
   assert.match(html,/portaladmin\.js/);
   assert.match(html,/portalNudge/);
 });
