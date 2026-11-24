@@ -4,7 +4,7 @@
   const CDN='https://www.gstatic.com/firebasejs/11.9.1/';
   const appEl=document.getElementById('app');
   let session=null;
-  let view={tab:'properties',q:'',filter:'',propertyId:'',certificateId:'',invoiceId:'',invoiceStatus:'',invFrom:'',invTo:'',requestForm:false,inbox:false,notice:''};
+  let view={tab:'properties',q:'',filter:'',propertyId:'',certificateId:'',invoiceId:'',invoiceStatus:'',invFrom:'',invTo:'',requestForm:false,inbox:false,notice:'',uploadPreview:null};
   let authBits=null;
   let loginError='';
   let painting=false;
@@ -202,8 +202,17 @@
     }).join('')||'<p class="empty">No invoices yet.</p>';
     return '<button type="button" class="back" data-tab="properties">Back to properties</button><article class="card" id="property"><h2>'+esc(prop.address)+'</h2>'+pills(prop,prop.tenancy)+'<p class="meta">Last service '+(prop.lastService?esc(data().prettyDate(prop.lastService)):'not on file')+' · Due '+(prop.due?esc(data().prettyDate(prop.due)):'not on file')+'</p></article><h2 class="sectionh">Requests</h2>'+requestCards(requests)+'<h2 class="sectionh">Jobs</h2>'+jobCards(jobs,'No visits on file.')+'<h2 class="sectionh">Service reports</h2>'+reportCards+'<h2 class="sectionh">Compliance certificates</h2>'+complyCards+'<h2 class="sectionh">Invoices</h2>'+invoiceCards;
   }
+  function previewTable(){
+    const rows=view.uploadPreview;
+    if(!rows||!rows.length)return '';
+    const bad=rows.filter(function(row){return !row.ok}).length;
+    const body=rows.map(function(row){
+      return '<tr><td data-label="Row">'+row.line+'</td><td data-label="Address">'+esc(row.address||'')+'</td><td data-label="Tenancy">'+esc(row.tenancy||'')+'</td><td data-label="Check">'+(row.ok?'Ready':esc(row.error))+'</td></tr>';
+    }).join('');
+    return '<h2 class="sectionh" id="uploadpreview">Upload preview</h2><p class="meta" id="uploadstatus">'+(bad?bad+' row'+(bad===1?' needs':'s need')+' a fix before these jobs can be sent.':'All '+rows.length+' rows are ready to send.')+'</p><table class="reporttable" id="uploadtable"><thead><tr><th>Row</th><th>Address</th><th>Tenancy</th><th>Check</th></tr></thead><tbody>'+body+'</tbody></table>'+(bad?'':'<div class="actions"><button type="button" class="pri" id="reqsubmit">Submit '+rows.length+' jobs</button></div>');
+  }
   function requestForm(){
-    return '<button type="button" class="back" data-tab="jobs">Back</button><form class="login" id="requestform"><h1>New job</h1><p>Send a service request for one of your properties. The access name and phone go to Adam only. They are not shown here after you send, and they are not printed on certificates, service reports or invoices.</p>'+(view.notice?'<p class="note" id="reqnote">'+esc(view.notice)+'</p>':'')+'<label class="l" for="reqaddr">Property address</label><input class="t" id="reqaddr" required placeholder="18 River Street, Maclean NSW 2463"><label class="l" for="reqten">Tenancy</label><select class="t" id="reqten"><option value="Permanent">Permanent</option><option value="Holiday">Holiday</option></select><label class="l" for="reqname">Access contact name</label><input class="t" id="reqname" required autocomplete="name"><label class="l" for="reqphone">Access phone</label><input class="t" id="reqphone" required inputmode="tel" autocomplete="tel"><label class="l" for="reqtime">Preferred timeframe</label><input class="t" id="reqtime" placeholder="Next fortnight"><label class="l" for="reqnotes">Notes</label><textarea class="t" id="reqnotes" rows="3"></textarea><label class="l" for="reqfile">PDF or photo, optional, under 450 KB</label><input id="reqfile" type="file" accept="application/pdf,image/jpeg,image/png"><div class="actions"><button class="pri" type="submit">Send request</button></div></form><h2 class="sectionh">Or upload a CSV</h2><p class="meta">Up to 40 rows. Download the template, fill it in, and upload it. Access phones in the file are stored for Adam only.</p><div class="actions"><button type="button" id="reqtemplate">Download CSV template</button></div><label class="l" for="reqcsv">CSV file</label><input id="reqcsv" type="file" accept=".csv,text/csv">';
+    return '<button type="button" class="back" data-tab="jobs">Back</button><form class="login" id="requestform"><h1>New job</h1><p>Send one property. Tenant name, phone and email go to Adam only. They are not shown on this portal after you send, and a Holiday property is never sent an access SMS.</p>'+(view.notice?'<p class="note" id="reqnote">'+esc(view.notice)+'</p>':'')+'<label class="l" for="reqaddr">Property address</label><input class="t" id="reqaddr" required placeholder="18 River Street, Maclean NSW 2463"><label class="l" for="reqten">Perm or Holiday</label><select class="t" id="reqten"><option value="Permanent">Perm</option><option value="Holiday">Holiday</option></select><label class="l" for="reqname">Tenant name</label><input class="t" id="reqname" required autocomplete="name"><label class="l" for="reqphone">Tenant phone</label><input class="t" id="reqphone" required inputmode="tel" autocomplete="tel" placeholder="0412 000 111"><label class="l" for="reqemail">Tenant email</label><input class="t" id="reqemail" type="email" autocomplete="email" placeholder="Optional"><label class="l" for="reqkeys">Keys / access notes</label><input class="t" id="reqkeys" placeholder="Key safe, no phone numbers"><label class="tog"><span>Vacant / changeover</span><input type="checkbox" id="reqvacant"></label><label class="l" for="reqdate">Preferred date</label><input class="t" id="reqdate" type="date"><label class="l" for="reqnotes">Notes</label><textarea class="t" id="reqnotes" rows="3"></textarea><label class="l" for="reqfile">PDF or photo, optional, under 450 KB</label><input id="reqfile" type="file" accept="application/pdf,image/jpeg,image/png"><div class="actions"><button class="pri" type="submit">Send job</button></div></form><h2 class="sectionh">Or upload a spreadsheet</h2><p class="meta">CSV, up to 40 rows. Download the template, fill in the columns, then check the preview before sending. Tenant phone is 0### ### ###. Holiday rows are not sent an access SMS.</p><div class="actions"><button type="button" id="reqtemplate">Download CSV template</button></div><label class="l" for="reqcsv">CSV file</label><input id="reqcsv" type="file" accept=".csv,text/csv">'+previewTable();
   }
   function inboxView(){
     const api=window.CCSARequests;
@@ -399,9 +408,12 @@
         const built=window.CCSARequests.buildOne(session.agency,{
           address:document.getElementById('reqaddr').value,
           tenancy:document.getElementById('reqten').value,
-          contactName:document.getElementById('reqname').value,
-          contactPhone:document.getElementById('reqphone').value,
-          timeframe:document.getElementById('reqtime').value,
+          tenantName:document.getElementById('reqname').value,
+          tenantPhone:document.getElementById('reqphone').value,
+          tenantEmail:document.getElementById('reqemail').value,
+          accessNotes:document.getElementById('reqkeys').value,
+          vacant:document.getElementById('reqvacant').checked?'yes':'no',
+          preferredDate:document.getElementById('reqdate').value,
           notes:document.getElementById('reqnotes').value,
           fileName:attached&&attached.fileName,
           fileType:attached&&attached.fileType,
@@ -418,10 +430,10 @@
       const reader=new FileReader();
       reader.onload=function(){
         const parsed=CCSARequests.parseCsv(String(reader.result||''));
-        if(!parsed.ok){view.notice=parsed.error;paint();return}
-        const many=CCSARequests.buildMany(session.agency,parsed.rows,new Date().toISOString());
-        if(!many.ok){view.notice=many.error;paint();return}
-        sendBuilt(many.items).catch(function(err){view.notice=err.message||'That upload did not finish.';paint()});
+        if(!parsed.ok){view.uploadPreview=null;view.notice=parsed.error;paint();return}
+        view.uploadPreview=CCSARequests.previewRows(session.agency,parsed.rows,new Date().toISOString());
+        view.notice='';
+        paint();
       };
       reader.readAsText(file);
     };
@@ -430,8 +442,15 @@
       if(!b||!appEl.contains(b))return;
       if(b.id==='newjob')go({requestForm:true,inbox:false,propertyId:'',certificateId:'',invoiceId:'',tab:'jobs'});
       if(b.id==='demoinbox'||b.id==='admininbox')go({inbox:true,requestForm:false,propertyId:'',certificateId:'',invoiceId:''});
+      if(b.id==='reqsubmit'){
+        const rows=view.uploadPreview||[];
+        if(!rows.length||rows.some(function(row){return !row.ok})){view.notice='Fix the rows in the preview before sending.';paint();return}
+        const items=rows.map(function(row){return row.item});
+        view.uploadPreview=null;
+        sendBuilt(items).catch(function(err){view.notice=err.message||'That upload did not finish.';paint()});
+      }
       if(b.id==='reqtemplate'){
-        const blob=new Blob([CCSARequests.csvTemplate()],{type:'text/csv'});
+        const blob=new Blob([CCSARequests.submissionTemplate()],{type:'text/csv'});
         const a=document.createElement('a');
         const url=URL.createObjectURL(blob);
         a.href=url;a.download='ccsa-job-requests.csv';
@@ -581,7 +600,7 @@
     }
   }
   async function signOut(){
-    session=null;view={tab:'properties',q:'',filter:'',propertyId:'',certificateId:'',invoiceId:'',invoiceStatus:'',invFrom:'',invTo:'',requestForm:false,inbox:false,notice:''};
+    session=null;view={tab:'properties',q:'',filter:'',propertyId:'',certificateId:'',invoiceId:'',invoiceStatus:'',invFrom:'',invTo:'',requestForm:false,inbox:false,notice:'',uploadPreview:null};
     if(authBits){try{await authBits.authMod.signOut(authBits.auth)}catch(e){}}
     if(/[?&]demo=1/.test(location.search))location.href=location.pathname;
     else paint();

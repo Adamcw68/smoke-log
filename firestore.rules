@@ -6,8 +6,8 @@ rules_version = '2';
 // portal-job-keys: id,propertyId,agencyId,agencyCode,address,street,town,ident,tenancy,status,serviceDate,appointment,appointmentTime,lastService,due,result,alarmCount,priorDate,priorResult,visitKind,visitReason,publishedAt
 // portal-certificate-keys: id,propertyId,jobId,agencyId,agencyCode,address,ident,tenancy,date,lastInspection,tech,statement,result,alarms,visitKind,visitReason,priorDue,publishedAt
 // portal-invoice-keys: id,number,propertyId,jobId,agencyId,agencyCode,address,ident,tenancy,issueDate,dueDate,status,paidAt,gstRegistered,businessName,abn,businessAddress,businessPhone,businessEmail,bankName,bsb,accountName,accountNumber,terms,lines,exCents,gstCents,totalCents,publishedAt
-// portal-request-keys: id,agencyId,agencyCode,propertyId,address,ident,tenancy,timeframe,notes,status,createdAt,fileName,fileType,fileData
-// portal-access-keys: id,agencyId,requestId,contactName,contactPhone,createdAt
+// portal-request-keys: id,agencyId,agencyCode,propertyId,address,ident,tenancy,timeframe,notes,status,createdAt,fileName,fileType,fileData,vacant,preferredDate
+// portal-access-keys: id,agencyId,requestId,contactName,contactPhone,createdAt,tenancy,tenantEmail,accessNotes,accessSms
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() {
@@ -187,7 +187,7 @@ service cloud.firestore {
     }
     function validRequest(agencyId, docId) {
       let data = request.resource.data;
-      return data.keys().hasOnly(['id','agencyId','agencyCode','propertyId','address','ident','tenancy','timeframe','notes','status','createdAt','fileName','fileType','fileData'])
+      return data.keys().hasOnly(['id','agencyId','agencyCode','propertyId','address','ident','tenancy','timeframe','notes','status','createdAt','fileName','fileType','fileData','vacant','preferredDate'])
         && data.id == docId
         && docIdOk(docId)
         && data.agencyId == agencyId
@@ -209,11 +209,13 @@ service cloud.firestore {
         && (data.fileType == '' || data.fileType == 'application/pdf' || data.fileType == 'image/jpeg' || data.fileType == 'image/png')
         && data.fileData is string
         && data.fileData.size() < 620000
-        && (data.fileData == '' || data.fileData.matches('^[A-Za-z0-9+/=]+$'));
+        && (data.fileData == '' || data.fileData.matches('^[A-Za-z0-9+/=]+$'))
+        && (data.vacant == '' || data.vacant == 'yes' || data.vacant == 'no')
+        && dayOrEmpty(data.preferredDate);
     }
     function validAccess(agencyId, docId) {
       let data = request.resource.data;
-      return data.keys().hasOnly(['id','agencyId','requestId','contactName','contactPhone','createdAt'])
+      return data.keys().hasOnly(['id','agencyId','requestId','contactName','contactPhone','createdAt','tenancy','tenantEmail','accessNotes','accessSms'])
         && data.id == docId
         && docIdOk(docId)
         && data.agencyId == agencyId
@@ -226,7 +228,13 @@ service cloud.firestore {
         && data.contactPhone.size() < 24
         && data.contactPhone.matches('^(?:\\+?61|0)[0-9 \\-]{8,16}$')
         && data.createdAt is string
-        && data.createdAt.size() < 40;
+        && data.createdAt.size() < 40
+        && tenancyOk(data.tenancy)
+        && data.tenancy.size() > 0
+        && (data.tenantEmail == '' || (data.tenantEmail is string && data.tenantEmail.size() < 80 && data.tenantEmail.matches('.+@.+[.].+')))
+        && plainText(data.accessNotes, 240)
+        && data.accessSms is bool
+        && (data.tenancy != 'Holiday' || data.accessSms == false);
     }
     function validPortal(agencyId, kind, docId) {
       return (kind == 'properties' && validProperty(agencyId, docId))
