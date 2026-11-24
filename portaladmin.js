@@ -24,7 +24,7 @@
   const state={
     configured:false,signedIn:false,email:'',uid:'',isAdmin:false,adminChecked:false,
     draftEmail:'',agencyCode:'Ray White Maclean/Yamba',password:'',logins:[],auto:true,
-    message:'',busy:false,showOnce:null,requests:[],access:{}
+    message:'',busy:false,showOnce:null,requests:[],access:{},queueLimit:4
   };
   let hooks=null,pending=false;
 
@@ -60,7 +60,8 @@
       <label class="tog"><span>Publish when a job is archived or marked done</span><input type="checkbox" id="portalauto" ${state.auto?'checked':''}></label>
       <button type="button" class="btn pri" id="portalpub" ${state.busy?'disabled':''}>Publish to portal</button>
       <h2 id="inbox">Job requests</h2>
-      <p class="note">Agents send these from their portal. The access phone is shown here only. Completing a request deletes it. Google Calendar changes only when you tap Add to calendar.</p>
+      <p class="note">Agents send these from their portal. You see ${state.queueLimit} jobs from each agent at a time. Scheduling or completing one shows the next. The access phone is shown here only. Holiday properties are not sent an access SMS. Completing a request removes the tenant details. Google Calendar changes only when you tap Add to calendar.</p>
+      <div class="row" id="queuelimit"><button type="button" data-queuelimit="3" class="${state.queueLimit===3?'pri':''}">Show 3</button><button type="button" data-queuelimit="4" class="${state.queueLimit===4?'pri':''}">Show 4</button></div>
       <button type="button" class="btn" id="portalinbox" ${state.busy?'disabled':''}>Load job requests</button>
       ${inboxHTML()}`:'';
     const signed=state.signedIn?`<p class="note" id="portalaccount">${esc(state.email)} · uid ${esc(state.uid)}${state.isAdmin?' · admin':''}</p>`:'<p class="note">Sign in with Sync before creating a login or publishing. Worksheets on this phone stay here.</p>';
@@ -76,11 +77,23 @@
   function inboxHTML(){
     const api=typeof CCSARequests!=='undefined'?CCSARequests:(typeof require==='function'?function(){try{return require('./requests.js')}catch(e){return null}}():null);
     if(!state.requests.length)return '<p class="note">No requests loaded.</p>';
-    return state.requests.map(function(row){
+    const cap=api&&api.queueLimit?api.queueLimit(state.queueLimit):4;
+    const queue=api&&api.agentQueue?api.agentQueue(state.requests,cap):{visible:state.requests,queued:{}};
+    const visible={};
+    queue.visible.forEach(function(row){visible[row.id]=true});
+    const shown=state.requests.filter(function(row){return visible[row.id]||row.status==='scheduled'});
+    const waiting=Object.keys(queue.queued||{}).filter(function(id){return queue.queued[id]>0}).map(function(id){
+      const sample=state.requests.filter(function(row){return row.agencyId===id})[0]||{};
+      const name=sample.agencyId==='rwm'||/ray white (maclean|yamba)/i.test(sample.agencyCode||'')?'RWY':(sample.agencyCode||id);
+      return '<p class="note" data-queued="'+esc(id)+'">'+esc(name)+': '+queue.queued[id]+' more queued</p>';
+    }).join('');
+    return waiting+shown.map(function(row){
       const who=row.status==='completed'?null:state.access[row.id];
       const label=api?api.statusLabel(row.status):row.status;
+      const agent=row.agencyId==='rwm'||/ray white (maclean|yamba)/i.test(row.agencyCode||'')?'RWY':row.agencyCode;
+      const sms=who&&who.accessSms===false?' · No access SMS':'';
       const buttons=row.status==='new'?'<button type="button" class="pri" data-accept="'+esc(row.id)+'">Accept</button><button type="button" data-reqstatus="declined" data-req="'+esc(row.id)+'">Decline</button>':row.status==='accepted'?'<button type="button" data-reqstatus="scheduled" data-req="'+esc(row.id)+'">Mark scheduled</button><button type="button" data-reqcal="'+esc(row.id)+'">Add to calendar</button>':row.status==='scheduled'?'<button type="button" data-reqstatus="completed" data-req="'+esc(row.id)+'">Mark completed</button>':'';
-      return '<article class="card" data-request="'+esc(row.id)+'"><div class="chiprow"><span class="badge">'+esc(label)+'</span><span class="badge">'+esc(row.agencyCode)+'</span></div><div class="addr">'+esc(row.address)+'</div><div class="meta">'+esc(row.tenancy)+(row.timeframe?' · '+esc(row.timeframe):'')+(who?' · '+esc(who.contactName)+' '+esc(who.contactPhone):'')+'</div><div class="row">'+buttons+'</div></article>';
+      return '<article class="card" data-request="'+esc(row.id)+'"><div class="chiprow"><span class="badge">'+esc(label)+'</span><span class="badge">'+esc(agent)+'</span></div><div class="addr">'+esc(row.address)+'</div><div class="meta">'+esc(row.tenancy)+(row.preferredDate?' · '+esc(row.preferredDate):'')+(row.vacant==='yes'?' · Vacant / changeover':'')+(who?' · '+esc(who.contactName)+' '+esc(who.contactPhone):'')+sms+'</div><div class="row">'+buttons+'</div></article>';
     }).join('');
   }
   function repaint(){
@@ -375,6 +388,7 @@
       if(b.dataset.portalDisable)setDisabled(b.dataset.portalDisable,true);
       if(b.dataset.portalEnable)setDisabled(b.dataset.portalEnable,false);
       if(b.id==='portalinbox')loadInbox();
+      if(b.dataset.queuelimit){state.queueLimit=b.dataset.queuelimit==='3'?3:4;try{hooks.storage.setItem('ccsa.queue.limit',String(state.queueLimit))}catch(err){}repaint()}
       if(b.dataset.accept)acceptRequest(b.dataset.accept);
       if(b.dataset.req)writeStatus(b.dataset.req,b.dataset.reqstatus);
       if(b.dataset.reqcal)calendarRequest(b.dataset.reqcal);
@@ -385,6 +399,7 @@
     state.password=state.password||tempPassword();
     if(typeof document!=='undefined'&&lib()&&lib().bindPasswordEyes)lib().bindPasswordEyes(document);
     try{state.auto=!hooks.storage||hooks.storage.getItem('ccsa.portal.auto')!=='0'}catch(e){state.auto=true}
+    try{const saved=hooks.storage&&hooks.storage.getItem('ccsa.queue.limit');state.queueLimit=saved==='3'?3:4}catch(e){state.queueLimit=4}
     const cfg=hooks.config?hooks.config():null;
     state.configured=!!(cfg&&cfg.apiKey&&!/YOUR_/i.test(JSON.stringify(cfg)));
   }
