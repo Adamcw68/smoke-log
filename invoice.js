@@ -13,6 +13,7 @@
   const LINE_KEYS=['description','qty','unitCents','amountCents'];
   const FORBIDDEN=['contact','p1','p2','phone','phoneLine','email','tenant','tenantName','tenantPhone','tenantEmail','mobile','directions','notes','comments'];
   const SERVICE='Annual smoke alarm and compliance service';
+  const OFF_SERVICE='Off-annual service visit';
   const REPLACE='Smoke alarm replacement';
   const BATTERY='New battery';
 
@@ -64,7 +65,7 @@
       termsDays:14,
       termsText:'Payment is due within 14 days.',
       gstRegistered:false,
-      prices:{service:0,replace:0,battery:0},
+      prices:{service:0,offAnnual:0,replace:0,battery:0},
       nextNumber:1,
       accountCode:'200',
       brandingTheme:''
@@ -108,6 +109,7 @@
     base.gstRegistered=!!src.gstRegistered;
     base.prices={
       service:cents(prices.service),
+      offAnnual:cents(prices.offAnnual),
       replace:cents(prices.replace),
       battery:cents(prices.battery)
     };
@@ -215,7 +217,10 @@
     prices=prices||{};
     const n=form&&form.alarms?+form.alarms:0;
     const alarms=((form&&form.al)||[]).slice(0,n);
-    const lines=[{description:SERVICE,qty:1,unitCents:cents(prices.service)}];
+    const off=form&&form.visitKind==='off';
+    const visit=typeof CCSAVisit!=='undefined'?CCSAVisit:(typeof require==='function'?(function(){try{return require('./visittype.js')}catch(e){return null}})():null);
+    const why=off&&visit&&visit.reasonLabel?visit.reasonLabel(form):'';
+    const lines=[{description:off?OFF_SERVICE+(why?' — '+why:''):SERVICE,qty:1,unitCents:cents(off?prices.offAnnual:prices.service)}];
     const replaced=alarms.filter(function(a){return a&&(a.isNew||a.newAns==='Yes')}).length;
     if(replaced)lines.push({description:REPLACE,qty:replaced,unitCents:cents(prices.replace)});
     const batteries=alarms.filter(function(a){return a&&a.yn&&a.yn.battery==='Yes'&&!lithium(a)}).length;
@@ -542,7 +547,7 @@
       termsDays:14,
       termsText:'Payment is due within 14 days.',
       gstRegistered:true,
-      prices:{service:15000,replace:4500,battery:500},
+      prices:{service:15000,offAnnual:8000,replace:4500,battery:500},
       nextNumber:1
     });
   }
@@ -663,6 +668,7 @@
       <h2>Price list</h2>
       <p class="note">These start at 0.00. Enter the amount you charge, excluding GST.</p>
       <label class="l" for="inv-price-service">${esc(SERVICE)}</label><input class="t" id="inv-price-service" inputmode="decimal" value="${esc(dollars(s.prices.service))}">
+      <label class="l" for="inv-price-off">${esc(OFF_SERVICE)}</label><input class="t" id="inv-price-off" inputmode="decimal" value="${esc(dollars(s.prices.offAnnual))}">
       <label class="l" for="inv-price-replace">${esc(REPLACE)}</label><input class="t" id="inv-price-replace" inputmode="decimal" value="${esc(dollars(s.prices.replace))}">
       <label class="l" for="inv-price-battery">${esc(BATTERY)}</label><input class="t" id="inv-price-battery" inputmode="decimal" value="${esc(dollars(s.prices.battery))}">
       <div class="row"><button type="button" class="btn pri" id="inv-save-settings">Save settings</button></div>
@@ -692,9 +698,10 @@
   }
   function readSettings(el){
     const service=dollarsToCents(el.querySelector('#inv-price-service').value);
+    const offAnnual=dollarsToCents(el.querySelector('#inv-price-off').value);
     const replace=dollarsToCents(el.querySelector('#inv-price-replace').value);
     const battery=dollarsToCents(el.querySelector('#inv-price-battery').value);
-    if(service==null||replace==null||battery==null)return null;
+    if(service==null||offAnnual==null||replace==null||battery==null)return null;
     return normaliseSettings({
       businessName:el.querySelector('#inv-name').value,
       abn:el.querySelector('#inv-abn').value,
@@ -708,7 +715,7 @@
       termsDays:el.querySelector('#inv-days').value,
       termsText:el.querySelector('#inv-terms').value,
       gstRegistered:el.querySelector('#inv-gst').checked,
-      prices:{service:service,replace:replace,battery:battery},
+      prices:{service:service,offAnnual:offAnnual,replace:replace,battery:battery},
       nextNumber:mem.settings.nextNumber,
       accountCode:el.querySelector('#inv-xero-account').value,
       brandingTheme:el.querySelector('#inv-xero-theme').value

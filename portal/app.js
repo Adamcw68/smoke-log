@@ -153,7 +153,7 @@
       const prop=props[job.propertyId];
       const cert=certFor(job);
       const statusCls=job.status==='completed'?'done':job.status==='booked'?'book':'soon';
-      return '<article class="card"><div class="pills"><span class="pill '+statusCls+'">'+esc(data().statusLabel(job.status))+'</span>'+(job.status==='completed'&&job.result?'<span class="pill '+(job.result==='fail'?'fail':'ok')+'">'+esc(data().resultLabel(job.result))+'</span>':'')+'</div><h2>'+esc(job.address)+'</h2>'+pills(prop,job.tenancy)+'<p class="meta">'+esc(whenJob(job))+(prop&&prop.lastService&&job.status!=='completed'?' · Last service '+esc(data().prettyDate(prop.lastService)):'')+'</p><div class="actions">'+(cert?'<button type="button" data-certificate="'+esc(cert.id)+'">Certificate</button>':'')+'<button type="button" data-property="'+esc(job.propertyId)+'">Property</button></div></article>';
+      return '<article class="card"><div class="pills"><span class="pill '+statusCls+'">'+esc(data().statusLabel(job.status))+'</span>'+(job.visitKind==='off'?'<span class="pill book">Off-annual'+(job.visitReason?' · '+esc(job.visitReason):'')+'</span>':'')+(job.status==='completed'&&job.result?'<span class="pill '+(job.result==='fail'?'fail':'ok')+'">'+esc(data().resultLabel(job.result))+'</span>':'')+'</div><h2>'+esc(job.address)+'</h2>'+pills(prop,job.tenancy)+'<p class="meta">'+esc(whenJob(job))+(prop&&prop.lastService&&job.status!=='completed'?' · Last service '+esc(data().prettyDate(prop.lastService)):'')+'</p><div class="actions">'+(cert?'<button type="button" data-certificate="'+esc(cert.id)+'">Certificate</button>':'')+'<button type="button" data-property="'+esc(job.propertyId)+'">Property</button></div></article>';
     }).join('');
   }
   function requestCards(list){

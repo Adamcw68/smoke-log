@@ -25,8 +25,8 @@
   const STATUSES=['upcoming','booked','completed'];
   const COMPLIANCE=['compliant','due soon','overdue','failed'];
   const PROPERTY_KEYS=['id','agencyId','agencyCode','address','street','town','ident','tenancy','compliance','lastService','due','alarmCount','publishedAt'];
-  const JOB_KEYS=['id','propertyId','agencyId','agencyCode','address','street','town','ident','tenancy','status','serviceDate','appointment','appointmentTime','lastService','due','result','alarmCount','priorDate','priorResult','publishedAt'];
-  const CERT_KEYS=['id','propertyId','jobId','agencyId','agencyCode','address','ident','tenancy','date','lastInspection','tech','statement','result','alarms','publishedAt'];
+  const JOB_KEYS=['id','propertyId','agencyId','agencyCode','address','street','town','ident','tenancy','status','serviceDate','appointment','appointmentTime','lastService','due','result','alarmCount','priorDate','priorResult','visitKind','visitReason','publishedAt'];
+  const CERT_KEYS=['id','propertyId','jobId','agencyId','agencyCode','address','ident','tenancy','date','lastInspection','tech','statement','result','alarms','visitKind','visitReason','priorDue','publishedAt'];
   const ALARM_KEYS=['n','location','type','power','expiry','result'];
   const FORBIDDEN=['contact','p1','p2','phone','phoneLine','email','tenant','tenantName','tenantPhone','tenantEmail','mobile','directions','notes','comments'];
   const SAMPLE_TENANT={name:'Jane Tenant',phone:'0400 111 222',phone2:'02 6645 1234',email:'jane.tenant@example.com'};
@@ -269,7 +269,19 @@
     if(ymd(job&&job.last))return {date:ymd(job.last),result:'pass'};
     return {date:'',result:''};
   }
+  function visitKindOf(form){return form&&form.visitKind==='off'?'off':'annual'}
+  function visitReasonOf(form){
+    if(visitKindOf(form)!=='off')return '';
+    const api=typeof CCSAVisit!=='undefined'?CCSAVisit:(typeof require==='function'?(function(){try{return require('./visittype.js')}catch(e){return null}})():null);
+    const label=api&&api.reasonLabel?api.reasonLabel(form):'';
+    return scrubString(label).slice(0,80);
+  }
   function dueOf(job,form,serviceDate){
+    if(visitKindOf(form)==='off'){
+      const result=serviceResult(form);
+      if((result==='pass'||result==='replace')&&serviceDate)return addMonths(serviceDate,12);
+      return ymd(form&&form.priorDue)||'';
+    }
     if(ymd(job&&job.due))return ymd(job.due);
     const base=serviceDate||ymd(job&&job.last);
     return base?addMonths(base,12):'';
@@ -337,9 +349,11 @@
     const prior=priorOf(job,form);
     const due=dueOf(job,form,serviceDate||prior.date);
     const propertyId=propertyKey(address);
+    const off=visitKindOf(form)==='off';
+    const offTag=off?'-off-'+(slug(job.id)||'visit').slice(-12):'';
     const id=status==='completed'
-      ?propertyId+'-'+(serviceDate||'undated')
-      :propertyId+'-'+status+'-'+(appt.date||'open');
+      ?propertyId+'-'+(serviceDate||'undated')+offTag
+      :propertyId+'-'+status+'-'+(appt.date||'open')+offTag;
     const tenancy=tenancyOf(job,form);
     const alarmCount=form&&+form.alarms?+form.alarms:(+job.alarms||0);
     const row={
@@ -362,6 +376,8 @@
       alarmCount:alarmCount>0?alarmCount:0,
       priorDate:status==='completed'?'':prior.date,
       priorResult:status==='completed'?'':prior.result,
+      visitKind:visitKindOf(form),
+      visitReason:visitReasonOf(form),
       publishedAt:publishedAt||''
     };
     let certificate=null;
@@ -383,11 +399,15 @@
         statement:'',
         result:result,
         alarms:alarmsOf(form),
+        visitKind:visitKindOf(form),
+        visitReason:visitReasonOf(form),
+        priorDue:ymd(form&&form.priorDue)||'',
         publishedAt:publishedAt||''
       };
+      certificate.id=propertyId+'-'+serviceDate+offTag;
       certificate.statement=statementFor(certificate.tech,certificate.date);
     }else if(form&&ymd(form.date)){
-      retract=propertyId+'-'+ymd(form.date);
+      retract=propertyId+'-'+ymd(form.date)+offTag;
     }
     return {agency:agency,job:row,certificate:certificate,retract:retract};
   }
@@ -400,8 +420,9 @@
     const serviceDate=ymd(form.date)||'';
     const propertyId=propertyKey(address);
     const last=ymd(job.last);
-    return {
-      id:propertyId+'-'+(serviceDate||'undated'),
+    const off=visitKindOf(form)==='off';
+    const cert={
+      id:propertyId+'-'+(serviceDate||'undated')+(off?'-off-'+(slug(job.id)||'visit').slice(-12):''),
       propertyId:propertyId,
       jobId:String(job.id||''),
       agencyId:agency.id||'',
@@ -415,8 +436,12 @@
       statement:'',
       result:serviceResult(form)||'',
       alarms:alarmsOf(form),
+      visitKind:visitKindOf(form),
+      visitReason:visitReasonOf(form),
+      priorDue:ymd(form.priorDue)||'',
       publishedAt:''
     };
+    return cert;
   }
   function byDateDesc(list,field){
     return list.slice().sort(function(a,b){
@@ -437,11 +462,14 @@
     const properties=[];
     groups.forEach(function(list,propertyId){
       const completed=byDateDesc(list.filter(function(j){return j.status==='completed'&&j.serviceDate}),'serviceDate');
+      const basis=completed.filter(function(j){return j.visitKind!=='off'||j.result==='pass'||j.result==='replace'});
       const latest=completed[0]||byDateDesc(list,'lastService')[0]||list[0];
+      const anchor=basis[0]||null;
       const prior=list.filter(function(j){return j.priorDate&&(j.priorResult==='pass'||j.priorResult==='replace'||j.priorResult==='fail')}).sort(function(a,b){return a.priorDate<b.priorDate?1:-1})[0];
-      const result=completed.length?(completed[0].result||''):(prior?prior.priorResult:'');
-      const lastService=completed.length?completed[0].serviceDate:(prior?prior.priorDate:(latest.lastService||''));
-      const due=(completed.length&&completed[0].due)||(latest&&latest.due)||(lastService?addMonths(lastService,12):'');
+      const latestOffFail=completed[0]&&completed[0].visitKind==='off'&&completed[0].result==='fail';
+      const result=latestOffFail?'fail':(anchor?(anchor.result||''):(prior?prior.priorResult:''));
+      const lastService=anchor?anchor.serviceDate:(prior?prior.priorDate:(latest.lastService||''));
+      const due=(anchor&&anchor.due)||(completed[0]&&completed[0].due)||(latest&&latest.due)||'';
       const alarmCount=completed.length?completed[0].alarmCount:(latest.alarmCount||0);
       properties.push({
         id:propertyId,
@@ -585,6 +613,9 @@
       if(!dayOk(data.serviceDate)||!dayOk(data.appointment)||!timeOk(data.appointmentTime)||!dayOk(data.lastService)||!dayOk(data.due)||!dayOk(data.priorDate))return 'date is not allowed';
       if(['','pass','replace','fail','incomplete'].indexOf(data.result)<0||['','pass','replace','fail','incomplete'].indexOf(data.priorResult)<0)return 'result is not allowed';
       if(typeof data.alarmCount!=='number'||data.alarmCount<0||data.alarmCount>=40)return 'alarm count is not allowed';
+      if(data.visitKind!=='annual'&&data.visitKind!=='off')return 'visit type is not allowed';
+      const why=textProblem(data.visitReason,80);
+      if(why)return 'visit reason '+why;
     }
     if(kind==='certificates'){
       if(!docIdOk(data.propertyId)||!docIdOk(data.jobId))return 'id has characters the portal rejects';
@@ -594,6 +625,10 @@
       const statement=textProblem(data.statement,900);
       if(statement)return 'statement '+statement;
       if(['pass','replace','fail','incomplete'].indexOf(data.result)<0)return 'result is not allowed';
+      if(data.visitKind!=='annual'&&data.visitKind!=='off')return 'visit type is not allowed';
+      const visitWhy=textProblem(data.visitReason,80);
+      if(visitWhy)return 'visit reason '+visitWhy;
+      if(!dayOk(data.priorDue))return 'date is not allowed';
       if(!Array.isArray(data.alarms)||data.alarms.length>=30)return 'alarm list is not allowed';
       for(let i=0;i<data.alarms.length;i++){
         const alarm=data.alarms[i]||{};
@@ -831,6 +866,7 @@
     addMonths:addMonths,
     alarmResult:alarmResult,
     serviceResult:serviceResult,
+    dueOf:dueOf,
     expiryOf:expiryOf,
     buildPortal:buildPortal,
     localCertificate:localCertificate,
