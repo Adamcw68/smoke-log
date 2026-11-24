@@ -3,8 +3,8 @@ rules_version = '2';
 // Adam's first admins/{uid} document is created in the Firebase console.
 // Deploy: npx firebase deploy --only firestore:rules --project ccsa-smoke-log
 // portal-property-keys: id,agencyId,agencyCode,address,street,town,ident,tenancy,compliance,lastService,due,alarmCount,publishedAt
-// portal-job-keys: id,propertyId,agencyId,agencyCode,address,street,town,ident,tenancy,status,serviceDate,appointment,appointmentTime,lastService,due,result,alarmCount,priorDate,priorResult,publishedAt
-// portal-certificate-keys: id,propertyId,jobId,agencyId,agencyCode,address,ident,tenancy,date,lastInspection,tech,statement,result,alarms,publishedAt
+// portal-job-keys: id,propertyId,agencyId,agencyCode,address,street,town,ident,tenancy,status,serviceDate,appointment,appointmentTime,lastService,due,result,alarmCount,priorDate,priorResult,visitKind,visitReason,publishedAt
+// portal-certificate-keys: id,propertyId,jobId,agencyId,agencyCode,address,ident,tenancy,date,lastInspection,tech,statement,result,alarms,visitKind,visitReason,priorDue,publishedAt
 // portal-invoice-keys: id,number,propertyId,jobId,agencyId,agencyCode,address,ident,tenancy,issueDate,dueDate,status,paidAt,gstRegistered,businessName,abn,businessAddress,businessPhone,businessEmail,bankName,bsb,accountName,accountNumber,terms,lines,exCents,gstCents,totalCents,publishedAt
 // portal-request-keys: id,agencyId,agencyCode,propertyId,address,ident,tenancy,timeframe,notes,status,createdAt,fileName,fileType,fileData
 // portal-access-keys: id,agencyId,requestId,contactName,contactPhone,createdAt
@@ -79,7 +79,9 @@ service cloud.firestore {
     }
     function validJob(agencyId, docId) {
       let data = request.resource.data;
-      return data.keys().hasOnly(['id','propertyId','agencyId','agencyCode','address','street','town','ident','tenancy','status','serviceDate','appointment','appointmentTime','lastService','due','result','alarmCount','priorDate','priorResult','publishedAt'])
+      return data.keys().hasOnly(['id','propertyId','agencyId','agencyCode','address','street','town','ident','tenancy','status','serviceDate','appointment','appointmentTime','lastService','due','result','alarmCount','priorDate','priorResult','visitKind','visitReason','publishedAt'])
+        && (data.visitKind == 'annual' || data.visitKind == 'off')
+        && plainText(data.visitReason, 80)
         && data.id == docId
         && docIdOk(docId)
         && data.agencyId == agencyId
@@ -109,7 +111,10 @@ service cloud.firestore {
     }
     function validCertificate(agencyId, docId) {
       let data = request.resource.data;
-      return data.keys().hasOnly(['id','propertyId','jobId','agencyId','agencyCode','address','ident','tenancy','date','lastInspection','tech','statement','result','alarms','publishedAt'])
+      return data.keys().hasOnly(['id','propertyId','jobId','agencyId','agencyCode','address','ident','tenancy','date','lastInspection','tech','statement','result','alarms','visitKind','visitReason','priorDue','publishedAt'])
+        && (data.visitKind == 'annual' || data.visitKind == 'off')
+        && plainText(data.visitReason, 80)
+        && dayOrEmpty(data.priorDue)
         && data.id == docId
         && docIdOk(docId)
         && data.agencyId == agencyId

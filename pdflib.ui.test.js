@@ -412,7 +412,7 @@ test('worksheet rules stay, photos stay in the saved PDF, and reload keeps them'
   assert.equal(after.cleaned,'Yes');
   assert.equal(after.isNew,true);
   const sw=await page.evaluate(async()=>await (await fetch('sw.js')).text());
-  assert.match(sw,/ccsa-v2\.59\.0-20261123/);
+  assert.match(sw,/ccsa-v2\.60\.0-20261124/);
   assert.match(sw,/pdflib\.js/);
   assert.match(sw,/sheetfill\.js/);
   assertNoAppError(page);
