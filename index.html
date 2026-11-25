@@ -434,7 +434,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="alarmedit.js"></script><script src="labelread.js"></script><script src="addressfind.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="calpick.js"></script><script src="pdflib.js"></script><script src="transfer.js"></script><script src="firebase-config.js"></script><script src="livesync.js"></script><script src="visittype.js"></script><script src="portaldata.js"></script><script src="certificate.js"></script><script src="invoice.js"></script><script src="requests.js"></script><script src="portaladmin.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.61.0 (20261124)';
+const APP_VERSION='2.62.0 (20261125)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -710,21 +710,20 @@ function applyCalendar(events){ // sets svc on non-archived matches; caller reco
   return {events:events.length,matched:hits.size,changed,unmatched,details:detailJobs}}
 function visitOf(ev){return window.SheetFill&&SheetFill.visitColour?SheetFill.visitColour(ev&&ev.colorId):{ready:true,kind:'',label:'',waiting:false}}
 function readyLine(ready,waiting,other){return window.SheetFill&&SheetFill.readyLine?SheetFill.readyLine(ready,waiting,other):(ready+' ready')}
-/* Peacock and Sage come in. Cocoa is no colour on the event. Anything else stays out. A job already here is never deleted. */
+/* Every colour comes in. Peacock and Sage still name the visit. A default colour is only a waiting note. A notReady flag left by the old colour rule is cleared. A job already here is never deleted. */
 function ingestCalendar(events, calendarId){
   events=events||[];
   let ready=0,waiting=0,other=0;
-  const readyEvents=[];
   events.forEach(ev=>{
     const c=visitOf(ev);
-    if(!c.ready){if(c.waiting)waiting++;else other++;return}
-    ready++;readyEvents.push(ev)});
-  readyEvents.forEach(ev=>{
+    if(c.ready)ready++;
+    else if(c.waiting)waiting++;
+    else other++;
     const made=ensureJobForEvent(ev);
     made.job.notReady=false;
-    made.job.visit=visitOf(ev).kind;
+    if(c.ready)made.job.visit=c.kind;
     if(calendarId)stampJobCalendar(made.job,calendarId)});
-  const r=applyCalendar(readyEvents);
+  const r=applyCalendar(events);
   const seen=new Map();
   events.forEach(ev=>{
     const j=matchEventJob(ev);if(!j)return;
@@ -733,7 +732,9 @@ function ingestCalendar(events, calendarId){
   seen.forEach((evs,id)=>{
     const j=JOBS.find(x=>x.id===id);if(!j)return;
     const best=pickEvent(j,evs),c=visitOf(best);
-    if(c.ready){j.notReady=false;j.visit=c.kind;if(calendarId)stampJobCalendar(j,calendarId)}else j.notReady=true});
+    j.notReady=false;
+    if(c.ready)j.visit=c.kind;
+    if(calendarId)stampJobCalendar(j,calendarId)});
   r.ready=ready;r.waiting=waiting;r.other=other;r.summary=readyLine(ready,waiting,other);
   save(LS.jobs,JOBS);
   return r}
@@ -770,10 +771,11 @@ function ensureJobForEvent(ev){
   JOBS.push(j);recomputeRouteOrder();save(LS.jobs,JOBS);
   return {job:j,created:true}}
 function openEventWorksheet(ev){
-  const c=visitOf(ev),existing=matchEventJob(ev);
-  if(!c.ready&&!existing){toast(c.waiting?'Not ready yet. Waiting on the tenant. Nothing was added.':'This appointment is not marked ready. Nothing was added.');return}
+  const c=visitOf(ev);
   const r=ensureJobForEvent(ev);
-  if(c.ready){r.job.notReady=false;r.job.visit=c.kind;save(LS.jobs,JOBS)}
+  r.job.notReady=false;
+  if(c.ready)r.job.visit=c.kind;
+  save(LS.jobs,JOBS);
   if(r.created)toast('No matching job – started a worksheet for this appointment');
   location.hash='#job/'+encodeURIComponent(r.job.id)}
 function calDayList(){return [...new Set(CAL_EVENTS.map(ev=>String(ev.iso).slice(0,10)))]}
@@ -799,9 +801,12 @@ function calEntriesHTML(){
   const none=UI.filter==='done'?'No completed appointments this day.':UI.filter==='todo'?'No to-do appointments this day.':UI.filter==='arch'?'No archived appointments this day.':'No appointments this day.';
   return `<section class="calents" id="calents" aria-label="Calendar entries"><div class="calhd"><b>Calendar entries</b><span class="note">${count}</span></div>
   <div class="calnav"><button type="button" id="calprev" aria-label="Earlier day"${at<=0?' disabled':''}>‹</button><div class="calday">${esc(calDayLabel(day))}</div><button type="button" id="calnext" aria-label="Later day"${at<0||at>=days.length-1?' disabled':''}>›</button></div>
-  ${shown.length?shown.map(({ev,i})=>{const job=matchEventJob(ev),title=eventTitle(ev),st=job?statusOf(job):'',c=visitOf(ev),held=!c.ready&&!job;
-    const note=held?(c.waiting?'Skipped. Waiting on the tenant.':'Skipped. Not marked ready.'):job?(isArch(job)?'Archived job':job.notReady?'Not ready. The worksheet is still here.':''):'Not on the job list yet – this starts a worksheet.';
-    return `<article class="calent"><div class="caltime">${esc(evClock(ev.iso))}</div><div class="calbody"><div class="calsum">${esc(title)}</div>${st?`<span class="badge sb sb-${st}">${ST[st]}</span>`:''}${held?`<span class="badge due">Skipped</span>`:''}${ev.location&&ev.location!==title?`<div class="note">${esc(ev.location)}</div>`:''}${note?`<div class="note">${note}</div>`:''}</div>${held?'':`<button type="button" class="btn pri calopen" data-calev="${i}" aria-label="Open worksheet for ${esc(title)}">Open worksheet</button>`}</article>`}).join(''):`<p class="empty">${esc(none)}</p>`}
+  ${shown.length?shown.map(({ev,i})=>{const job=matchEventJob(ev),title=eventTitle(ev),st=job?statusOf(job):'',c=visitOf(ev);
+    const notes=[];
+    if(c.waiting)notes.push('Waiting on tenant');
+    if(job&&isArch(job))notes.push('Archived job');
+    else if(!job&&!c.waiting)notes.push('Not on the job list yet – this starts a worksheet.');
+    return `<article class="calent"><div class="caltime">${esc(evClock(ev.iso))}</div><div class="calbody"><div class="calsum">${esc(title)}</div>${st?`<span class="badge sb sb-${st}">${ST[st]}</span>`:''}${ev.location&&ev.location!==title?`<div class="note">${esc(ev.location)}</div>`:''}${notes.map(n=>`<div class="note">${esc(n)}</div>`).join('')}</div><button type="button" class="btn pri calopen" data-calev="${i}" aria-label="Open worksheet for ${esc(title)}">Open worksheet</button></article>`}).join(''):`<p class="empty">${esc(none)}</p>`}
   <p class="note calfoot">The job list follows this order. Open worksheet uses the same address match.</p></section>`}
 function bindCalEntries(root){
   root=root||document;
