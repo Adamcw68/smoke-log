@@ -434,7 +434,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="alarmedit.js"></script><script src="labelread.js"></script><script src="addressfind.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="calpick.js"></script><script src="pdflib.js"></script><script src="transfer.js"></script><script src="firebase-config.js"></script><script src="livesync.js"></script><script src="visittype.js"></script><script src="portaldata.js"></script><script src="certificate.js"></script><script src="invoice.js"></script><script src="requests.js"></script><script src="portaladmin.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.62.0 (20261125)';
+const APP_VERSION='2.63.0 (20261126)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -1648,13 +1648,11 @@ function renderList(){
   const calSort=CAL_EVENTS.length>0;
   const searching=!!String(UI.q||'').trim();
   const SRC=[...new Set(JOBS.map(j=>j.src||''))];if(UI.src!=null&&!SRC.includes(UI.src))UI.src=null;
-  let list=(window.CCSAAddress?CCSAAddress.searchJobs(JOBS,FORMS,UI.q):JOBS).filter(j=>UI.src==null||(j.src||'')===UI.src);
   const done=isDone,act=JOBS.filter(j=>!isArch(j)),na=JOBS.length-act.length;
   if(!['all','todo','done','arch'].includes(UI.filter)){UI.filter='all';save(LS.ui,UI)}
-  if(!searching)list=list.filter(passesJobFilter);
-  list=sortJobs(list);const nd=act.filter(done).length,hasRoute=JOBS.some(j=>j.order!=null||(j.svc&&!isNaN(Date.parse(j.svc)))),pg=dayProgress();
+  const list=visibleJobs();const nd=act.filter(done).length,hasRoute=JOBS.some(j=>j.order!=null||(j.svc&&!isNaN(Date.parse(j.svc)))),pg=dayProgress();
   m.innerHTML=`${hostingBannerHTML()}${syncHTML()}${portalHTML()}${libEntry()}<div class="prog" id="prog"><div class="pt"><b>${pg.label}: ${pg.n} of ${pg.of}</b> archived/done</div><div class="pbar" role="progressbar" aria-valuemin="0" aria-valuemax="${pg.of}" aria-valuenow="${pg.n}"><i style="width:${pg.of?Math.round(100*pg.n/pg.of):0}%"></i></div></div>
-  <div class="tools"><input id="q" type="search" placeholder="Search address, agent, contact…" value="${esc(UI.q)}"><select id="sort" aria-label="Sort"><option value="route">${calSort?'Calendar order':hasRoute?'Route order':'Sheet order'}</option>${calSort?'':`<option value="date">Date</option><option value="town">Town</option><option value="source">Source sheet</option>`}</select></div>
+  <form class="tools" id="qform" role="search"><input id="q" type="search" inputmode="search" enterkeyhint="search" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder="Search address, agent, contact…" aria-label="Search for address" value="${esc(UI.q)}"><select id="sort" aria-label="Sort"><option value="route">${calSort?'Calendar order':hasRoute?'Route order':'Sheet order'}</option>${calSort?'':`<option value="date">Date</option><option value="town">Town</option><option value="source">Source sheet</option>`}</select></form>
   <div class="row" style="margin-top:0"><button type="button" class="btn" id="dayopen">Day PDF</button></div>
   ${searching?'<p class="note" id="qnote">Search includes to-do, completed and archived jobs. Each card keeps its Archived or Done label.</p>':''}
   <div class="jobfilt"><div class="seg" role="tablist" aria-label="Show to-do or completed jobs">${[['all','All '+act.length],['todo','To do '+(act.length-nd)],['done','Done '+nd],['arch','Archived ('+na+')']].map(([k,t])=>`<button type="button" data-f="${k}" role="tab" aria-selected="${UI.filter===k}" class="t-${k} ${UI.filter===k?'on':''}">${t}</button>`).join('')}</div></div>
@@ -1666,7 +1664,8 @@ function renderList(){
   ${UI.filter==='arch'&&list.length?`<button class="btn unall" id="unall">↩️ Unarchive all (${list.length})</button>`:''}
   <div id="cards">${list.map(card).join('')||`<p class="empty">${esc(listEmptyCopy())}</p>`}</div>`;
   $('#sort').value=UI.sort;
-  $('#q').oninput=e=>{UI.q=e.target.value;save(LS.ui,UI);const p=e.target.selectionStart;renderList();const i=$('#q');i.focus();i.setSelectionRange(p,p)};
+  const qform=$('#qform');if(qform)qform.onsubmit=e=>{e.preventDefault();paintJobCards()};
+  $('#q').oninput=e=>{UI.q=e.target.value;save(LS.ui,UI);paintJobCards()};
   $('#sort').onchange=e=>{UI.sort=e.target.value;save(LS.ui,UI);renderList()};
   if($('#dayopen'))$('#dayopen').onclick=openDayPdf;
   bindCalendarControls();
@@ -1674,12 +1673,8 @@ function renderList(){
   if($('#srcf'))$('#srcf').onchange=e=>{UI.src=e.target.value==='*'?null:e.target.value;save(LS.ui,UI);renderList()};
   if($('#impx'))$('#impx').onclick=()=>{LASTIMP=null;$('#impsum').remove()};
   m.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{UI.filter=b.dataset.f;save(LS.ui,UI);renderList()});
-  m.querySelectorAll('[data-done]').forEach(b=>b.onclick=()=>{const j=JOBS.find(x=>x.id===b.dataset.done);const f=formFor(j);const go=()=>{applyDone(f,!f.done);touch(j.id);save(LS.forms,FORMS);renderList();portalNudge();if(f.done){offerArchive(j);noteMarkedDone(j)}else hideSnack()};if(f.done)go();else cleanGate(j,f,'mark done',go)});
-  m.querySelectorAll('[data-arch]').forEach(b=>b.onclick=()=>archiveJobs([b.dataset.arch]));
-  m.querySelectorAll('[data-offvisit]').forEach(b=>b.onclick=()=>addOffAnnualVisit(b.dataset.offvisit));
-  m.querySelectorAll('[data-restore]').forEach(b=>b.onclick=()=>restoreJobs([b.dataset.restore]));
-  m.querySelectorAll('.swp>.card[data-id]').forEach(c=>bindSwipe(c,c.dataset.id,c.parentElement.classList.contains('r')?'right':'left'));
-  const ua=$('#unall');if(ua)ua.onclick=()=>{const ids=list.map(j=>j.id);if(ids.length&&confirm('Unarchive all '+ids.length+' archived job'+(ids.length>1?'s':'')+'?\nThey go back to the job list in route order.'))restoreJobs(ids,'Unarchived '+ids.length+' job'+(ids.length>1?'s':''))};
+  bindJobCards($('#cards'));
+  const ua=$('#unall');if(ua)ua.onclick=()=>{const ids=visibleJobs().map(j=>j.id);if(ids.length&&confirm('Unarchive all '+ids.length+' archived job'+(ids.length>1?'s':'')+'?\nThey go back to the job list in route order.'))restoreJobs(ids,'Unarchived '+ids.length+' job'+(ids.length>1?'s':''))};
   const ad=$('#archdone');if(ad)ad.onclick=()=>{const ids=act.filter(done).map(j=>j.id);if(ids.length&&confirm('Archive all '+ids.length+' done job'+(ids.length>1?'s':'')+'?\nThey move to Archived and keep their worksheets and photos.'))archiveJobs(ids,'Archived '+ids.length+' done job'+(ids.length>1?'s':''))};
   m.insertAdjacentHTML('beforeend',setTechHTML());bindSetTech();
   m.insertAdjacentHTML('beforeend',`${xferHTML()}<div class="row" style="margin-top:8px"><button id="clr">🗑️ Clear all</button><button id="repl">♻️ Replace all from sheet…</button></div><p class="note">Job data, worksheets, photos and saved PDFs are stored only on this device. Load sheet adds jobs from one or more spreadsheets (duplicates of the same address and date are skipped). Replace all swaps the whole list. Import worksheets does not.</p><p class="note">${gcalLive()?'Connect Google once. After that, <b>Refresh order from calendar</b> reads the calendar chosen above, and opening the app does it again when the last sync is older than 15 minutes (today’s jobs) or 30 minutes. Worksheets are kept. Archived jobs stay put. Offline, use <b>Import calendar file</b> (.ics or JSON).':'Moved a job on the shared Google Calendar? Export that calendar as .ics (Calendar settings → the smoke-alarm calendar → Export, then unzip) or save a JSON file of the events, then tap <b>Refresh order from calendar</b>. Matching addresses pick up the new time and the list reorders. Worksheets already filled in are kept. Archived jobs stay put.'}</p><p class="note" id="ver">App version ${APP_VERSION}</p>`);
@@ -1687,6 +1682,38 @@ function renderList(){
   bindXfer(m);bindSync(m);bindPortal(m);
   $('#clr').onclick=async()=>{if(confirm('Delete all jobs, worksheet entries, photos and saved PDFs from this phone?')){hideSnack();if(window.CCSASync&&CCSASync.beforeClearAll){try{await CCSASync.beforeClearAll()}catch(e){console.warn(e)}}JOBS=[];FORMS={};LASTIMP=null;CAL_EVENTS=[];save(LS.jobs,JOBS);save(LS.forms,FORMS);save(LS_CALEV,CAL_EVENTS);try{await photoClear()}catch(e){console.warn(e)}try{await pdfClear()}catch(e){console.warn(e)}PURL.forEach(u=>URL.revokeObjectURL(u));PURL.clear();renderList();toast('All data cleared')}};
   $('#bar').innerHTML='';
+}
+function visibleJobs(){
+  const searching=!!String(UI.q||'').trim();
+  let list=(window.CCSAAddress?CCSAAddress.searchJobs(JOBS,FORMS,UI.q):JOBS).filter(j=>UI.src==null||(j.src||'')===UI.src);
+  if(!searching)list=list.filter(passesJobFilter);
+  return sortJobs(list);
+}
+function bindJobCards(root){
+  if(!root)return;
+  root.querySelectorAll('[data-done]').forEach(b=>b.onclick=()=>{const j=JOBS.find(x=>x.id===b.dataset.done);const f=formFor(j);const go=()=>{applyDone(f,!f.done);touch(j.id);save(LS.forms,FORMS);renderList();portalNudge();if(f.done){offerArchive(j);noteMarkedDone(j)}else hideSnack()};if(f.done)go();else cleanGate(j,f,'mark done',go)});
+  root.querySelectorAll('[data-arch]').forEach(b=>b.onclick=()=>archiveJobs([b.dataset.arch]));
+  root.querySelectorAll('[data-offvisit]').forEach(b=>b.onclick=()=>addOffAnnualVisit(b.dataset.offvisit));
+  root.querySelectorAll('[data-restore]').forEach(b=>b.onclick=()=>restoreJobs([b.dataset.restore]));
+  root.querySelectorAll('.swp>.card[data-id]').forEach(c=>bindSwipe(c,c.dataset.id,c.parentElement.classList.contains('r')?'right':'left'));
+}
+/* Typing must not rebuild the page. Replacing the search field closes the phone keyboard and drops letters. */
+function paintJobCards(){
+  const box=$('#cards');
+  if(!box)return;
+  const searching=!!String(UI.q||'').trim();
+  const list=visibleJobs();
+  const note=$('#qnote');
+  if(searching){
+    if(!note){
+      const filt=document.querySelector('.jobfilt');
+      if(filt)filt.insertAdjacentHTML('beforebegin','<p class="note" id="qnote">Search includes to-do, completed and archived jobs. Each card keeps its Archived or Done label.</p>');
+    }
+  }else if(note)note.remove();
+  box.innerHTML=list.map(card).join('')||`<p class="empty">${esc(listEmptyCopy())}</p>`;
+  bindJobCards(box);
+  const ua=$('#unall');
+  if(ua)ua.onclick=()=>{const ids=visibleJobs().map(j=>j.id);if(ids.length&&confirm('Unarchive all '+ids.length+' archived job'+(ids.length>1?'s':'')+'?\nThey go back to the job list in route order.'))restoreJobs(ids,'Unarchived '+ids.length+' job'+(ids.length>1?'s':''))};
 }
 function card(j){
   const f=FORMS[j.id],done=!!(f&&f.done),when=j.svc?new Date(j.svc):null,st=statusOf(j),ar=st==='arch',due=replaceDue(j);

@@ -122,7 +122,7 @@
     return '<div class="tabs" role="tablist">'+['properties','jobs','certificates','invoices'].map(function(tab){
       const label=tab==='properties'?'Properties':tab==='jobs'?'Jobs':tab==='certificates'?'Certificates':'Invoices';
       return '<button type="button" role="tab" aria-selected="'+(view.tab===tab?'true':'false')+'" class="'+(view.tab===tab?'on':'')+'" data-tab="'+tab+'">'+label+'</button>';
-    }).join('')+'</div><input class="search" id="q" type="search" placeholder="Search address" value="'+esc(view.q)+'" aria-label="Search address">';
+    }).join('')+'</div><form id="qform" role="search"><input class="search" id="q" type="search" inputmode="search" enterkeyhint="search" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder="Search address" value="'+esc(view.q)+'" aria-label="Search for address"></form>';
   }
   function agencyOptions(selected){
     const all=session.admin?'<option value="all"'+(selected==='all'?' selected':'')+'>All agencies</option>':'';
@@ -270,20 +270,21 @@
     const biz=[model.businessAddress,model.businessPhone,model.businessEmail].filter(Boolean).map(function(line){return '<p class="meta">'+esc(line)+'</p>'}).join('');
     return '<button type="button" class="back" data-tab="invoices">Back</button><article class="cert" id="invoice"><div class="certhead"><div class="kicker">'+esc(model.business)+'</div><h1>'+esc(model.title)+'</h1></div><div class="certbody">'+biz+'<div class="facts"><div><span>Invoice</span><b>'+esc(model.number)+'</b></div><div><span>Issued</span><b>'+esc(model.issue||'—')+'</b></div><div><span>Due</span><b>'+esc(model.due||'—')+'</b></div><div><span>Status</span><b>'+esc(model.status)+'</b></div></div>'+(model.abn?'<p class="meta">ABN '+esc(model.abn)+'</p>':'')+'<p class="meta">Bill to</p><h2>'+esc(model.billTo||session.agency.name)+'</h2><p class="meta">Property</p><h2>'+esc(model.address)+'</h2><table><thead><tr><th>Description</th><th>Qty</th><th>Price</th><th>Amount</th></tr></thead><tbody>'+lines+'</tbody></table><p class="meta">Subtotal '+esc(model.ex)+(model.showGst?' · GST 10% '+esc(model.gst):'')+'</p><h3>Total '+esc(model.total)+'</h3><h3>Payment</h3>'+pay+(model.terms?'<p>'+esc(model.terms)+'</p>':'')+'<p class="foot">'+esc(model.note)+'</p><div class="actions"><button type="button" class="pri" data-invoice-download="'+esc(row.id)+'">Download PDF</button></div></div></article>';
   }
+  function resultsHTML(){
+    if(view.inbox)return inboxView();
+    if(view.requestForm)return requestForm();
+    if(view.invoiceId)return invoiceView();
+    if(view.certificateId)return certificateView();
+    if(view.propertyId)return propertyView();
+    if(view.tab==='jobs')return jobsView();
+    if(view.tab==='certificates')return certificatesView();
+    if(view.tab==='invoices')return invoicesView();
+    return propertyCards();
+  }
   function mainView(){
-    let body='';
-    if(view.inbox)body=inboxView();
-    else if(view.requestForm)body=requestForm();
-    else if(view.invoiceId)body=invoiceView();
-    else if(view.certificateId)body=certificateView();
-    else if(view.propertyId)body=propertyView();
-    else if(view.tab==='jobs')body=jobsView();
-    else if(view.tab==='certificates')body=certificatesView();
-    else if(view.tab==='invoices')body=invoicesView();
-    else body=propertyCards();
     const showTools=!view.propertyId&&!view.certificateId&&!view.invoiceId&&!view.requestForm&&!view.inbox;
     const foot=view.inbox?'Access phones are on this inbox only. They are removed when a request is completed, and they are not shown to the agency.':'Portal for '+esc(session.agency.name)+'. Tenant names, phone numbers and email addresses are not shown.';
-    return header()+'<main>'+demoBar()+(showTools?stats()+tabs():'')+body+'<p class="foot">'+foot+'</p></main>';
+    return header()+'<main>'+demoBar()+(showTools?stats()+tabs():'')+'<div id="results">'+resultsHTML()+'</div><p class="foot">'+foot+'</p></main>';
   }
   let accessLoading=false;
   async function ensureAccess(){
@@ -381,6 +382,14 @@
     document.body.appendChild(a);a.click();a.remove();
     setTimeout(function(){URL.revokeObjectURL(url)},4000);
   }
+  function bindResultControls(){
+    const invStatus=document.getElementById('invstatus');
+    if(invStatus)invStatus.onchange=function(){view.invoiceStatus=invStatus.value;paint()};
+    const invFrom=document.getElementById('invfrom');
+    if(invFrom)invFrom.onchange=function(){view.invFrom=invFrom.value;paint()};
+    const invTo=document.getElementById('invto');
+    if(invTo)invTo.onchange=function(){view.invTo=invTo.value;paint()};
+  }
   function bind(){
     const out=document.getElementById('signout');
     if(out)out.onclick=function(){signOut()};
@@ -388,14 +397,17 @@
     if(form)form.onsubmit=function(e){e.preventDefault();signIn(form.email.value,form.password.value)};
     const google=document.getElementById('googlesign');
     if(google)google.onclick=function(){signInGoogle()};
+    const qform=document.getElementById('qform');
+    if(qform)qform.onsubmit=function(e){e.preventDefault()};
     const q=document.getElementById('q');
-    if(q)q.oninput=function(){view.q=q.value;const pos=q.selectionStart;paint();const again=document.getElementById('q');if(again){again.focus();again.setSelectionRange(pos,pos)}};
-    const invStatus=document.getElementById('invstatus');
-    if(invStatus)invStatus.onchange=function(){view.invoiceStatus=invStatus.value;paint()};
-    const invFrom=document.getElementById('invfrom');
-    if(invFrom)invFrom.onchange=function(){view.invFrom=invFrom.value;paint()};
-    const invTo=document.getElementById('invto');
-    if(invTo)invTo.onchange=function(){view.invTo=invTo.value;paint()};
+    if(q)q.oninput=function(){
+      view.q=q.value;
+      const box=document.getElementById('results');
+      if(!box){paint();return}
+      box.innerHTML=resultsHTML();
+      bindResultControls();
+    };
+    bindResultControls();
     const demo=document.getElementById('demoagency');
     if(demo)demo.onchange=function(){loadDemo(demo.value);view.propertyId='';view.certificateId='';view.invoiceId='';view.requestForm=false;view.inbox=false;view.filter='';view.notice='';paint()};
     const adminPick=document.getElementById('adminagency');
