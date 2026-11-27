@@ -434,7 +434,7 @@ parse_Primary(n.content)}catch(l){}a="/EncryptionInfo";n=Qe.find(e,a);if(!n||!n.
 <script src="calpush.js"></script><script src="alarmedit.js"></script><script src="labelread.js"></script><script src="addressfind.js"></script><script src="sheetfill.js"></script><script src="jobrefresh.js"></script><script src="gsignin.js"></script><script src="calpick.js"></script><script src="pdflib.js"></script><script src="transfer.js"></script><script src="firebase-config.js"></script><script src="livesync.js"></script><script src="visittype.js"></script><script src="portaldata.js"></script><script src="certificate.js"></script><script src="invoice.js"></script><script src="requests.js"></script><script src="portaladmin.js"></script>
 <script>'use strict';
 /* Clarence Coast Smoke Alarms – on-site worksheet app. All job data stays on this device (localStorage + IndexedDB for photos). */
-const APP_VERSION='2.63.0 (20261126)';
+const APP_VERSION='2.64.0 (20261126)';
 /* Live Google Calendar sync. Paste an OAuth *Web* client id below. Leave it empty to keep file import only — the app still runs.
    Google Cloud Console: enable the Calendar API, then create an OAuth client (type Web application).
    Authorized JavaScript origins must include the GitHub Pages origin, https://adamcw68.github.io
@@ -782,7 +782,8 @@ function calDayList(){return [...new Set(CAL_EVENTS.map(ev=>String(ev.iso).slice
 function calDayPick(days){if(days.includes(UI.calDay))return UI.calDay;const t=todayISO();return days.find(d=>d>=t)||days[days.length-1]||''}
 function evClock(iso){const m=String(iso||'').match(/T(\d{2}):(\d{2})/);return m?m[1]+':'+m[2]:''}
 function calDayLabel(day){const [y,m,d]=String(day).split('-').map(Number);const nice=new Date(y,(m||1)-1,d||1).toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'});return day===todayISO()?'Today · '+nice:nice}
-/* Same choice as the job cards. A calendar row with no worksheet yet counts as to do. */
+/* Same choice as the job cards. A calendar row with no worksheet yet counts as to do.
+   Archived jobs stay off the home list (All, To do and Done). They stay on Archived, and address search still finds them. */
 function passesJobFilter(j){
   const f=UI.filter;
   if(!j)return f==='all'||f==='todo';
@@ -797,7 +798,7 @@ function calEntriesHTML(){
   const days=calDayList(),day=calDayPick(days);UI.calDay=day;const at=days.indexOf(day);
   const rows=CAL_EVENTS.map((ev,i)=>({ev,i})).filter(x=>String(x.ev.iso).slice(0,10)===day);
   const shown=rows.filter(x=>passesJobFilter(matchEventJob(x.ev)));
-  const count=UI.filter==='all'?rows.length+' on this day':shown.length+' '+(UI.filter==='done'?'completed':UI.filter==='todo'?'to do':'archived');
+  const count=UI.filter==='all'?shown.length+' on this day':shown.length+' '+(UI.filter==='done'?'completed':UI.filter==='todo'?'to do':'archived');
   const none=UI.filter==='done'?'No completed appointments this day.':UI.filter==='todo'?'No to-do appointments this day.':UI.filter==='arch'?'No archived appointments this day.':'No appointments this day.';
   return `<section class="calents" id="calents" aria-label="Calendar entries"><div class="calhd"><b>Calendar entries</b><span class="note">${count}</span></div>
   <div class="calnav"><button type="button" id="calprev" aria-label="Earlier day"${at<=0?' disabled':''}>‹</button><div class="calday">${esc(calDayLabel(day))}</div><button type="button" id="calnext" aria-label="Later day"${at<0||at>=days.length-1?' disabled':''}>›</button></div>
